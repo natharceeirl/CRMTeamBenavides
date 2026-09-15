@@ -1,6 +1,9 @@
 using System.Text;
 using CRMTeamBenavides.Api.Configuration;
+using CRMTeamBenavides.Api.Features.Auth;
+using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Data;
+using CRMTeamBenavides.Data.Seed;
 using CRMTeamBenavides.Domain.Entities;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -61,6 +64,9 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
+builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
@@ -71,12 +77,17 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+
+    using var seedScope = app.Services.CreateScope();
+    await DevelopmentUserSeeder.SeedAsync(seedScope.ServiceProvider, app.Configuration);
 }
 
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.MapAuthEndpoints();
 
 var summaries = new[]
 {
