@@ -1,13 +1,25 @@
+using Microsoft.AspNetCore.Identity;
+
 namespace CRMTeamBenavides.Domain.Entities;
 
-public class Usuario : BaseEntity
+public class Usuario : IdentityUser<Guid>
 {
-    public string NombreCompleto { get; set; } = string.Empty;
-    public string Email { get; set; } = string.Empty;
+    public Usuario()
+    {
+        Id = Guid.NewGuid();
+    }
 
-    // El hash de contraseña lo gestiona ASP.NET Core Identity; este campo
-    // queda por compatibilidad si se necesita consultar fuera de Identity.
-    public string? Telefono { get; set; }
+    public string NombreCompleto { get; set; } = string.Empty;
+
+    // Campos de auditoría: antes venían de BaseEntity. Usuario ya no puede
+    // heredar BaseEntity porque C# no permite herencia múltiple y ahora
+    // hereda de IdentityUser<Guid>. Se agregan directamente aquí, sin
+    // cambiar su comportamiento ni su nombre.
+    public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
+    public DateTime? FechaModificacion { get; set; }
+    public Guid? CreadoPorId { get; set; }
+    public Guid? ModificadoPorId { get; set; }
+    public bool Activo { get; set; } = true;
 
     public ICollection<UsuarioRol> UsuarioRoles { get; set; } = new List<UsuarioRol>();
 }

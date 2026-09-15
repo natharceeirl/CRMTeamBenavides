@@ -1,9 +1,10 @@
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using CRMTeamBenavides.Domain.Entities;
 
 namespace CRMTeamBenavides.Data;
 
-public class ApplicationDbContext : DbContext
+public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
 {
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
 
@@ -38,6 +39,9 @@ public class ApplicationDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        // Identity por defecto mapea a "AspNetUsers"; se conserva el nombre
+        // de tabla que ya existe en la migración inicial.
+        modelBuilder.Entity<Usuario>().ToTable("Usuarios");
 
         // --- Claves compuestas para tablas puente ---
         modelBuilder.Entity<RolPermiso>().HasKey(rp => new { rp.RolId, rp.PermisoId });
