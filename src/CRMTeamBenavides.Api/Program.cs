@@ -9,6 +9,9 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("DefaultConnection")));
 
+builder.Services.AddAuthentication();
+builder.Services.AddDataProtection();
+
 builder.Services
     .AddIdentityCore<Usuario>()
     .AddEntityFrameworkStores<ApplicationDbContext>()

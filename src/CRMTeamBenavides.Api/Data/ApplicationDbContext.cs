@@ -35,10 +35,34 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
 
     // Auditoría
     public DbSet<EventoAuditoria> EventosAuditoria => Set<EventoAuditoria>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.ToTable("RefreshTokens");
+
+            entity.Property(rt => rt.Token)
+                .IsRequired()
+                .HasMaxLength(256);
+
+            entity.HasIndex(rt => rt.Token).IsUnique();
+
+            entity.Property(rt => rt.ReemplazadoPorToken)
+                .HasMaxLength(256);
+
+            entity.Property(rt => rt.CreadoPorIp)
+                .HasMaxLength(45);
+
+            entity.HasOne(rt => rt.Usuario)
+                .WithMany()
+                .HasForeignKey(rt => rt.UsuarioId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         // Identity por defecto mapea a "AspNetUsers"; se conserva el nombre
         // de tabla que ya existe en la migración inicial.
         modelBuilder.Entity<Usuario>().ToTable("Usuarios");
@@ -47,18 +71,18 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
         modelBuilder.Entity<RolPermiso>().HasKey(rp => new { rp.RolId, rp.PermisoId });
         modelBuilder.Entity<UsuarioRol>().HasKey(ur => new { ur.UsuarioId, ur.RolId });
 
-        // --- Índices únicos (evitar duplicados que rompan el negocio) ---
+        // --- Índices únicos ---
         modelBuilder.Entity<Usuario>().HasIndex(u => u.Email).IsUnique();
         modelBuilder.Entity<Vehiculo>().HasIndex(v => v.Placa).IsUnique();
         modelBuilder.Entity<Producto>().HasIndex(p => p.Codigo).IsUnique();
         modelBuilder.Entity<Rol>().HasIndex(r => r.Nombre).IsUnique();
         modelBuilder.Entity<Permiso>().HasIndex(p => p.Codigo).IsUnique();
 
-        // --- Propiedades calculadas: no se guardan en la BD ---
+        // --- Propiedades calculadas ---
         modelBuilder.Entity<DetalleServicio>().Ignore(d => d.Subtotal);
         modelBuilder.Entity<DetalleVenta>().Ignore(d => d.Subtotal);
 
-        // --- Evitar borrado en cascada accidental en relaciones sensibles ---
+        // --- Evitar borrado en cascada accidental ---
         modelBuilder.Entity<OrdenServicio>()
             .HasOne(o => o.Vehiculo)
             .WithMany(v => v.OrdenesServicio)
