@@ -1,3 +1,4 @@
+using CRMTeamBenavides.Api.Configuration;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
@@ -17,6 +18,20 @@ builder.Services
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddSignInManager()
     .AddDefaultTokenProviders();
+
+builder.Services
+    .AddOptions<JwtSettings>()
+    .Bind(builder.Configuration.GetSection(JwtSettings.SectionName))
+    .Validate(settings => !string.IsNullOrWhiteSpace(settings.SecretKey),
+        "JwtSettings:SecretKey es obligatorio.")
+    .Validate(settings => !string.IsNullOrWhiteSpace(settings.Issuer),
+        "JwtSettings:Issuer es obligatorio.")
+    .Validate(settings => !string.IsNullOrWhiteSpace(settings.Audience),
+        "JwtSettings:Audience es obligatorio.")
+    .Validate(settings => settings.AccessTokenExpirationMinutes > 0,
+        "JwtSettings:AccessTokenExpirationMinutes debe ser mayor que 0.")
+    .Validate(settings => settings.RefreshTokenExpirationDays > 0,
+        "JwtSettings:RefreshTokenExpirationDays debe ser mayor que 0.");
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
