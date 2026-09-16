@@ -1,3 +1,5 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using CRMTeamBenavides.Api.Services;
 
 namespace CRMTeamBenavides.Api.Features.Auth;
@@ -29,5 +31,21 @@ public static class AuthEndpoints
                 : Results.Unauthorized();
         })
         .WithName("RefreshToken");
+        group.MapGet("/me", async (ClaimsPrincipal user, IAuthService authService) =>
+        {
+            var subClaim = user.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+                ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (!Guid.TryParse(subClaim, out var usuarioId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await authService.GetCurrentUserAsync(usuarioId);
+
+            return result.IsSuccess ? Results.Ok(result.Data) : Results.Unauthorized();
+        })
+        .RequireAuthorization()
+        .WithName("Me");
     }
 }

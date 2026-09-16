@@ -9,3 +9,10 @@ public record LoginResponse(
     DateTime RefreshTokenExpiration);
 
 public record RefreshRequest(string RefreshToken);
+
+public record MeResponse(
+    Guid Id,
+    string Email,
+    string NombreCompleto,
+    bool Activo,
+    List<string> Roles);

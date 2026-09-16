@@ -123,4 +123,26 @@ public class AuthService : IAuthService
             refreshToken.Token,
             refreshToken.FechaExpiracion);
     }
+    public async Task<ServiceResult<MeResponse>> GetCurrentUserAsync(Guid usuarioId)
+    {
+        var usuario = await _userManager.FindByIdAsync(usuarioId.ToString());
+        if (usuario is null || !usuario.Activo)
+        {
+            return ServiceResult<MeResponse>.NotFound();
+        }
+
+        var roles = await _context.UsuarioRoles
+            .Where(ur => ur.UsuarioId == usuarioId && ur.Rol.Activo)
+            .Select(ur => ur.Rol.Nombre)
+            .ToListAsync();
+
+        var response = new MeResponse(
+            usuario.Id,
+            usuario.Email ?? string.Empty,
+            usuario.NombreCompleto,
+            usuario.Activo,
+            roles);
+
+        return ServiceResult<MeResponse>.Success(response);
+    }
 }
