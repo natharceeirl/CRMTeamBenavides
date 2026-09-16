@@ -1,6 +1,8 @@
 using System.Text;
 using CRMTeamBenavides.Api.Configuration;
 using CRMTeamBenavides.Api.Features.Auth;
+using CRMTeamBenavides.Api.Features.Clientes;
+using CRMTeamBenavides.Api.Features.Vehiculos;
 using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Data.Seed;
@@ -66,6 +68,8 @@ builder.Services.AddAuthorization();
 
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IClienteService, ClienteService>();
+builder.Services.AddScoped<IVehiculoService, VehiculoService>();
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -88,6 +92,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapAuthEndpoints();
+app.MapClienteEndpoints();
+app.MapVehiculoEndpoints();
 
 var summaries = new[]
 {
