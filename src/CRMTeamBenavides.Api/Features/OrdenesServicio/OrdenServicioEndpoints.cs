@@ -52,5 +52,44 @@ public static class OrdenServicioEndpoints
             };
         })
         .WithName("RegistrarDiagnosticoOrdenServicio");
+
+        group.MapPost("/{id:guid}/detalles", async (Guid id, AgregarDetalleServicioRequest request, IOrdenServicioService service) =>
+        {
+            var result = await service.AgregarDetalleAsync(id, request);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Created($"/api/ordenes-servicio/{id}/detalles/{result.Data!.Id}", result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        })
+        .WithName("AgregarDetalleOrdenServicio");
+
+        group.MapDelete("/{id:guid}/detalles/{detalleId:guid}", async (Guid id, Guid detalleId, IOrdenServicioService service) =>
+        {
+            var result = await service.EliminarDetalleAsync(id, detalleId);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(new { message = "Detalle eliminado correctamente." }),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        })
+        .WithName("EliminarDetalleOrdenServicio");
+
+        group.MapPut("/{id:guid}/estado", async (Guid id, CambiarEstadoOrdenServicioRequest request, IOrdenServicioService service) =>
+        {
+            var result = await service.CambiarEstadoAsync(id, request);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        })
+        .WithName("CambiarEstadoOrdenServicio");
     }
 }
