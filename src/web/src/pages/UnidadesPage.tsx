@@ -1,67 +1,126 @@
 import { useState } from 'react'
-import { Button, Input, Segmented, Table, type TableProps } from 'antd'
+import { Button, Input, Popconfirm, Space, Table, type TableProps } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import { Link } from 'react-router'
 import { BarraSuperior } from '../components/BarraSuperior'
-import { buscarCliente, nombreUnidad, tiposUnidad, unidades, type TipoUnidad, type Unidad } from '../data/ejemplo'
+import { AvisoError } from '../components/AvisoError'
+import { ModalVehiculo } from '../components/ModalVehiculo'
+import { useEliminarVehiculo, useVehiculos } from '../api/vehiculos'
+import type { VehiculoResponse } from '../api/tipos'
 import { entero } from '../utils/formato'
-
-const TODAS = 'Todas'
-const opcionesTipo = [TODAS, ...Object.values(tiposUnidad)]
-
-const columnas: TableProps<Unidad>['columns'] = [
-  { title: 'Unidad', key: 'unidad', render: (_, unidad) => <strong>{nombreUnidad(unidad)}</strong> },
-  { title: 'Tipo', key: 'tipo', render: (_, unidad) => tiposUnidad[unidad.tipo] },
-  { title: 'Placa', key: 'placa', className: 'num', render: (_, unidad) => unidad.placa ?? '—' },
-  { title: 'VIN o serie', dataIndex: 'serie', className: 'num' },
-  { title: 'N.° de motor', dataIndex: 'numeroMotor', className: 'num' },
-  {
-    title: 'Medidor',
-    key: 'medidor',
-    align: 'right',
-    className: 'num',
-    render: (_, unidad) => `${entero(unidad.medidor)} ${unidad.unidadMedidor}`,
-  },
-  {
-    title: 'Propietario',
-    key: 'propietario',
-    render: (_, unidad) => {
-      const cliente = buscarCliente(unidad.clienteId)
-      return cliente ? <Link to={`/clientes/${cliente.id}`}>{cliente.nombre}</Link> : '—'
-    },
-  },
-]
 
 export function UnidadesPage() {
   const [texto, setTexto] = useState('')
-  const [tipo, setTipo] = useState<string>(TODAS)
+  const [editando, setEditando] = useState<VehiculoResponse | null>(null)
+  const [modalAbierto, setModalAbierto] = useState(false)
 
-  const tipoElegido = (Object.keys(tiposUnidad) as TipoUnidad[]).find((clave) => tiposUnidad[clave] === tipo)
-  const visibles = unidades.filter((unidad) => {
-    const busqueda = [nombreUnidad(unidad), unidad.placa, unidad.serie, unidad.numeroMotor].join(' ').toLowerCase()
-    return (!tipoElegido || unidad.tipo === tipoElegido) && busqueda.includes(texto.toLowerCase())
-  })
+  const vehiculos = useVehiculos()
+  const eliminar = useEliminarVehiculo()
+
+  const abrirNueva = () => {
+    setEditando(null)
+    setModalAbierto(true)
+  }
+
+  const columnas: TableProps<VehiculoResponse>['columns'] = [
+    {
+      title: 'Unidad',
+      key: 'unidad',
+      render: (_, vehiculo) => (
+        <strong>
+          {vehiculo.marca} {vehiculo.modelo} {vehiculo.anio ?? ''}
+        </strong>
+      ),
+    },
+    { title: 'Placa', dataIndex: 'placa', className: 'num' },
+    {
+      title: 'Kilometraje',
+      dataIndex: 'kilometraje',
+      align: 'right',
+      className: 'num',
+      render: (valor: number | null) => (valor === null ? '—' : `${entero(valor)} km`),
+    },
+    { title: 'Color', dataIndex: 'color', render: (valor: string | null) => valor ?? '—' },
+    {
+      title: 'Propietario',
+      key: 'propietario',
+      render: (_, vehiculo) => <Link to={`/clientes/${vehiculo.clienteId}`}>{vehiculo.clienteNombre}</Link>,
+    },
+    {
+      title: '',
+      key: 'acciones',
+      align: 'right',
+      render: (_, vehiculo) => (
+        <Space size="small">
+          <Button
+            type="link"
+            onClick={() => {
+              setEditando(vehiculo)
+              setModalAbierto(true)
+            }}
+          >
+            Editar
+          </Button>
+          <Popconfirm
+            title="Dar de baja la unidad"
+            okText="Dar de baja"
+            cancelText="Cancelar"
+            onConfirm={() => eliminar.mutate(vehiculo.id)}
+          >
+            <Button type="link">Dar de baja</Button>
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ]
+
+  const busqueda = texto.toLowerCase()
+  const visibles = (vehiculos.data ?? []).filter((vehiculo) =>
+    [vehiculo.marca, vehiculo.modelo, vehiculo.placa, vehiculo.clienteNombre]
+      .join(' ')
+      .toLowerCase()
+      .includes(busqueda),
+  )
 
   return (
     <>
-      <BarraSuperior titulo="Unidades" acciones={<Button type="primary">Registrar unidad</Button>} />
+      <BarraSuperior
+        titulo="Unidades"
+        acciones={
+          <Button type="primary" onClick={abrirNueva}>
+            Registrar unidad
+          </Button>
+        }
+      />
       <div className="pagina">
         <section>
+          <AvisoError error={vehiculos.error ?? eliminar.error} />
+          <p className="texto-secundario" style={{ marginBottom: 16 }}>
+            El tipo de unidad, la serie, el número de motor y el medidor en horas todavía no existen en la API. Paolo los
+            agrega por migración cuando el Ingeniero confirme el modelo.
+          </p>
           <div className="filtros">
             <Input
               id="buscar-unidades"
               prefix={<SearchOutlined />}
-              placeholder="Buscar por modelo, placa, serie o motor"
+              placeholder="Buscar por modelo, placa o propietario"
               allowClear
               value={texto}
               onChange={(evento) => setTexto(evento.target.value)}
               style={{ width: 340 }}
             />
-            <Segmented<string> options={opcionesTipo} value={tipo} onChange={setTipo} />
           </div>
-          <Table rowKey="id" columns={columnas} dataSource={visibles} pagination={false} />
+          <Table
+            rowKey="id"
+            columns={columnas}
+            dataSource={visibles}
+            pagination={false}
+            loading={vehiculos.isPending}
+            locale={{ emptyText: 'Todavía no hay unidades registradas' }}
+          />
         </section>
       </div>
+      <ModalVehiculo abierto={modalAbierto} vehiculo={editando} onCerrar={() => setModalAbierto(false)} />
     </>
   )
 }

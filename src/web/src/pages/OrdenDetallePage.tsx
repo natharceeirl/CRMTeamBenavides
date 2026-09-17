@@ -1,105 +1,224 @@
-import { Button, Input, Table, Tag, type TableProps } from 'antd'
+import { useState } from 'react'
+import {
+  Button,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Popconfirm,
+  Select,
+  Table,
+  Tag,
+  type TableProps,
+} from 'antd'
 import { Link, useParams } from 'react-router'
 import { BarraSuperior } from '../components/BarraSuperior'
-import { EstadoOrdenTag } from '../components/EstadoOrdenTag'
+import { AvisoError } from '../components/AvisoError'
+import { EstadoOrdenApiTag } from '../components/EstadoOrdenApiTag'
 import { Indicadores } from '../components/Indicadores'
 import {
-  buscarCliente,
-  buscarUnidad,
-  identificadorUnidad,
-  nombreUnidad,
-  ordenes,
-  type LineaOrden,
-} from '../data/ejemplo'
-import { entero, importe, soles } from '../utils/formato'
+  ESTADO,
+  esEstadoTerminal,
+  nombresEstado,
+  permiteEditarDetalles,
+  useAgregarDetalle,
+  useCambiarEstado,
+  useEliminarDetalle,
+  useOrden,
+  useRegistrarDiagnostico,
+  transicionesValidas,
+} from '../api/ordenes'
+import { useUsuarios } from '../api/usuarios'
+import type { DetalleServicioResponse } from '../api/tipos'
+import { entero, fechaHora, importe, referenciaOrden, soles } from '../utils/formato'
 
-const TASA_IGV = 0.18
-
-const columnas: TableProps<LineaOrden>['columns'] = [
-  { title: 'Concepto', dataIndex: 'concepto' },
-  { title: 'Tipo', dataIndex: 'tipo' },
-  {
-    title: 'Cant.',
-    key: 'cantidad',
-    align: 'right',
-    className: 'num',
-    render: (_, linea) => (linea.unidad ? `${linea.cantidad} ${linea.unidad}` : linea.cantidad),
-  },
-  {
-    title: 'P. unit.',
-    dataIndex: 'precioUnitario',
-    align: 'right',
-    className: 'num',
-    render: (precio: number) => importe(precio),
-  },
-  {
-    title: 'Importe',
-    key: 'importe',
-    align: 'right',
-    className: 'num',
-    render: (_, linea) => importe(linea.cantidad * linea.precioUnitario),
-  },
-]
+type CamposManoObra = {
+  descripcion: string
+  cantidad: number
+  precioUnitario: number
+}
 
 export function OrdenDetallePage() {
-  const { numero } = useParams()
-  const orden = ordenes.find((item) => item.numero === numero)
+  const { id } = useParams()
+  const orden = useOrden(id)
+  const usuarios = useUsuarios()
 
-  if (!orden) {
+  const guardarDiagnostico = useRegistrarDiagnostico()
+  const agregarDetalle = useAgregarDetalle()
+  const eliminarDetalle = useEliminarDetalle()
+  const cambiarEstado = useCambiarEstado()
+
+  const [formularioMano] = Form.useForm<CamposManoObra>()
+  const [textoDiagnostico, setTextoDiagnostico] = useState<string | null>(null)
+  const [tecnico, setTecnico] = useState<string | null>(null)
+  const [estadoDestino, setEstadoDestino] = useState<number | null>(null)
+  const [observacionesCambio, setObservacionesCambio] = useState('')
+
+  if (orden.isPending) {
+    return (
+      <>
+        <BarraSuperior antetitulo="Órdenes" titulo="Cargando orden…" />
+        <div className="pagina" />
+      </>
+    )
+  }
+
+  if (orden.isError || !orden.data) {
     return (
       <>
         <BarraSuperior antetitulo="Órdenes" titulo="Orden no encontrada" />
         <div className="pagina">
+          <AvisoError error={orden.error} />
           <p>
-            No existe la orden {numero}. <Link to="/ordenes">Volver a órdenes</Link>
+            <Link to="/ordenes">Volver a órdenes</Link>
           </p>
         </div>
       </>
     )
   }
 
-  const unidad = buscarUnidad(orden.unidadId)
-  const cliente = buscarCliente(orden.clienteId)
-  const lineas = orden.lineas ?? []
-  const sumaPorTipo = (tipo: LineaOrden['tipo']) =>
-    lineas.filter((linea) => linea.tipo === tipo).reduce((suma, linea) => suma + linea.cantidad * linea.precioUnitario, 0)
-  const manoDeObra = sumaPorTipo('Mano de obra')
-  const repuestos = sumaPorTipo('Repuesto')
-  const total = manoDeObra + repuestos
-  const gravada = total / (1 + TASA_IGV)
-  const igv = total - gravada
-  const bitacora = orden.bitacora ?? [{ evento: 'Unidad recibida', fecha: orden.ingreso }]
-  const historial = ordenes.filter((item) => item.unidadId === orden.unidadId && item.numero !== orden.numero)
+  const datos = orden.data
+  const puedeEditar = permiteEditarDetalles(datos.estadoId)
+  const puedeDiagnosticar = !esEstadoTerminal(datos.estadoId)
+  const destinos = transicionesValidas[datos.estadoId] ?? []
+
+  const repuestos = datos.detalles
+    .filter((detalle) => detalle.esRepuesto)
+    .reduce((suma, detalle) => suma + detalle.subtotal, 0)
+  const manoDeObra = datos.total - repuestos
+
+  const columnas: TableProps<DetalleServicioResponse>['columns'] = [
+    { title: 'Concepto', dataIndex: 'descripcion' },
+    {
+      title: 'Tipo',
+      key: 'tipo',
+      render: (_, detalle) => (detalle.esRepuesto ? 'Repuesto' : 'Mano de obra'),
+    },
+    { title: 'Código', dataIndex: 'productoCodigo', className: 'num', render: (codigo: string | null) => codigo ?? '—' },
+    { title: 'Cant.', dataIndex: 'cantidad', align: 'right', className: 'num' },
+    {
+      title: 'P. unit.',
+      dataIndex: 'precioUnitario',
+      align: 'right',
+      className: 'num',
+      render: (precio: number) => importe(precio),
+    },
+    {
+      title: 'Importe',
+      dataIndex: 'subtotal',
+      align: 'right',
+      className: 'num',
+      render: (subtotal: number) => importe(subtotal),
+    },
+    {
+      title: '',
+      key: 'acciones',
+      align: 'right',
+      render: (_, detalle) =>
+        puedeEditar ? (
+          <Popconfirm
+            title="Quitar el ítem"
+            description={detalle.esRepuesto ? 'El repuesto vuelve al stock.' : undefined}
+            okText="Quitar"
+            cancelText="Cancelar"
+            onConfirm={() => eliminarDetalle.mutate({ id: datos.id, detalleId: detalle.id })}
+          >
+            <Button type="link">Quitar</Button>
+          </Popconfirm>
+        ) : null,
+    },
+  ]
+
+  const registrarManoDeObra = async (campos: CamposManoObra) => {
+    await agregarDetalle.mutateAsync({
+      id: datos.id,
+      datos: {
+        productoId: null,
+        descripcion: campos.descripcion.trim(),
+        cantidad: campos.cantidad,
+        precioUnitario: campos.precioUnitario,
+      },
+    })
+    formularioMano.resetFields()
+  }
+
+  const guardarDiagnosticoActual = async () => {
+    await guardarDiagnostico.mutateAsync({
+      id: datos.id,
+      datos: {
+        diagnostico: (textoDiagnostico ?? datos.diagnostico ?? '').trim(),
+        tecnicoAsignadoId: tecnico ?? datos.tecnicoAsignadoId,
+        observaciones: null,
+      },
+    })
+    setTextoDiagnostico(null)
+    setTecnico(null)
+  }
+
+  const confirmarCambioDeEstado = async () => {
+    if (estadoDestino === null) {
+      return
+    }
+
+    await cambiarEstado.mutateAsync({
+      id: datos.id,
+      datos: {
+        nuevoEstado: estadoDestino,
+        observaciones: observacionesCambio.trim() ? observacionesCambio.trim() : null,
+      },
+    })
+
+    setEstadoDestino(null)
+    setObservacionesCambio('')
+  }
 
   return (
     <>
       <header className="barra-superior detalle">
         <div>
-          <div className="etiqueta">{orden.numero}</div>
+          <div className="etiqueta">{referenciaOrden(datos.id)}</div>
           <h1 className="titulo-orden">
-            {unidad ? `${nombreUnidad(unidad)} · ${identificadorUnidad(unidad)}` : orden.numero}
+            {datos.vehiculoMarca} {datos.vehiculoModelo} · {datos.vehiculoPlaca}
           </h1>
           <div className="etiquetas-orden">
-            <EstadoOrdenTag estado={orden.estado} />
-            <Tag style={{ marginInlineEnd: 0 }}>{orden.tecnico}</Tag>
+            <EstadoOrdenApiTag estadoId={datos.estadoId} />
+            <Tag style={{ marginInlineEnd: 0 }}>{datos.tecnicoNombre ?? 'Sin técnico'}</Tag>
           </div>
         </div>
         <div className="acciones">
-          <Button>Agregar repuesto</Button>
-          <Button type="primary">
-            {orden.estado === 'esperando_aprobacion' ? 'Registrar aprobación' : 'Cambiar estado'}
-          </Button>
+          {destinos.map((destino) => (
+            <Button
+              key={destino}
+              danger={destino === ESTADO.cancelada}
+              type={destino === ESTADO.cancelada ? 'default' : 'primary'}
+              onClick={() => setEstadoDestino(destino)}
+            >
+              {destino === ESTADO.cancelada ? 'Anular' : `Pasar a ${nombresEstado[destino]}`}
+            </Button>
+          ))}
         </div>
       </header>
 
       <div className="pagina">
+        <AvisoError
+          error={
+            cambiarEstado.error ??
+            agregarDetalle.error ??
+            eliminarDetalle.error ??
+            guardarDiagnostico.error
+          }
+        />
+
         <Indicadores
           tamano="mediano"
           items={[
-            { etiqueta: 'Cliente', valor: cliente?.nombre ?? '—' },
-            { etiqueta: 'Ingreso', valor: orden.ingreso },
-            { etiqueta: 'Medidor', valor: unidad ? `${entero(unidad.medidor)} ${unidad.unidadMedidor}` : '—' },
-            { etiqueta: 'Total', valor: total > 0 ? soles(total) : '—' },
+            { etiqueta: 'Cliente', valor: datos.clienteNombre },
+            { etiqueta: 'Ingreso', valor: fechaHora(datos.fechaApertura) },
+            {
+              etiqueta: 'Kilometraje',
+              valor: datos.vehiculoKilometraje === null ? '—' : `${entero(datos.vehiculoKilometraje)} km`,
+            },
+            { etiqueta: 'Total', valor: datos.total > 0 ? soles(datos.total) : '—' },
           ]}
         />
 
@@ -109,9 +228,9 @@ export function OrdenDetallePage() {
               <h2>Trabajos y repuestos</h2>
             </div>
             <Table
-              rowKey="concepto"
+              rowKey="id"
               columns={columnas}
-              dataSource={lineas}
+              dataSource={datos.detalles}
               pagination={false}
               locale={{ emptyText: 'Aún no hay trabajos ni repuestos registrados' }}
             />
@@ -125,70 +244,191 @@ export function OrdenDetallePage() {
                 <div className="valor">{importe(repuestos)}</div>
               </div>
               <div>
-                <div className="etiqueta">Op. gravada</div>
-                <div className="valor">{importe(gravada)}</div>
-              </div>
-              <div>
-                <div className="etiqueta">IGV 18 %</div>
-                <div className="valor">{importe(igv)}</div>
-              </div>
-              <div>
                 <div className="etiqueta">Total</div>
-                <div className="valor total">{soles(total)}</div>
+                <div className="valor total">{soles(datos.total)}</div>
               </div>
             </div>
-            <Button type="primary" disabled={orden.estado !== 'lista_entrega'} style={{ marginTop: 20 }}>
-              Registrar comprobante
-            </Button>
+
+            {puedeEditar && (
+              <>
+                <div className="seccion-titulo" style={{ marginTop: 24 }}>
+                  <h2>Agregar mano de obra</h2>
+                </div>
+                <Form<CamposManoObra>
+                  form={formularioMano}
+                  layout="vertical"
+                  requiredMark={false}
+                  onFinish={registrarManoDeObra}
+                  initialValues={{ cantidad: 1 }}
+                >
+                  <div className="formulario-grid">
+                    <Form.Item
+                      label="Concepto"
+                      name="descripcion"
+                      className="ancho-completo"
+                      rules={[{ required: true, message: 'Describe el trabajo' }]}
+                    >
+                      <Input placeholder="Mantenimiento de 12 000 km, revisión de frenos…" />
+                    </Form.Item>
+                    <Form.Item
+                      label="Cantidad"
+                      name="cantidad"
+                      rules={[{ required: true, message: 'Indica la cantidad' }]}
+                    >
+                      <InputNumber min={1} style={{ width: '100%' }} />
+                    </Form.Item>
+                    <Form.Item
+                      label="Precio unitario"
+                      name="precioUnitario"
+                      rules={[{ required: true, message: 'Indica el precio' }]}
+                    >
+                      <InputNumber min={0} precision={2} style={{ width: '100%' }} />
+                    </Form.Item>
+                  </div>
+                  <Button type="primary" htmlType="submit" loading={agregarDetalle.isPending}>
+                    Agregar
+                  </Button>
+                </Form>
+                <p className="texto-secundario" style={{ marginTop: 16 }}>
+                  Para agregar repuestos falta la API de inventario, que sale el martes 22/09. La orden descuenta stock
+                  sola cuando el repuesto se asigna, así que no conviene inventar el catálogo desde la web.
+                </p>
+              </>
+            )}
+            {!puedeEditar && (
+              <p className="texto-secundario" style={{ marginTop: 16 }}>
+                La orden está en «{datos.estado}» y ya no admite cambios en los ítems.
+              </p>
+            )}
           </section>
 
           <aside className="columna">
             <section>
               <div className="seccion-titulo">
-                <h2>Bitácora</h2>
+                <h2>Diagnóstico</h2>
+              </div>
+              <Input.TextArea
+                id="diagnostico"
+                rows={5}
+                value={textoDiagnostico ?? datos.diagnostico ?? ''}
+                onChange={(evento) => setTextoDiagnostico(evento.target.value)}
+                placeholder="Qué encontró el técnico"
+                disabled={!puedeDiagnosticar}
+              />
+              <div style={{ marginTop: 12 }}>
+                <Select
+                  allowClear
+                  showSearch
+                  optionFilterProp="label"
+                  style={{ width: '100%' }}
+                  placeholder="Técnico asignado"
+                  value={tecnico ?? datos.tecnicoAsignadoId ?? undefined}
+                  onChange={(valor) => setTecnico(valor ?? null)}
+                  disabled={!puedeDiagnosticar}
+                  options={(usuarios.data ?? []).map((usuario) => ({
+                    value: usuario.id,
+                    label: usuario.nombreCompleto,
+                  }))}
+                />
+              </div>
+              <Button
+                type="primary"
+                style={{ marginTop: 12 }}
+                loading={guardarDiagnostico.isPending}
+                disabled={
+                  !puedeDiagnosticar || (textoDiagnostico ?? datos.diagnostico ?? '').trim().length === 0
+                }
+                onClick={guardarDiagnosticoActual}
+              >
+                Guardar diagnóstico
+              </Button>
+              {datos.estadoId === ESTADO.abierta && (
+                <p className="texto-secundario" style={{ marginTop: 8 }}>
+                  Al guardar el diagnóstico la orden pasa sola a «Diagnóstico».
+                </p>
+              )}
+            </section>
+
+            <section>
+              <div className="seccion-titulo">
+                <h2>Unidad y cliente</h2>
               </div>
               <table className="tabla-simple">
                 <tbody>
-                  {bitacora.map((registro) => (
-                    <tr key={`${registro.fecha}-${registro.evento}`}>
-                      <td>{registro.evento}</td>
-                      <td>{registro.fecha}</td>
-                    </tr>
-                  ))}
+                  <tr>
+                    <td>Placa</td>
+                    <td>{datos.vehiculoPlaca}</td>
+                  </tr>
+                  <tr>
+                    <td>Año</td>
+                    <td>{datos.vehiculoAnio ?? '—'}</td>
+                  </tr>
+                  <tr>
+                    <td>Color</td>
+                    <td>{datos.vehiculoColor ?? '—'}</td>
+                  </tr>
+                  <tr>
+                    <td>Cliente</td>
+                    <td>
+                      <Link to={`/clientes/${datos.clienteId}`}>{datos.clienteNombre}</Link>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Documento</td>
+                    <td>{datos.clienteDocumentoIdentidad ?? '—'}</td>
+                  </tr>
+                  <tr>
+                    <td>Teléfono</td>
+                    <td>{datos.clienteTelefono ?? '—'}</td>
+                  </tr>
+                  <tr>
+                    <td>Cierre</td>
+                    <td>{fechaHora(datos.fechaCierre)}</td>
+                  </tr>
                 </tbody>
               </table>
             </section>
+
             <section>
               <div className="seccion-titulo">
-                <h2>Nota del asesor</h2>
+                <h2>Observaciones de recepción</h2>
               </div>
-              <Input.TextArea id="nota-asesor" rows={4} defaultValue={orden.nota} placeholder="Escribe una nota interna" />
-            </section>
-            <section>
-              <div className="seccion-titulo">
-                <h2>Historial de la unidad</h2>
-              </div>
-              {historial.length > 0 ? (
-                <table className="tabla-simple">
-                  <tbody>
-                    {historial.map((item) => (
-                      <tr key={item.numero}>
-                        <td>
-                          <Link to={`/ordenes/${item.numero}`}>{item.numero}</Link>
-                        </td>
-                        <td>{item.ingreso}</td>
-                        <td>{item.total > 0 ? soles(item.total) : '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <p className="texto-secundario">Sin órdenes anteriores.</p>
-              )}
+              <p className={datos.observaciones ? undefined : 'texto-secundario'}>
+                {datos.observaciones ?? 'Sin observaciones.'}
+              </p>
             </section>
           </aside>
         </div>
       </div>
+
+      <Modal
+        title={
+          estadoDestino === ESTADO.cancelada
+            ? 'Anular la orden'
+            : `Pasar a ${estadoDestino === null ? '' : nombresEstado[estadoDestino]}`
+        }
+        open={estadoDestino !== null}
+        onCancel={() => {
+          setEstadoDestino(null)
+          setObservacionesCambio('')
+        }}
+        onOk={confirmarCambioDeEstado}
+        okText="Confirmar"
+        cancelText="Cancelar"
+        okButtonProps={{ danger: estadoDestino === ESTADO.cancelada }}
+        confirmLoading={cambiarEstado.isPending}
+        destroyOnHidden
+      >
+        {estadoDestino === ESTADO.cancelada && (
+          <p>Los repuestos asignados vuelven al stock. La orden no se puede reabrir.</p>
+        )}
+        <Input.TextArea
+          rows={3}
+          value={observacionesCambio}
+          onChange={(evento) => setObservacionesCambio(evento.target.value)}
+          placeholder="Observaciones (opcional)"
+        />
+      </Modal>
     </>
   )
 }

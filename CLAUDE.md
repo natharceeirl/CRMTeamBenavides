@@ -87,22 +87,19 @@ Principios del documento técnico que no se negocian:
 ## Repositorio
 
 - GitHub: https://github.com/natharceeirl/CRMTeamBenavides
-- Ramas: toda rama `feature/*` sale de `develop` actualizado y comparte su historia. Una rama con su propio commit inicial no puede abrir un Pull Request a `develop`.
+- Ramas (desde el 16/09): todo el trabajo va directo sobre `develop`. Front y back hacen sus commits ahí; no se crean ramas `feature/*` ni Pull Requests para el día a día.
 
   ```
-  main
-  └─ develop
-      ├─ feature/web-login       ← Santiago
-      ├─ feature/flutter-login   ← Santiago
-      ├─ feature/modelo-datos    ← Paolo
-      └─ feature/api-clientes    ← Paolo
+  main       (historia antigua, sin relación con develop)
+  └─ develop ← Santiago y Paolo
   ```
 
-- Flujo: `git switch develop` → `git pull` → `git switch -c feature/<tarea>` → commits → Pull Request a `develop`. Nunca se hace commit directo en `develop` ni en `main`.
+- Flujo: `git pull` antes de empezar y antes de subir → commits en `develop` → `git push`.
+- Pendiente: `main` (`f4806a0`) y `develop` (raíz `7775b93`) tienen historias sin relación, porque `develop` se rehízo sobre la rama del back. Hay que resolverlo antes del despliegue.
 - Estructura:
-  - `CRMTeamBenavides.slnx` y `src/CRMTeamBenavides.Api`: la API .NET 10 con entidades de dominio, `ApplicationDbContext` y migraciones (rama `feature/modelo-datos`).
-  - `src/web`: la web administrativa en React + TypeScript + Vite + Ant Design. Por ahora son wireframes con datos de ejemplo, y ahí se construye el login web (rama `feature/web-login`); ver `src/web/README.md`.
-  - La app móvil todavía no tiene proyecto.
+  - `CRMTeamBenavides.slnx` y `src/CRMTeamBenavides.Api`: la API .NET 10 con entidades de dominio, servicios, endpoints por área en `Features/`, `ApplicationDbContext` y migraciones.
+  - `src/web`: la web administrativa en React + TypeScript + Vite + Ant Design. Por ahora son wireframes con datos de ejemplo; ver `src/web/README.md`.
+  - `src/movil`: la app en Flutter (Riverpod, Dio y go_router) con login, navegación, clientes y unidades contra la misma API; ver `src/movil/README.md`.
 - Convenciones del backend: dominio en español, identificadores `Guid`, `BaseEntity` con campos de auditoría y borrado lógico (`Activo`).
 - Configuración local: la cadena de conexión y `JwtSettings:SecretKey` van en `dotnet user-secrets`, nunca en `appsettings.json`.
 - En desarrollo, el documento OpenAPI se sirve en `/openapi/v1.json`.

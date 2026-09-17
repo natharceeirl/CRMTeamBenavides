@@ -1,21 +1,34 @@
-import { useState } from 'react'
-import { Button, Checkbox, DatePicker, Form, Input, InputNumber, Segmented, Select, Upload } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
+import { Button, Form, Input, Select } from 'antd'
 import { useNavigate } from 'react-router'
 import { BarraSuperior } from '../components/BarraSuperior'
-import { clientes, identificadorUnidad, nombreUnidad, ordenes, unidades } from '../data/ejemplo'
-import { entero } from '../utils/formato'
+import { AvisoError } from '../components/AvisoError'
+import { useAbrirOrden } from '../api/ordenes'
+import { useVehiculos } from '../api/vehiculos'
+import { useUsuarios } from '../api/usuarios'
 
-const tecnicos = [...new Set(ordenes.map((orden) => orden.tecnico))]
-const accesorios = ['Casco', 'Llaves', 'Espejos', 'Tapa de tanque', 'Documentos']
+type Campos = {
+  vehiculoId: string
+  tecnicoAsignadoId?: string
+  observaciones?: string
+}
 
 export function NuevaOrdenPage() {
   const navigate = useNavigate()
-  const [clienteId, setClienteId] = useState<string>()
-  const [unidadId, setUnidadId] = useState<string>()
+  const [formulario] = Form.useForm<Campos>()
 
-  const unidadesCliente = unidades.filter((unidad) => unidad.clienteId === clienteId)
-  const unidad = unidades.find((item) => item.id === unidadId)
+  const vehiculos = useVehiculos()
+  const usuarios = useUsuarios()
+  const abrir = useAbrirOrden()
+
+  const enviar = async (campos: Campos) => {
+    const orden = await abrir.mutateAsync({
+      vehiculoId: campos.vehiculoId,
+      tecnicoAsignadoId: campos.tecnicoAsignadoId ?? null,
+      observaciones: campos.observaciones?.trim() ? campos.observaciones.trim() : null,
+    })
+
+    navigate(`/ordenes/${orden.id}`)
+  }
 
   return (
     <>
@@ -25,44 +38,51 @@ export function NuevaOrdenPage() {
         acciones={
           <>
             <Button onClick={() => navigate('/ordenes')}>Cancelar</Button>
-            <Button type="primary" onClick={() => navigate('/ordenes')}>
+            <Button type="primary" loading={abrir.isPending} onClick={() => formulario.submit()}>
               Abrir orden
             </Button>
           </>
         }
       />
       <div className="pagina">
-        <Form layout="vertical" requiredMark={false} className="formulario">
+        <AvisoError error={abrir.error} />
+        <Form<Campos>
+          form={formulario}
+          layout="vertical"
+          requiredMark={false}
+          className="formulario"
+          onFinish={enviar}
+        >
           <section className="bloque">
-            <h2>Cliente y unidad</h2>
+            <h2>Unidad que ingresa</h2>
             <div className="formulario-grid">
-              <Form.Item label="Cliente" htmlFor="cliente">
-                <Select<string>
-                  id="cliente"
+              <Form.Item
+                label="Unidad"
+                name="vehiculoId"
+                className="ancho-completo"
+                rules={[{ required: true, message: 'Elige la unidad que ingresa al taller' }]}
+              >
+                <Select
                   showSearch
                   optionFilterProp="label"
-                  placeholder="Busca por nombre o documento"
-                  value={clienteId}
-                  onChange={(valor) => {
-                    setClienteId(valor)
-                    setUnidadId(undefined)
-                  }}
-                  options={clientes.map((cliente) => ({
-                    value: cliente.id,
-                    label: `${cliente.nombre} · ${cliente.tipoDocumento} ${cliente.documento}`,
+                  loading={vehiculos.isPending}
+                  placeholder="Busca por placa, modelo o cliente"
+                  options={(vehiculos.data ?? []).map((vehiculo) => ({
+                    value: vehiculo.id,
+                    label: `${vehiculo.marca} ${vehiculo.modelo} · ${vehiculo.placa} · ${vehiculo.clienteNombre}`,
                   }))}
                 />
               </Form.Item>
-              <Form.Item label="Unidad" htmlFor="unidad">
-                <Select<string>
-                  id="unidad"
-                  placeholder={clienteId ? 'Elige la unidad' : 'Primero elige un cliente'}
-                  disabled={!clienteId}
-                  value={unidadId}
-                  onChange={setUnidadId}
-                  options={unidadesCliente.map((item) => ({
-                    value: item.id,
-                    label: `${nombreUnidad(item)} · ${identificadorUnidad(item)}`,
+              <Form.Item label="Técnico" name="tecnicoAsignadoId">
+                <Select
+                  allowClear
+                  showSearch
+                  optionFilterProp="label"
+                  loading={usuarios.isPending}
+                  placeholder="Asignar técnico (opcional)"
+                  options={(usuarios.data ?? []).map((usuario) => ({
+                    value: usuario.id,
+                    label: usuario.nombreCompleto,
                   }))}
                 />
               </Form.Item>
@@ -72,55 +92,15 @@ export function NuevaOrdenPage() {
           <section className="bloque">
             <h2>Recepción</h2>
             <div className="formulario-grid">
-              <Form.Item label="Motivo de ingreso" htmlFor="motivo" className="ancho-completo">
-                <Input.TextArea id="motivo" rows={3} placeholder="Qué pide el cliente y qué síntomas reporta" />
-              </Form.Item>
-              <Form.Item
-                label={`Lectura del medidor (${unidad?.unidadMedidor === 'h' ? 'horas' : 'km'})`}
-                htmlFor="medidor"
-              >
-                <InputNumber
-                  id="medidor"
-                  min={0}
-                  style={{ width: '100%' }}
-                  placeholder={unidad ? `Última lectura: ${entero(unidad.medidor)}` : undefined}
-                />
-              </Form.Item>
-              <Form.Item label="Entrega estimada" htmlFor="entrega">
-                <DatePicker
-                  id="entrega"
-                  showTime
-                  format="DD/MM/YYYY HH:mm"
-                  placeholder="Fecha y hora"
-                  style={{ width: '100%' }}
-                />
-              </Form.Item>
-              <Form.Item label="Técnico" htmlFor="tecnico">
-                <Select<string>
-                  id="tecnico"
-                  placeholder="Asignar técnico"
-                  options={tecnicos.map((tecnico) => ({ value: tecnico, label: tecnico }))}
-                />
-              </Form.Item>
-              <Form.Item label="Prioridad">
-                <Segmented options={['Normal', 'Urgente']} defaultValue="Normal" />
+              <Form.Item label="Motivo de ingreso y observaciones" name="observaciones" className="ancho-completo">
+                <Input.TextArea rows={3} placeholder="Qué pide el cliente y qué síntomas reporta" />
               </Form.Item>
             </div>
-          </section>
-
-          <section className="bloque">
-            <h2>Accesorios entregados</h2>
-            <Checkbox.Group options={accesorios} />
-          </section>
-
-          <section className="bloque">
-            <h2>Fotos de ingreso</h2>
-            <Upload listType="picture-card" accept="image/*" multiple beforeUpload={() => false}>
-              <button type="button" className="subir-foto">
-                <PlusOutlined />
-                <span>Agregar foto</span>
-              </button>
-            </Upload>
+            <p className="texto-secundario">
+              La lectura del medidor, la fecha de entrega prometida, la prioridad, los accesorios recibidos y las fotos
+              de ingreso todavía no existen en la API. Están en el mockup y hay que confirmarlos con el Ingeniero antes
+              de que Paolo los agregue por migración.
+            </p>
           </section>
         </Form>
       </div>
