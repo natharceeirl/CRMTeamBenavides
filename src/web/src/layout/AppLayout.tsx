@@ -1,7 +1,7 @@
-import { NavLink, Outlet } from 'react-router'
+import { NavLink, Outlet, useNavigate } from 'react-router'
 import { Logo } from '../components/Logo'
 import { ChatbotWidget } from '../components/ChatbotWidget'
-import { usuarioActual } from '../data/ejemplo'
+import { useSesion } from '../auth/sesion'
 
 const enlaces = [
   { ruta: '/', texto: 'Tablero', exacto: true },
@@ -15,6 +15,14 @@ const enlaces = [
 ]
 
 export function AppLayout() {
+  const { usuario, salir } = useSesion()
+  const navigate = useNavigate()
+
+  const cerrar = () => {
+    salir()
+    navigate('/login', { replace: true })
+  }
+
   return (
     <div className="app">
       <aside className="sidebar">
@@ -29,8 +37,12 @@ export function AppLayout() {
           ))}
         </nav>
         <div className="sidebar-pie">
-          <strong>{usuarioActual.nombre}</strong>
-          {usuarioActual.rol}
+          <strong>{usuario?.nombre ?? 'Usuario'}</strong>
+          {/* El rol se mostrará cuando el backend lo mande en el login o en /me. */}
+          {usuario?.email}
+          <button type="button" className="sidebar-salir" onClick={cerrar}>
+            Cerrar sesión
+          </button>
         </div>
       </aside>
       <div className="contenido">
