@@ -1,7 +1,9 @@
 using System.Text;
 using CRMTeamBenavides.Api.Configuration;
 using CRMTeamBenavides.Api.Features.Auth;
+using CRMTeamBenavides.Api.Features.CategoriasProducto;
 using CRMTeamBenavides.Api.Features.Clientes;
+using CRMTeamBenavides.Api.Features.Inventario;
 using CRMTeamBenavides.Api.Features.OrdenesServicio;
 using CRMTeamBenavides.Api.Features.Permisos;
 using CRMTeamBenavides.Api.Features.Roles;
@@ -78,6 +80,8 @@ builder.Services.AddScoped<IRolService, RolService>();
 builder.Services.AddScoped<IPermisoService, PermisoService>();
 builder.Services.AddScoped<IUsuarioService, UsuarioService>();
 builder.Services.AddScoped<IOrdenServicioService, OrdenServicioService>();
+builder.Services.AddScoped<ICategoriaProductoService, CategoriaProductoService>();
+builder.Services.AddScoped<IInventarioService, InventarioService>();
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -106,6 +110,8 @@ app.MapRolEndpoints();
 app.MapPermisoEndpoints();
 app.MapUsuarioEndpoints();
 app.MapOrdenServicioEndpoints();
+app.MapCategoriaProductoEndpoints();
+app.MapInventarioEndpoints();
 
 var summaries = new[]
 {
