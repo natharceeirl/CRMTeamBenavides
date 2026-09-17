@@ -15,7 +15,7 @@ const enlaces = [
 ]
 
 export function AppLayout() {
-  const { usuario, salir } = useSesion()
+  const { usuario, roles, salir } = useSesion()
   const navigate = useNavigate()
 
   const cerrar = () => {
@@ -30,6 +30,8 @@ export function AppLayout() {
           <Logo variante="oscuro" alto={26} />
         </div>
         <nav className="sidebar-nav" aria-label="Menú principal">
+          {/* El menú todavía no se filtra por permiso: la matriz de roles y
+              permisos sigue pendiente de que el cliente la confirme. */}
           {enlaces.map((enlace) => (
             <NavLink key={enlace.ruta} to={enlace.ruta} end={enlace.exacto}>
               {enlace.texto}
@@ -38,8 +40,7 @@ export function AppLayout() {
         </nav>
         <div className="sidebar-pie">
           <strong>{usuario?.nombre ?? 'Usuario'}</strong>
-          {/* El rol se mostrará cuando el backend lo mande en el login o en /me. */}
-          {usuario?.email}
+          {roles.length > 0 ? roles.join(' · ') : usuario?.email}
           <button type="button" className="sidebar-salir" onClick={cerrar}>
             Cerrar sesión
           </button>

@@ -3,79 +3,75 @@ import { Button, Input, Select, Table, type TableProps } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import { Link, useNavigate } from 'react-router'
 import { BarraSuperior } from '../components/BarraSuperior'
-import { EstadoOrdenTag } from '../components/EstadoOrdenTag'
-import {
-  buscarCliente,
-  buscarUnidad,
-  estadosOrden,
-  identificadorUnidad,
-  nombreUnidad,
-  ordenes,
-  type EstadoOrden,
-  type Orden,
-} from '../data/ejemplo'
-import { soles } from '../utils/formato'
+import { AvisoError } from '../components/AvisoError'
+import { EstadoOrdenApiTag } from '../components/EstadoOrdenApiTag'
+import { nombresEstado, useOrdenes } from '../api/ordenes'
+import type { OrdenServicioResponse } from '../api/tipos'
+import { fechaHora, referenciaOrden } from '../utils/formato'
 
-const opcionesEstado = (Object.keys(estadosOrden) as EstadoOrden[]).map((clave) => ({
-  value: clave,
-  label: estadosOrden[clave],
+const opcionesEstado = Object.entries(nombresEstado).map(([valor, etiqueta]) => ({
+  value: Number(valor),
+  label: etiqueta,
 }))
 
-const opcionesTecnico = [...new Set(ordenes.map((orden) => orden.tecnico))].map((tecnico) => ({
-  value: tecnico,
-  label: tecnico,
-}))
-
-const columnas: TableProps<Orden>['columns'] = [
+const columnas: TableProps<OrdenServicioResponse>['columns'] = [
   {
     title: 'Orden',
-    dataIndex: 'numero',
+    dataIndex: 'id',
     className: 'num',
-    render: (numero: string) => (
-      <Link to={`/ordenes/${numero}`} style={{ fontWeight: 600 }}>
-        {numero}
+    render: (id: string) => (
+      <Link to={`/ordenes/${id}`} style={{ fontWeight: 600 }}>
+        {referenciaOrden(id)}
       </Link>
     ),
   },
-  { title: 'Cliente', key: 'cliente', render: (_, orden) => buscarCliente(orden.clienteId)?.nombre ?? '—' },
+  { title: 'Cliente', dataIndex: 'clienteNombre' },
   {
     title: 'Unidad',
     key: 'unidad',
-    render: (_, orden) => {
-      const unidad = buscarUnidad(orden.unidadId)
-      return unidad ? `${nombreUnidad(unidad)} · ${identificadorUnidad(unidad)}` : '—'
-    },
+    render: (_, orden) => `${orden.vehiculoMarca} ${orden.vehiculoModelo} · ${orden.vehiculoPlaca}`,
   },
-  { title: 'Técnico', dataIndex: 'tecnico', className: 'sin-salto' },
-  { title: 'Estado', key: 'estado', render: (_, orden) => <EstadoOrdenTag estado={orden.estado} /> },
-  { title: 'Entrega', dataIndex: 'entrega', className: 'num' },
   {
-    title: 'Total',
-    dataIndex: 'total',
-    align: 'right',
+    title: 'Técnico',
+    dataIndex: 'tecnicoNombre',
+    className: 'sin-salto',
+    render: (nombre: string | null) => nombre ?? 'Sin asignar',
+  },
+  {
+    title: 'Estado',
+    key: 'estado',
+    render: (_, orden) => <EstadoOrdenApiTag estadoId={orden.estadoId} />,
+  },
+  {
+    title: 'Ingreso',
+    dataIndex: 'fechaApertura',
     className: 'num',
-    render: (total: number) => (total > 0 ? soles(total) : '—'),
+    render: (fecha: string) => fechaHora(fecha),
   },
 ]
 
 export function OrdenesPage() {
   const navigate = useNavigate()
   const [texto, setTexto] = useState('')
-  const [estado, setEstado] = useState<EstadoOrden>()
-  const [tecnico, setTecnico] = useState<string>()
+  const [estado, setEstado] = useState<number>()
 
-  const visibles = ordenes.filter((orden) => {
-    const unidad = buscarUnidad(orden.unidadId)
-    const cliente = buscarCliente(orden.clienteId)
-    const busqueda = [orden.numero, orden.motivo, cliente?.nombre, unidad?.placa, unidad?.serie]
+  // El estado se filtra en la API; el texto, en la tabla ya cargada.
+  const ordenes = useOrdenes({ estado })
+
+  const busqueda = texto.toLowerCase()
+  const visibles = (ordenes.data ?? []).filter((orden) =>
+    [
+      referenciaOrden(orden.id),
+      orden.clienteNombre,
+      orden.vehiculoPlaca,
+      orden.vehiculoMarca,
+      orden.vehiculoModelo,
+      orden.tecnicoNombre ?? '',
+    ]
       .join(' ')
       .toLowerCase()
-    return (
-      (!texto || busqueda.includes(texto.toLowerCase())) &&
-      (!estado || orden.estado === estado) &&
-      (!tecnico || orden.tecnico === tecnico)
-    )
-  })
+      .includes(busqueda),
+  )
 
   return (
     <>
@@ -89,17 +85,18 @@ export function OrdenesPage() {
       />
       <div className="pagina">
         <section>
+          <AvisoError error={ordenes.error} />
           <div className="filtros">
             <Input
               id="buscar-ordenes"
               prefix={<SearchOutlined />}
-              placeholder="Buscar orden, cliente, placa o serie"
+              placeholder="Buscar por cliente, placa, técnico o referencia"
               allowClear
               value={texto}
               onChange={(evento) => setTexto(evento.target.value)}
-              style={{ width: 320 }}
+              style={{ width: 340 }}
             />
-            <Select<EstadoOrden>
+            <Select<number>
               id="filtro-estado"
               allowClear
               placeholder="Estado"
@@ -108,17 +105,15 @@ export function OrdenesPage() {
               options={opcionesEstado}
               style={{ width: 220 }}
             />
-            <Select<string>
-              id="filtro-tecnico"
-              allowClear
-              placeholder="Técnico"
-              value={tecnico}
-              onChange={setTecnico}
-              options={opcionesTecnico}
-              style={{ width: 200 }}
-            />
           </div>
-          <Table rowKey="numero" columns={columnas} dataSource={visibles} pagination={false} />
+          <Table
+            rowKey="id"
+            columns={columnas}
+            dataSource={visibles}
+            pagination={false}
+            loading={ordenes.isPending}
+            locale={{ emptyText: 'No hay órdenes que coincidan' }}
+          />
         </section>
       </div>
     </>

@@ -1,5 +1,5 @@
 // Contratos del backend: src/CRMTeamBenavides.Api/Features/**/*Contracts.cs
-// ASP.NET serializa las propiedades en camelCase.
+// ASP.NET serializa las propiedades en camelCase y los enums como número.
 
 export type SolicitudLogin = {
   email: string
@@ -11,6 +11,15 @@ export type RespuestaLogin = {
   accessTokenExpiration: string
   refreshToken: string
   refreshTokenExpiration: string
+}
+
+/** GET /api/auth/me */
+export type UsuarioActualResponse = {
+  id: string
+  email: string
+  nombreCompleto: string
+  activo: boolean
+  roles: string[]
 }
 
 export type ClienteResponse = {
@@ -99,4 +108,70 @@ export type PermisoResponse = {
   codigo: string
   descripcion: string | null
   activo: boolean
+}
+
+export type DetalleServicioResponse = {
+  id: string
+  productoId: string | null
+  productoCodigo: string | null
+  descripcion: string
+  cantidad: number
+  precioUnitario: number
+  subtotal: number
+  esRepuesto: boolean
+}
+
+export type OrdenServicioResponse = {
+  id: string
+  vehiculoId: string
+  vehiculoPlaca: string
+  vehiculoMarca: string
+  vehiculoModelo: string
+  clienteId: string
+  clienteNombre: string
+  tecnicoAsignadoId: string | null
+  tecnicoNombre: string | null
+  estado: string
+  estadoId: number
+  fechaApertura: string
+  fechaCierre: string | null
+  diagnostico: string | null
+  observaciones: string | null
+  activo: boolean
+}
+
+export type OrdenServicioDetalleResponse = OrdenServicioResponse & {
+  vehiculoAnio: number | null
+  vehiculoKilometraje: number | null
+  vehiculoColor: string | null
+  clienteTelefono: string | null
+  clienteDocumentoIdentidad: string | null
+  detalles: DetalleServicioResponse[]
+  total: number
+}
+
+export type AperturaOrdenRequest = {
+  vehiculoId: string
+  tecnicoAsignadoId: string | null
+  observaciones: string | null
+}
+
+export type DiagnosticoRequest = {
+  diagnostico: string
+  tecnicoAsignadoId: string | null
+  observaciones: string | null
+}
+
+/** Repuesto: productoId y cantidad, el precio lo pone el catálogo.
+ *  Mano de obra: descripcion, cantidad y precioUnitario. */
+export type AgregarDetalleRequest = {
+  productoId: string | null
+  descripcion: string | null
+  cantidad: number
+  precioUnitario: number | null
+}
+
+export type CambiarEstadoRequest = {
+  nuevoEstado: number
+  observaciones: string | null
 }

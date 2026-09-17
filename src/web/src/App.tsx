@@ -23,7 +23,7 @@ export default function App() {
           <Route index element={<TableroPage />} />
           <Route path="ordenes" element={<OrdenesPage />} />
           <Route path="ordenes/nueva" element={<NuevaOrdenPage />} />
-          <Route path="ordenes/:numero" element={<OrdenDetallePage />} />
+          <Route path="ordenes/:id" element={<OrdenDetallePage />} />
           <Route path="clientes" element={<ClientesPage />} />
           <Route path="clientes/:id" element={<ClienteDetallePage />} />
           <Route path="unidades" element={<UnidadesPage />} />
