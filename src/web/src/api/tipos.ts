@@ -300,3 +300,75 @@ export type CrearVentaRequest = {
   detalles: { productoId: string; cantidad: number }[]
   esCotizacion: boolean
 }
+
+export type DashboardResumenResponse = {
+  fechaDesde: string | null
+  fechaHasta: string | null
+  ordenesServicio: {
+    abierta: number
+    diagnostico: number
+    aprobada: number
+    enProceso: number
+    lista: number
+    entregada: number
+    cancelada: number
+    total: number
+  }
+  ventas: {
+    confirmadas: number
+    cotizaciones: number
+    anuladas: number
+    montoConfirmadas: number
+    ticketPromedio: number
+  }
+  inventario: {
+    productosConStockBajo: number
+    productosSinStock: number
+    valorEstimadoInventario: number
+  }
+  crmActivos: {
+    clientesActivos: number
+    vehiculosActivos: number
+  }
+}
+
+export type OrdenServicioReporteResponse = {
+  id: string
+  vehiculoId: string
+  vehiculoPlaca: string
+  vehiculoMarca: string
+  vehiculoModelo: string
+  clienteId: string
+  clienteNombre: string
+  tecnicoId: string | null
+  tecnicoNombre: string | null
+  estado: string
+  estadoId: number
+  fechaApertura: string
+  fechaCierre: string | null
+  /** Horas entre apertura y cierre; null si sigue abierta. */
+  tiempoAtencionHoras: number | null
+}
+
+export type VentaReporteResponse = {
+  id: string
+  clienteId: string
+  clienteNombre: string
+  ordenServicioId: string | null
+  estado: string
+  estadoId: number
+  fecha: string
+  total: number
+}
+
+export type StockBajoResponse = {
+  productoId: string
+  codigo: string
+  nombre: string
+  categoriaId: string
+  categoriaNombre: string
+  stockActual: number
+  stockMinimo: number
+  diferencia: number
+  precioVenta: number
+}
