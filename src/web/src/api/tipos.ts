@@ -254,3 +254,49 @@ export type MovimientoInventarioResponse = {
   ventaId: string | null
   fechaCreacion: string
 }
+
+export type VentaResponse = {
+  id: string
+  clienteId: string
+  clienteNombre: string
+  ordenServicioId: string | null
+  estado: string
+  estadoId: number
+  fecha: string
+  total: number
+  cantidadItems: number
+  activo: boolean
+}
+
+export type DetalleVentaResponse = {
+  id: string
+  productoId: string
+  productoCodigo: string
+  productoNombre: string
+  cantidad: number
+  precioUnitario: number
+  subtotal: number
+}
+
+export type VentaDetalleResponse = {
+  id: string
+  clienteId: string
+  clienteNombre: string
+  clienteDocumento: string | null
+  clienteTelefono: string | null
+  ordenServicioId: string | null
+  estado: string
+  estadoId: number
+  fecha: string
+  total: number
+  detalles: DetalleVentaResponse[]
+  activo: boolean
+}
+
+/** Con esCotizacion en false la venta nace confirmada y descuenta stock. */
+export type CrearVentaRequest = {
+  clienteId: string
+  ordenServicioId: string | null
+  detalles: { productoId: string; cantidad: number }[]
+  esCotizacion: boolean
+}
