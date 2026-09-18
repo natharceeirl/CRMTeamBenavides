@@ -16,6 +16,7 @@ import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { EstadoOrdenApiTag } from '../components/EstadoOrdenApiTag'
 import { Indicadores } from '../components/Indicadores'
+import { ModalRepuestoOrden } from '../components/ModalRepuestoOrden'
 import {
   ESTADO,
   esEstadoTerminal,
@@ -53,6 +54,7 @@ export function OrdenDetallePage() {
   const [tecnico, setTecnico] = useState<string | null>(null)
   const [estadoDestino, setEstadoDestino] = useState<number | null>(null)
   const [observacionesCambio, setObservacionesCambio] = useState('')
+  const [modalRepuesto, setModalRepuesto] = useState(false)
 
   if (orden.isPending) {
     return (
@@ -289,10 +291,9 @@ export function OrdenDetallePage() {
                     Agregar
                   </Button>
                 </Form>
-                <p className="texto-secundario" style={{ marginTop: 16 }}>
-                  Para agregar repuestos falta la API de inventario, que sale el martes 22/09. La orden descuenta stock
-                  sola cuando el repuesto se asigna, así que no conviene inventar el catálogo desde la web.
-                </p>
+                <Button style={{ marginTop: 16 }} onClick={() => setModalRepuesto(true)}>
+                  Agregar repuesto del inventario
+                </Button>
               </>
             )}
             {!puedeEditar && (
@@ -400,6 +401,12 @@ export function OrdenDetallePage() {
           </aside>
         </div>
       </div>
+
+      <ModalRepuestoOrden
+        abierto={modalRepuesto}
+        ordenId={datos.id}
+        onCerrar={() => setModalRepuesto(false)}
+      />
 
       <Modal
         title={

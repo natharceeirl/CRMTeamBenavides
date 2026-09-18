@@ -175,3 +175,82 @@ export type CambiarEstadoRequest = {
   nuevoEstado: number
   observaciones: string | null
 }
+
+export type CategoriaProductoResponse = {
+  id: string
+  nombre: string
+  cantidadProductos: number
+  activo: boolean
+  fechaCreacion: string
+}
+
+export type CategoriaProductoRequest = {
+  nombre: string
+}
+
+export type ProductoResponse = {
+  id: string
+  codigo: string
+  nombre: string
+  descripcion: string | null
+  unidad: string
+  precioVenta: number
+  stockActual: number
+  stockMinimo: number
+  esBajoStock: boolean
+  categoriaId: string
+  categoriaNombre: string
+  activo: boolean
+  fechaCreacion: string
+}
+
+export type CrearProductoRequest = {
+  categoriaId: string
+  codigo: string
+  nombre: string
+  descripcion: string | null
+  unidad: string | null
+  precioVenta: number
+  stockInicial: number
+  stockMinimo: number
+}
+
+/** Al actualizar no se toca el stock: eso va por entradas, salidas o ajustes. */
+export type ActualizarProductoRequest = {
+  categoriaId: string
+  codigo: string
+  nombre: string
+  descripcion: string | null
+  unidad: string | null
+  precioVenta: number
+  stockMinimo: number
+}
+
+export type EntradaRequest = {
+  cantidad: number
+  motivo: string
+}
+
+export type SalidaRequest = {
+  cantidad: number
+  motivo: string
+}
+
+export type AjusteRequest = {
+  nuevoStock: number
+  motivo: string
+}
+
+export type MovimientoInventarioResponse = {
+  id: string
+  productoId: string
+  productoCodigo: string
+  productoNombre: string
+  tipo: string
+  tipoId: number
+  cantidad: number
+  motivo: string | null
+  ordenServicioId: string | null
+  ventaId: string | null
+  fechaCreacion: string
+}
