@@ -9,6 +9,7 @@ using CRMTeamBenavides.Api.Features.Permisos;
 using CRMTeamBenavides.Api.Features.Roles;
 using CRMTeamBenavides.Api.Features.Usuarios;
 using CRMTeamBenavides.Api.Features.Vehiculos;
+using CRMTeamBenavides.Api.Features.Chatbot;
 using CRMTeamBenavides.Api.Features.Dashboard;
 using CRMTeamBenavides.Api.Features.Reportes;
 using CRMTeamBenavides.Api.Features.Ventas;
@@ -88,6 +89,7 @@ builder.Services.AddScoped<IInventarioService, InventarioService>();
 builder.Services.AddScoped<IVentaService, VentaService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IReporteService, ReporteService>();
+builder.Services.AddScoped<IChatbotService, ChatbotService>();
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -102,6 +104,7 @@ if (app.Environment.IsDevelopment())
 
     using var seedScope = app.Services.CreateScope();
     await DevelopmentUserSeeder.SeedAsync(seedScope.ServiceProvider, app.Configuration);
+    await FaqSeeder.SeedAsync(seedScope.ServiceProvider.GetRequiredService<ApplicationDbContext>());
 }
 
 app.UseHttpsRedirection();
@@ -121,6 +124,7 @@ app.MapInventarioEndpoints();
 app.MapVentaEndpoints();
 app.MapDashboardEndpoints();
 app.MapReporteEndpoints();
+app.MapChatbotEndpoints();
 
 var summaries = new[]
 {

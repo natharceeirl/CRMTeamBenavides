@@ -33,6 +33,10 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
     public DbSet<DetalleVenta> DetallesVenta => Set<DetalleVenta>();
     public DbSet<Comprobante> Comprobantes => Set<Comprobante>();
 
+    // Chatbot
+    public DbSet<FaqItem> FaqItems => Set<FaqItem>();
+    public DbSet<ConsultaChatbot> ConsultasChatbot => Set<ConsultaChatbot>();
+
     // Auditoría
     public DbSet<EventoAuditoria> EventosAuditoria => Set<EventoAuditoria>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
@@ -100,6 +104,21 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
 
         modelBuilder.Entity<DetalleVenta>()
             .HasOne(d => d.Producto)
+            .WithMany()
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ConsultaChatbot>()
+            .HasOne(c => c.Cliente)
+            .WithMany()
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ConsultaChatbot>()
+            .HasOne(c => c.AgenteAsignado)
+            .WithMany()
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ConsultaChatbot>()
+            .HasOne(c => c.FaqItem)
             .WithMany()
             .OnDelete(DeleteBehavior.Restrict);
     }
