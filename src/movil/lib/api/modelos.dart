@@ -126,3 +126,137 @@ class UsuarioSesion {
   final String email;
   final String nombre;
 }
+
+/// GET /api/auth/me
+class UsuarioActualApi {
+  const UsuarioActualApi({
+    required this.id,
+    required this.email,
+    required this.nombreCompleto,
+    required this.activo,
+    required this.roles,
+  });
+
+  factory UsuarioActualApi.desdeJson(Map<String, dynamic> json) => UsuarioActualApi(
+        id: json['id'] as String,
+        email: json['email'] as String? ?? '',
+        nombreCompleto: json['nombreCompleto'] as String? ?? '',
+        activo: json['activo'] as bool? ?? true,
+        roles: (json['roles'] as List<dynamic>? ?? const [])
+            .map((rol) => rol as String)
+            .toList(),
+      );
+
+  final String id;
+  final String email;
+  final String nombreCompleto;
+  final bool activo;
+  final List<String> roles;
+}
+
+class OrdenServicioApi {
+  const OrdenServicioApi({
+    required this.id,
+    required this.vehiculoPlaca,
+    required this.vehiculoMarca,
+    required this.vehiculoModelo,
+    required this.clienteId,
+    required this.clienteNombre,
+    required this.estado,
+    required this.estadoId,
+    required this.fechaApertura,
+    this.tecnicoNombre,
+    this.diagnostico,
+    this.observaciones,
+  });
+
+  factory OrdenServicioApi.desdeJson(Map<String, dynamic> json) => OrdenServicioApi(
+        id: json['id'] as String,
+        vehiculoPlaca: json['vehiculoPlaca'] as String? ?? '',
+        vehiculoMarca: json['vehiculoMarca'] as String? ?? '',
+        vehiculoModelo: json['vehiculoModelo'] as String? ?? '',
+        clienteId: json['clienteId'] as String,
+        clienteNombre: json['clienteNombre'] as String? ?? '',
+        estado: json['estado'] as String? ?? '',
+        estadoId: json['estadoId'] as int,
+        fechaApertura: DateTime.parse(json['fechaApertura'] as String),
+        tecnicoNombre: json['tecnicoNombre'] as String?,
+        diagnostico: json['diagnostico'] as String?,
+        observaciones: json['observaciones'] as String?,
+      );
+
+  final String id;
+  final String vehiculoPlaca;
+  final String vehiculoMarca;
+  final String vehiculoModelo;
+  final String clienteId;
+  final String clienteNombre;
+  final String estado;
+  final int estadoId;
+  final DateTime fechaApertura;
+  final String? tecnicoNombre;
+  final String? diagnostico;
+  final String? observaciones;
+
+  String get unidad => '$vehiculoMarca $vehiculoModelo';
+
+  /// La API no da correlativo todavía: se usa el inicio del id.
+  String get referencia => '#${id.substring(0, 8).toUpperCase()}';
+}
+
+class DetalleServicioApi {
+  const DetalleServicioApi({
+    required this.id,
+    required this.descripcion,
+    required this.cantidad,
+    required this.precioUnitario,
+    required this.subtotal,
+    required this.esRepuesto,
+    this.productoCodigo,
+  });
+
+  factory DetalleServicioApi.desdeJson(Map<String, dynamic> json) => DetalleServicioApi(
+        id: json['id'] as String,
+        descripcion: json['descripcion'] as String? ?? '',
+        cantidad: json['cantidad'] as int? ?? 0,
+        precioUnitario: (json['precioUnitario'] as num? ?? 0).toDouble(),
+        subtotal: (json['subtotal'] as num? ?? 0).toDouble(),
+        esRepuesto: json['esRepuesto'] as bool? ?? false,
+        productoCodigo: json['productoCodigo'] as String?,
+      );
+
+  final String id;
+  final String descripcion;
+  final int cantidad;
+  final double precioUnitario;
+  final double subtotal;
+  final bool esRepuesto;
+  final String? productoCodigo;
+}
+
+class OrdenServicioDetalleApi {
+  const OrdenServicioDetalleApi({
+    required this.orden,
+    required this.detalles,
+    required this.total,
+    this.clienteTelefono,
+    this.vehiculoKilometraje,
+  });
+
+  factory OrdenServicioDetalleApi.desdeJson(Map<String, dynamic> json) =>
+      OrdenServicioDetalleApi(
+        orden: OrdenServicioApi.desdeJson(json),
+        detalles: (json['detalles'] as List<dynamic>? ?? const [])
+            .map((detalle) => DetalleServicioApi.desdeJson(detalle as Map<String, dynamic>))
+            .toList(),
+        total: (json['total'] as num? ?? 0).toDouble(),
+        clienteTelefono: json['clienteTelefono'] as String?,
+        vehiculoKilometraje: json['vehiculoKilometraje'] as int?,
+      );
+
+  final OrdenServicioApi orden;
+  final List<DetalleServicioApi> detalles;
+  final double total;
+  final String? clienteTelefono;
+  final int? vehiculoKilometraje;
+}

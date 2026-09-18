@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/sesion.dart';
 import '../tema.dart';
 import 'clientes.dart';
+import 'ordenes.dart';
 import 'unidades.dart';
 
 class PantallaInicio extends ConsumerStatefulWidget {
@@ -24,7 +25,10 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final titulos = ['Clientes', 'Unidades'];
+    final titulos = ['Órdenes', 'Clientes', 'Unidades'];
+    final subtitulo = sesion.roles.isEmpty
+        ? (sesion.usuario?.nombre ?? '')
+        : '${sesion.usuario?.nombre ?? ''} · ${sesion.roles.join(', ')}';
 
     return Scaffold(
       appBar: AppBar(
@@ -33,7 +37,7 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
           children: [
             Text(titulos[_seccion]),
             Text(
-              sesion.usuario?.nombre ?? '',
+              subtitulo,
               style: const TextStyle(fontSize: 12, color: Colors.white70),
             ),
           ],
@@ -48,13 +52,18 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
       ),
       body: IndexedStack(
         index: _seccion,
-        children: const [PantallaClientes(), PantallaUnidades()],
+        children: const [PantallaOrdenes(), PantallaClientes(), PantallaUnidades()],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _seccion,
         onDestinationSelected: (indice) => setState(() => _seccion = indice),
         indicatorColor: Marca.acento.withValues(alpha: 0.15),
         destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.build_outlined),
+            selectedIcon: Icon(Icons.build),
+            label: 'Órdenes',
+          ),
           NavigationDestination(
             icon: Icon(Icons.people_outline),
             selectedIcon: Icon(Icons.people),

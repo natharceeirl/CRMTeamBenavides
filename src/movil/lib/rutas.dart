@@ -6,6 +6,7 @@ import 'auth/sesion.dart';
 import 'pantallas/cliente_detalle.dart';
 import 'pantallas/inicio.dart';
 import 'pantallas/login.dart';
+import 'pantallas/orden_detalle.dart';
 
 /// Rutas de la app. El guardia vive acá: sin sesión solo se puede estar en el
 /// login, y con sesión el login redirige al inicio.
@@ -45,6 +46,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: 'clientes/:id',
             builder: (context, estado) => PantallaClienteDetalle(
               clienteId: estado.pathParameters['id']!,
+            ),
+          ),
+          GoRoute(
+            path: 'ordenes/:id',
+            builder: (context, estado) => PantallaOrdenDetalle(
+              ordenId: estado.pathParameters['id']!,
             ),
           ),
         ],

@@ -86,6 +86,37 @@ class ApiHttp {
     return datos.map(VehiculoApi.desdeJson).toList();
   }
 
+  Future<UsuarioActualApi> usuarioActual() async {
+    final datos = await _pedir<Map<String, dynamic>>('/api/auth/me');
+    return UsuarioActualApi.desdeJson(datos);
+  }
+
+  Future<List<OrdenServicioApi>> ordenes({int? estado}) async {
+    final ruta = estado == null
+        ? '/api/ordenes-servicio'
+        : '/api/ordenes-servicio?estado=$estado';
+    final datos = await _lista(ruta);
+    return datos.map(OrdenServicioApi.desdeJson).toList();
+  }
+
+  Future<OrdenServicioDetalleApi> orden(String id) async {
+    final datos = await _pedir<Map<String, dynamic>>('/api/ordenes-servicio/$id');
+    return OrdenServicioDetalleApi.desdeJson(datos);
+  }
+
+  /// El backend pasa la orden a Diagnóstico si estaba Abierta.
+  Future<OrdenServicioApi> registrarDiagnostico(String id, String diagnostico) async {
+    try {
+      final respuesta = await _dio.put<Map<String, dynamic>>(
+        '/api/ordenes-servicio/$id/diagnostico',
+        data: {'diagnostico': diagnostico},
+      );
+      return OrdenServicioApi.desdeJson(respuesta.data!);
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
   Future<List<Map<String, dynamic>>> _lista(String ruta) async {
     final datos = await _pedir<List<dynamic>>(ruta);
     return datos.cast<Map<String, dynamic>>();
@@ -186,6 +217,14 @@ class ApiHttp {
   }
 
   String _mensajeDeError(DioException fallo) {
+    final cuerpo = fallo.response?.data;
+    if (cuerpo is Map && cuerpo['error'] is String) {
+      final detalle = cuerpo['error'] as String;
+      if (detalle.isNotEmpty) {
+        return detalle;
+      }
+    }
+
     final estado = fallo.response?.statusCode;
     if (estado == 401) return 'La sesión expiró. Vuelve a iniciar sesión.';
     if (estado == 403) return 'No tienes permiso para esta operación.';
