@@ -11,6 +11,7 @@ const enlaces = [
   { ruta: '/repuestos', texto: 'Repuestos' },
   { ruta: '/ventas', texto: 'Ventas' },
   { ruta: '/reportes', texto: 'Reportes' },
+  { ruta: '/chatbot', texto: 'Chatbot' },
   { ruta: '/usuarios', texto: 'Usuarios' },
 ]
 

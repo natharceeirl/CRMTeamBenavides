@@ -13,6 +13,7 @@ import { RepuestosPage } from './pages/RepuestosPage'
 import { VentasPage } from './pages/VentasPage'
 import { ReportesPage } from './pages/ReportesPage'
 import { UsuariosPage } from './pages/UsuariosPage'
+import { ChatbotPage } from './pages/ChatbotPage'
 
 export default function App() {
   return (
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="repuestos" element={<RepuestosPage />} />
           <Route path="ventas" element={<VentasPage />} />
           <Route path="reportes" element={<ReportesPage />} />
+          <Route path="chatbot" element={<ChatbotPage />} />
           <Route path="usuarios" element={<UsuariosPage />} />
         </Route>
       </Route>

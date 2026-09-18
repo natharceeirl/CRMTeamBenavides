@@ -372,3 +372,79 @@ export type StockBajoResponse = {
   diferencia: number
   precioVenta: number
 }
+
+export type FaqResponse = {
+  id: string
+  categoria: string
+  pregunta: string
+  respuesta: string
+  palabrasClave: string | null
+  orden: number
+  vecesConsultada: number
+  activo: boolean
+}
+
+export type FaqRequest = {
+  categoria: string
+  pregunta: string
+  respuesta: string
+  palabrasClave: string | null
+  orden: number
+  activo?: boolean
+}
+
+export type ConsultaChatbotRequest = {
+  mensaje: string
+  nombreContacto: string | null
+  telefonoContacto: string | null
+  canal: string | null
+}
+
+export type ConsultaChatbotResponse = {
+  resueltoPorFaq: boolean
+  faq: FaqResponse | null
+  sugerencias: FaqResponse[]
+  requiereAgente: boolean
+  consultaId: string
+  mensajeRespuesta: string
+}
+
+export type SolicitarAgenteRequest = {
+  consultaId: string | null
+  nombreContacto: string | null
+  telefonoContacto: string
+  motivo: string
+  canal: string | null
+}
+
+export type SolicitudAgenteResponse = {
+  consultaId: string
+  estado: string
+  mensaje: string
+}
+
+export type ConsultaBandejaResponse = {
+  id: string
+  fecha: string
+  canal: string
+  clienteId: string | null
+  clienteNombre: string | null
+  nombreContacto: string | null
+  telefonoContacto: string | null
+  mensajeConsulta: string
+  faqItemId: string | null
+  faqPregunta: string | null
+  requiereAtencionAgente: boolean
+  estadoAtencion: string
+  estadoAtencionId: number
+  agenteAsignadoId: string | null
+  agenteNombre: string | null
+  notasAgente: string | null
+  fechaDerivacion: string | null
+  fechaResolucion: string | null
+}
+
+export type ResolverConsultaRequest = {
+  estado: number
+  notasAgente: string | null
+}
