@@ -97,14 +97,18 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+// Configure the HTTP request pipeline and initial seeding.
+using (var seedScope = app.Services.CreateScope())
 {
-    app.MapOpenApi();
+    var dbContext = seedScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await RolSeeder.SeedAsync(dbContext);
 
-    using var seedScope = app.Services.CreateScope();
-    await DevelopmentUserSeeder.SeedAsync(seedScope.ServiceProvider, app.Configuration);
-    await FaqSeeder.SeedAsync(seedScope.ServiceProvider.GetRequiredService<ApplicationDbContext>());
+    if (app.Environment.IsDevelopment())
+    {
+        app.MapOpenApi();
+        await DevelopmentUserSeeder.SeedAsync(seedScope.ServiceProvider, app.Configuration);
+        await FaqSeeder.SeedAsync(dbContext);
+    }
 }
 
 app.UseHttpsRedirection();

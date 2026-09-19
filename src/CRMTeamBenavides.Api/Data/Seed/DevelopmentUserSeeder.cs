@@ -1,5 +1,7 @@
 using CRMTeamBenavides.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CRMTeamBenavides.Data.Seed;
 
@@ -18,28 +20,48 @@ public static class DevelopmentUserSeeder
         }
 
         var userManager = serviceProvider.GetRequiredService<UserManager<Usuario>>();
+        var context = serviceProvider.GetRequiredService<ApplicationDbContext>();
 
-        var existingUser = await userManager.FindByEmailAsync(email);
-        if (existingUser is not null)
+        var usuario = await userManager.FindByEmailAsync(email);
+        if (usuario is null)
         {
-            return;
+            usuario = new Usuario
+            {
+                UserName = email,
+                Email = email,
+                NombreCompleto = "Usuario de Desarrollo",
+                Activo = true,
+                EmailConfirmed = true
+            };
+
+            var result = await userManager.CreateAsync(usuario, password);
+
+            if (!result.Succeeded)
+            {
+                var errors = string.Join("; ", result.Errors.Select(e => e.Description));
+                throw new InvalidOperationException($"No se pudo crear el usuario de desarrollo: {errors}");
+            }
         }
 
-        var usuario = new Usuario
-        {
-            UserName = email,
-            Email = email,
-            NombreCompleto = "Usuario de Desarrollo",
-            Activo = true,
-            EmailConfirmed = true
-        };
+        // Asignar rol administrativo de forma idempotente
+        var adminRol = await context.Roles
+            .FirstOrDefaultAsync(r => r.Nombre == RolSeeder.RolAdmin && r.Activo)
+            ?? await context.Roles.FirstOrDefaultAsync(r => r.Nombre == "Administrador" && r.Activo);
 
-        var result = await userManager.CreateAsync(usuario, password);
-
-        if (!result.Succeeded)
+        if (adminRol is not null)
         {
-            var errors = string.Join("; ", result.Errors.Select(e => e.Description));
-            throw new InvalidOperationException($"No se pudo crear el usuario de desarrollo: {errors}");
+            var tieneRol = await context.UsuarioRoles
+                .AnyAsync(ur => ur.UsuarioId == usuario.Id && ur.RolId == adminRol.Id);
+
+            if (!tieneRol)
+            {
+                context.UsuarioRoles.Add(new UsuarioRol
+                {
+                    UsuarioId = usuario.Id,
+                    RolId = adminRol.Id
+                });
+                await context.SaveChangesAsync();
+            }
         }
     }
 }
