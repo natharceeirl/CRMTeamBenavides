@@ -40,20 +40,32 @@ public class RolService : IRolService
             return ServiceResult<RolResponse>.Invalid("Nombre es obligatorio.");
         }
 
-        var duplicado = await _context.Roles.AnyAsync(r => r.Nombre == request.Nombre && r.Activo);
-        if (duplicado)
+        var nombre = request.Nombre.Trim();
+
+        var rolExistente = await _context.Roles.FirstOrDefaultAsync(r => r.Nombre == nombre);
+        if (rolExistente != null)
         {
-            return ServiceResult<RolResponse>.Invalid("Ya existe un rol activo con ese nombre.");
+            return rolExistente.Activo
+                ? ServiceResult<RolResponse>.Invalid("Ya existe un rol activo con ese nombre.")
+                : ServiceResult<RolResponse>.Invalid("Ya existe un rol con ese nombre (inactivo).");
         }
 
         var rol = new Rol
         {
-            Nombre = request.Nombre.Trim(),
+            Nombre = nombre,
             Descripcion = request.Descripcion
         };
 
         _context.Roles.Add(rol);
-        await _context.SaveChangesAsync();
+
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            return ServiceResult<RolResponse>.Invalid("Ya existe un rol con ese nombre.");
+        }
 
         return ServiceResult<RolResponse>.Success(MapToResponse(rol));
     }
