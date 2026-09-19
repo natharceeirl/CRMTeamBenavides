@@ -13,6 +13,7 @@ using CRMTeamBenavides.Api.Features.Chatbot;
 using CRMTeamBenavides.Api.Features.Dashboard;
 using CRMTeamBenavides.Api.Features.Reportes;
 using CRMTeamBenavides.Api.Features.Ventas;
+using CRMTeamBenavides.Api.Features.Yamaha;
 using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Data.Seed;
@@ -90,6 +91,39 @@ builder.Services.AddScoped<IVentaService, VentaService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IReporteService, ReporteService>();
 builder.Services.AddScoped<IChatbotService, ChatbotService>();
+
+// ---------------------------------------------------------------------------
+// Yamaha API — infraestructura del conector
+// ---------------------------------------------------------------------------
+// BaseUrl, AuthHeaderName y AuthHeaderValue deben proveerse en User Secrets o
+// variables de entorno. No incluir secretos en appsettings.json.
+// El esquema de autenticación exacto (API Key, Bearer, Basic, etc.) debe
+// confirmarse con la documentación oficial de Yamaha antes de definir esos valores.
+// Las operaciones de negocio reales se agregarán cuando el cliente entregue
+// documentación, credenciales y permisos oficiales de Yamaha.
+// ---------------------------------------------------------------------------
+builder.Services
+    .AddOptions<YamahaSettings>()
+    .Bind(builder.Configuration.GetSection(YamahaSettings.SectionName));
+
+builder.Services
+    .AddHttpClient<IYamahaApiClient, YamahaApiClient>((serviceProvider, client) =>
+    {
+        var settings = serviceProvider
+            .GetRequiredService<IOptions<YamahaSettings>>()
+            .Value;
+
+        if (!string.IsNullOrWhiteSpace(settings.BaseUrl))
+            client.BaseAddress = new Uri(settings.BaseUrl);
+
+        client.Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds > 0 ? settings.TimeoutSeconds : 30);
+
+        if (!string.IsNullOrWhiteSpace(settings.AuthHeaderName) &&
+            !string.IsNullOrWhiteSpace(settings.AuthHeaderValue))
+        {
+            client.DefaultRequestHeaders.Add(settings.AuthHeaderName, settings.AuthHeaderValue);
+        }
+    });
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
