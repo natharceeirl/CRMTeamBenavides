@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/sesion.dart';
 import '../tema.dart';
+import 'chatbot.dart';
 import 'clientes.dart';
 import 'ordenes.dart';
+import 'tablero.dart';
 import 'unidades.dart';
 
 class PantallaInicio extends ConsumerStatefulWidget {
@@ -25,7 +27,7 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final titulos = ['Órdenes', 'Clientes', 'Unidades'];
+    final titulos = ['Tablero', 'Órdenes', 'Clientes', 'Unidades'];
     final subtitulo = sesion.roles.isEmpty
         ? (sesion.usuario?.nombre ?? '')
         : '${sesion.usuario?.nombre ?? ''} · ${sesion.roles.join(', ')}';
@@ -52,13 +54,30 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
       ),
       body: IndexedStack(
         index: _seccion,
-        children: const [PantallaOrdenes(), PantallaClientes(), PantallaUnidades()],
+        children: const [
+          PantallaTablero(),
+          PantallaOrdenes(),
+          PantallaClientes(),
+          PantallaUnidades(),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        tooltip: 'Asistente',
+        backgroundColor: Marca.acentoBoton,
+        foregroundColor: Colors.white,
+        onPressed: () => abrirChatbot(context),
+        child: const Icon(Icons.chat_bubble_outline),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _seccion,
         onDestinationSelected: (indice) => setState(() => _seccion = indice),
         indicatorColor: Marca.acento.withValues(alpha: 0.15),
         destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard),
+            label: 'Tablero',
+          ),
           NavigationDestination(
             icon: Icon(Icons.build_outlined),
             selectedIcon: Icon(Icons.build),

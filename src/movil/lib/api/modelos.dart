@@ -260,3 +260,102 @@ class OrdenServicioDetalleApi {
   final String? clienteTelefono;
   final int? vehiculoKilometraje;
 }
+
+/// GET /api/dashboard/resumen
+class ResumenDashboardApi {
+  const ResumenDashboardApi({
+    required this.enTaller,
+    required this.listas,
+    required this.entregadas,
+    required this.totalOrdenes,
+    required this.ventasConfirmadas,
+    required this.montoVentas,
+    required this.productosStockBajo,
+    required this.clientesActivos,
+  });
+
+  factory ResumenDashboardApi.desdeJson(Map<String, dynamic> json) {
+    final ordenes = json['ordenesServicio'] as Map<String, dynamic>? ?? const {};
+    final ventas = json['ventas'] as Map<String, dynamic>? ?? const {};
+    final inventario = json['inventario'] as Map<String, dynamic>? ?? const {};
+    final crm = json['crmActivos'] as Map<String, dynamic>? ?? const {};
+
+    int entero(Map<String, dynamic> mapa, String clave) => (mapa[clave] as num? ?? 0).toInt();
+
+    // «En taller» es todo lo que no está entregado ni anulado.
+    final enTaller = entero(ordenes, 'abierta') +
+        entero(ordenes, 'diagnostico') +
+        entero(ordenes, 'aprobada') +
+        entero(ordenes, 'enProceso') +
+        entero(ordenes, 'lista');
+
+    return ResumenDashboardApi(
+      enTaller: enTaller,
+      listas: entero(ordenes, 'lista'),
+      entregadas: entero(ordenes, 'entregada'),
+      totalOrdenes: entero(ordenes, 'total'),
+      ventasConfirmadas: entero(ventas, 'confirmadas'),
+      montoVentas: (ventas['montoConfirmadas'] as num? ?? 0).toDouble(),
+      productosStockBajo: entero(inventario, 'productosConStockBajo'),
+      clientesActivos: entero(crm, 'clientesActivos'),
+    );
+  }
+
+  final int enTaller;
+  final int listas;
+  final int entregadas;
+  final int totalOrdenes;
+  final int ventasConfirmadas;
+  final double montoVentas;
+  final int productosStockBajo;
+  final int clientesActivos;
+}
+
+/// GET /api/chatbot/faqs
+class FaqApi {
+  const FaqApi({
+    required this.id,
+    required this.categoria,
+    required this.pregunta,
+    required this.respuesta,
+  });
+
+  factory FaqApi.desdeJson(Map<String, dynamic> json) => FaqApi(
+        id: json['id'] as String,
+        categoria: json['categoria'] as String? ?? '',
+        pregunta: json['pregunta'] as String? ?? '',
+        respuesta: json['respuesta'] as String? ?? '',
+      );
+
+  final String id;
+  final String categoria;
+  final String pregunta;
+  final String respuesta;
+}
+
+/// POST /api/chatbot/consultar
+class RespuestaChatbotApi {
+  const RespuestaChatbotApi({
+    required this.consultaId,
+    required this.mensajeRespuesta,
+    required this.resueltoPorFaq,
+    required this.requiereAgente,
+    required this.sugerencias,
+  });
+
+  factory RespuestaChatbotApi.desdeJson(Map<String, dynamic> json) => RespuestaChatbotApi(
+        consultaId: json['consultaId'] as String? ?? '',
+        mensajeRespuesta: json['mensajeRespuesta'] as String? ?? '',
+        resueltoPorFaq: json['resueltoPorFaq'] as bool? ?? false,
+        requiereAgente: json['requiereAgente'] as bool? ?? false,
+        sugerencias: (json['sugerencias'] as List<dynamic>? ?? const [])
+            .map((faq) => FaqApi.desdeJson(faq as Map<String, dynamic>))
+            .toList(),
+      );
+
+  final String consultaId;
+  final String mensajeRespuesta;
+  final bool resueltoPorFaq;
+  final bool requiereAgente;
+  final List<FaqApi> sugerencias;
+}

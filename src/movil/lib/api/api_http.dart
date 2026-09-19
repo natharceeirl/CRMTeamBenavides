@@ -117,6 +117,52 @@ class ApiHttp {
     }
   }
 
+  Future<ResumenDashboardApi> resumenDashboard() async {
+    final datos = await _pedir<Map<String, dynamic>>('/api/dashboard/resumen');
+    return ResumenDashboardApi.desdeJson(datos);
+  }
+
+  /// Las FAQs son públicas: no hacen falta credenciales.
+  Future<List<FaqApi>> faqs() async {
+    final datos = await _lista('/api/chatbot/faqs');
+    return datos.map(FaqApi.desdeJson).toList();
+  }
+
+  Future<RespuestaChatbotApi> consultarChatbot(String mensaje) async {
+    try {
+      final respuesta = await _dio.post<Map<String, dynamic>>(
+        '/api/chatbot/consultar',
+        data: {'mensaje': mensaje, 'canal': 'app'},
+      );
+      return RespuestaChatbotApi.desdeJson(respuesta.data!);
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
+  Future<String> solicitarAgente({
+    required String telefono,
+    required String motivo,
+    String? consultaId,
+    String? nombre,
+  }) async {
+    try {
+      final respuesta = await _dio.post<Map<String, dynamic>>(
+        '/api/chatbot/solicitar-agente',
+        data: {
+          'consultaId': consultaId,
+          'nombreContacto': nombre,
+          'telefonoContacto': telefono,
+          'motivo': motivo,
+          'canal': 'app',
+        },
+      );
+      return respuesta.data?['mensaje'] as String? ?? 'Solicitud registrada.';
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
   Future<List<Map<String, dynamic>>> _lista(String ruta) async {
     final datos = await _pedir<List<dynamic>>(ruta);
     return datos.cast<Map<String, dynamic>>();
