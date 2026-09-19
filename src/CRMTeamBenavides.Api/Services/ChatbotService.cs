@@ -70,6 +70,8 @@ public class ChatbotService : IChatbotService
 
         FaqItem? bestMatch = null;
         int maxScore = 0;
+        int bestTokensMatched = 0;
+        bool bestFraseMatch = false;
 
         foreach (var faq in faqsActivas)
         {
@@ -79,29 +81,47 @@ public class ChatbotService : IChatbotService
             var preguntaWords = normPregunta.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
             int score = 0;
+            int matchedTokensCount = 0;
+            bool fraseMatch = false;
 
             // Coincidencia de frase exacta o contenida
             if (!string.IsNullOrWhiteSpace(normUserMsg) &&
                 (normPregunta.Contains(normUserMsg) || (normUserMsg.Length >= 8 && normPregunta.Length >= 8 && normUserMsg.Contains(normPregunta))))
             {
                 score += 50;
+                fraseMatch = true;
             }
 
             // Coincidencia de palabras clave y términos individuales
             foreach (var token in tokens)
             {
-                if (keywords.Any(k => k == token))
+                bool tokenMatched = false;
+
+                if (keywords.Any(k => string.Equals(k, token, StringComparison.OrdinalIgnoreCase)))
                 {
                     score += 20;
+                    tokenMatched = true;
                 }
-                else if (keywords.Any(k => (k.Length >= 5 && token.Length >= 5) && (k.StartsWith(token) || token.StartsWith(k))))
+                else if (keywords.Any(k => SonSimilares(k, token)))
                 {
                     score += 15;
+                    tokenMatched = true;
                 }
 
-                if (preguntaWords.Any(w => w == token))
+                if (preguntaWords.Any(w => string.Equals(w, token, StringComparison.OrdinalIgnoreCase)))
                 {
                     score += 15;
+                    tokenMatched = true;
+                }
+                else if (preguntaWords.Any(w => SonSimilares(w, token)))
+                {
+                    score += 10;
+                    tokenMatched = true;
+                }
+
+                if (tokenMatched)
+                {
+                    matchedTokensCount++;
                 }
             }
 
@@ -109,11 +129,30 @@ public class ChatbotService : IChatbotService
             {
                 maxScore = score;
                 bestMatch = faq;
+                bestTokensMatched = matchedTokensCount;
+                bestFraseMatch = fraseMatch;
             }
         }
 
-        // Determinar si hay coincidencia suficiente (umbral = 20)
-        bool resuelto = bestMatch != null && maxScore >= 20;
+        // Regla de resolución automática:
+        // Evitar que una sola keyword genérica marque como resuelta una consulta.
+        // Se requiere evidencia suficiente para responder automáticamente:
+        // 1. Coincidencia de frase completa / pregunta contenida (con tokens.Count > 1).
+        // 2. Consulta multitoken con AL MENOS 2 tokens coincidentes y una cobertura >= 50%.
+        // Las consultas de un solo token ("repuestos", "precio", "costo", "aceite", etc.)
+        // o sin evidencia suficiente se ofrecen como sugerencia pero requieren atención de un asesor humano.
+        bool resuelto = false;
+        if (bestMatch != null && maxScore >= 20 && tokens.Count > 1)
+        {
+            if (bestFraseMatch)
+            {
+                resuelto = true;
+            }
+            else if (bestTokensMatched >= 2 && ((double)bestTokensMatched / tokens.Count) >= 0.5)
+            {
+                resuelto = true;
+            }
+        }
 
         Guid? clienteId = null;
         if (usuarioAutenticadoId.HasValue)
@@ -157,10 +196,22 @@ public class ChatbotService : IChatbotService
                 MensajeRespuesta: bestMatch!.Respuesta));
         }
 
-        // Sugerir las FAQs más consultadas o de mayor prioridad
-        var sugerencias = faqsActivas
-            .OrderByDescending(f => f.VecesConsultada)
-            .ThenBy(f => f.Orden)
+        // Sugerir las FAQs más relevantes: si hubo una mejor coincidencia parcial (score > 0),
+        // se coloca primero en las sugerencias, seguida de las más consultadas o prioritarias.
+        var sugerenciasQuery = faqsActivas.AsEnumerable();
+        if (bestMatch != null && maxScore > 0)
+        {
+            sugerenciasQuery = sugerenciasQuery.OrderByDescending(f => f.Id == bestMatch.Id)
+                                               .ThenByDescending(f => f.VecesConsultada)
+                                               .ThenBy(f => f.Orden);
+        }
+        else
+        {
+            sugerenciasQuery = sugerenciasQuery.OrderByDescending(f => f.VecesConsultada)
+                                               .ThenBy(f => f.Orden);
+        }
+
+        var sugerencias = sugerenciasQuery
             .Take(3)
             .Select(f => MapToFaqResponse(f))
             .ToList();
@@ -589,10 +640,30 @@ public class ChatbotService : IChatbotService
         {
             if (p.Length >= 3 && !StopWords.Contains(p))
             {
-                tokens.Add(p);
+                tokens.Add(NormalizarPalabra(p));
             }
         }
         return tokens;
+    }
+
+    private static string NormalizarPalabra(string palabra)
+    {
+        if (palabra == "atienden" || palabra == "atiende" || palabra == "atender") return "atencion";
+        return palabra;
+    }
+
+    private static bool SonSimilares(string a, string b)
+    {
+        if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) return true;
+        if (a.Length >= 4 && b.Length >= 4)
+        {
+            if (a.StartsWith(b, StringComparison.OrdinalIgnoreCase) || b.StartsWith(a, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        if (a.Length >= 5 && b.Length >= 5)
+        {
+            if (string.Equals(a[..5], b[..5], StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
     }
 
     private static string NormalizarTexto(string texto)
