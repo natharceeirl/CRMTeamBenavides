@@ -291,6 +291,24 @@ export type VentaDetalleResponse = {
   total: number
   detalles: DetalleVentaResponse[]
   activo: boolean
+  comprobante?: ComprobanteResponse | null
+}
+
+export type ComprobanteResponse = {
+  id: string
+  ventaId: string
+  tipo: string
+  serie: string | null
+  numero: string | null
+  estado: string
+  fechaCreacion: string
+  activo: boolean
+}
+
+export type RegistrarComprobanteRequest = {
+  tipo: string
+  serie?: string | null
+  numero?: string | null
 }
 
 /** Con esCotizacion en false la venta nace confirmada y descuenta stock. */

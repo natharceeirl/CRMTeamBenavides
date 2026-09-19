@@ -157,8 +157,7 @@ export function VentasPage() {
             locale={{ emptyText: 'Todavía no hay ventas ni cotizaciones' }}
           />
           <p className="texto-secundario" style={{ marginTop: 16 }}>
-            El comprobante todavía no se registra desde acá: ese módulo está pendiente de cerrar el alcance de
-            facturación con el Ingeniero.
+            El registro administrativo de comprobantes está disponible desde el detalle de cada venta confirmada.
           </p>
         </section>
       </div>

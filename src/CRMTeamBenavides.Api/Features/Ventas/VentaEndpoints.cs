@@ -71,5 +71,43 @@ public static class VentaEndpoints
             };
         })
         .WithName("AnularVenta");
+
+        group.MapGet("/{id:guid}/comprobante", async (Guid id, IVentaService service) =>
+        {
+            var result = await service.GetComprobanteAsync(id);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                _ => Results.Problem()
+            };
+        })
+        .WithName("GetComprobanteVenta");
+
+        group.MapPost("/{id:guid}/comprobante", async (Guid id, RegistrarComprobanteRequest request, IVentaService service) =>
+        {
+            var result = await service.RegistrarComprobanteAsync(id, request);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Created($"/api/ventas/{id}/comprobante", result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        })
+        .WithName("RegistrarComprobanteVenta");
+
+        group.MapPut("/{id:guid}/comprobante/anular", async (Guid id, IVentaService service) =>
+        {
+            var result = await service.AnularComprobanteAsync(id);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        })
+        .WithName("AnularComprobanteVenta");
     }
 }

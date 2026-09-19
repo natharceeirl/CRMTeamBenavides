@@ -73,6 +73,7 @@ public class VentaService : IVentaService
     {
         var venta = await _context.Ventas
             .Include(v => v.Cliente)
+            .Include(v => v.Comprobante)
             .Include(v => v.Detalles.Where(d => d.Activo))
                 .ThenInclude(d => d.Producto)
             .FirstOrDefaultAsync(v => v.Id == id && v.Activo);
@@ -370,6 +371,7 @@ public class VentaService : IVentaService
     {
         var venta = await _context.Ventas
             .Include(v => v.Cliente)
+            .Include(v => v.Comprobante)
             .Include(v => v.Detalles.Where(d => d.Activo))
                 .ThenInclude(d => d.Producto)
             .FirstOrDefaultAsync(v => v.Id == id && v.Activo);
@@ -439,6 +441,12 @@ public class VentaService : IVentaService
             venta.Estado            = EstadoVenta.Anulada;
             venta.FechaModificacion = DateTime.UtcNow;
 
+            if (venta.Comprobante != null && venta.Comprobante.Estado != "Anulado")
+            {
+                venta.Comprobante.Estado = "Anulado";
+                venta.Comprobante.FechaModificacion = DateTime.UtcNow;
+            }
+
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
@@ -449,6 +457,106 @@ public class VentaService : IVentaService
             await transaction.RollbackAsync();
             throw;
         }
+    }
+
+    public async Task<ServiceResult<ComprobanteResponse>> GetComprobanteAsync(Guid ventaId)
+    {
+        var venta = await _context.Ventas
+            .Include(v => v.Comprobante)
+            .FirstOrDefaultAsync(v => v.Id == ventaId && v.Activo);
+
+        if (venta is null)
+        {
+            return ServiceResult<ComprobanteResponse>.NotFound();
+        }
+
+        if (venta.Comprobante is null || !venta.Comprobante.Activo)
+        {
+            return ServiceResult<ComprobanteResponse>.NotFound();
+        }
+
+        return ServiceResult<ComprobanteResponse>.Success(MapToComprobanteResponse(venta.Comprobante));
+    }
+
+    public async Task<ServiceResult<ComprobanteResponse>> RegistrarComprobanteAsync(Guid ventaId, RegistrarComprobanteRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Tipo))
+        {
+            return ServiceResult<ComprobanteResponse>.Invalid("El tipo de comprobante es requerido.");
+        }
+
+        var venta = await _context.Ventas
+            .Include(v => v.Comprobante)
+            .FirstOrDefaultAsync(v => v.Id == ventaId && v.Activo);
+
+        if (venta is null)
+        {
+            return ServiceResult<ComprobanteResponse>.NotFound();
+        }
+
+        if (venta.Estado != EstadoVenta.Confirmada)
+        {
+            return ServiceResult<ComprobanteResponse>.Invalid("Solo se pueden asociar comprobantes a ventas en estado Confirmada.");
+        }
+
+        if (venta.Comprobante != null)
+        {
+            return ServiceResult<ComprobanteResponse>.Invalid("La venta ya cuenta con un comprobante registrado.");
+        }
+
+        var comprobante = new Comprobante
+        {
+            VentaId = ventaId,
+            Tipo = request.Tipo.Trim(),
+            Serie = string.IsNullOrWhiteSpace(request.Serie) ? null : request.Serie.Trim().ToUpperInvariant(),
+            Numero = string.IsNullOrWhiteSpace(request.Numero) ? null : request.Numero.Trim(),
+            Estado = "Emitido",
+            Activo = true,
+            FechaCreacion = DateTime.UtcNow
+        };
+
+        _context.Comprobantes.Add(comprobante);
+
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            // Protección ante concurrencia: el índice único IX_Comprobantes_VentaId previene duplicados
+            return ServiceResult<ComprobanteResponse>.Invalid("La venta ya cuenta con un comprobante registrado.");
+        }
+
+        return ServiceResult<ComprobanteResponse>.Success(MapToComprobanteResponse(comprobante));
+    }
+
+    public async Task<ServiceResult<ComprobanteResponse>> AnularComprobanteAsync(Guid ventaId)
+    {
+        var venta = await _context.Ventas
+            .Include(v => v.Comprobante)
+            .FirstOrDefaultAsync(v => v.Id == ventaId && v.Activo);
+
+        if (venta is null)
+        {
+            return ServiceResult<ComprobanteResponse>.NotFound();
+        }
+
+        if (venta.Comprobante is null || !venta.Comprobante.Activo)
+        {
+            return ServiceResult<ComprobanteResponse>.NotFound();
+        }
+
+        if (venta.Comprobante.Estado == "Anulado")
+        {
+            return ServiceResult<ComprobanteResponse>.Invalid("El comprobante ya se encuentra anulado.");
+        }
+
+        venta.Comprobante.Estado = "Anulado";
+        venta.Comprobante.FechaModificacion = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return ServiceResult<ComprobanteResponse>.Success(MapToComprobanteResponse(venta.Comprobante));
     }
 
     private static VentaDetalleResponse MapToDetalleResponse(Venta v) => new(
@@ -474,5 +582,16 @@ public class VentaService : IVentaService
                 d.PrecioUnitario,
                 d.Cantidad * d.PrecioUnitario))
             .ToList(),
-        v.Activo);
+        v.Activo,
+        v.Comprobante != null ? MapToComprobanteResponse(v.Comprobante) : null);
+
+    private static ComprobanteResponse MapToComprobanteResponse(Comprobante c) => new(
+        c.Id,
+        c.VentaId,
+        c.Tipo,
+        c.Serie,
+        c.Numero,
+        c.Estado,
+        c.FechaCreacion,
+        c.Activo);
 }

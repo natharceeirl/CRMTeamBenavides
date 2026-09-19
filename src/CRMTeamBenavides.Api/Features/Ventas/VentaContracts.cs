@@ -34,7 +34,8 @@ public record VentaDetalleResponse(
     DateTime Fecha,
     decimal Total,
     List<DetalleVentaResponse> Detalles,
-    bool Activo);
+    bool Activo,
+    ComprobanteResponse? Comprobante = null);
 
 public record DetalleVentaResponse(
     Guid Id,
@@ -44,3 +45,18 @@ public record DetalleVentaResponse(
     int Cantidad,
     decimal PrecioUnitario,
     decimal Subtotal);
+
+public record ComprobanteResponse(
+    Guid Id,
+    Guid VentaId,
+    string Tipo,
+    string? Serie,
+    string? Numero,
+    string Estado,
+    DateTime FechaCreacion,
+    bool Activo);
+
+public record RegistrarComprobanteRequest(
+    string Tipo,
+    string? Serie,
+    string? Numero);

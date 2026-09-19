@@ -1,7 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { solicitar } from './http'
 import { clavesInventario } from './inventario'
-import type { CrearVentaRequest, VentaDetalleResponse, VentaResponse } from './tipos'
+import type {
+  ComprobanteResponse,
+  CrearVentaRequest,
+  RegistrarComprobanteRequest,
+  VentaDetalleResponse,
+  VentaResponse,
+} from './tipos'
 
 /** Estados del backend (enum EstadoVenta). */
 export const ESTADO_VENTA = {
@@ -101,6 +107,36 @@ export function useAnularVenta() {
       solicitar<VentaDetalleResponse>(`/ventas/${id}/anular`, { metodo: 'PUT' }),
     onSuccess: async () => {
       await refrescarVentasEInventario(consultas)
+    },
+  })
+}
+
+export function useRegistrarComprobante() {
+  const consultas = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ ventaId, datos }: { ventaId: string; datos: RegistrarComprobanteRequest }) =>
+      solicitar<ComprobanteResponse>(`/ventas/${ventaId}/comprobante`, { metodo: 'POST', cuerpo: datos }),
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        consultas.invalidateQueries({ queryKey: clavesVentas.todas }),
+        consultas.invalidateQueries({ queryKey: clavesVentas.una(variables.ventaId) }),
+      ])
+    },
+  })
+}
+
+export function useAnularComprobante() {
+  const consultas = useQueryClient()
+
+  return useMutation({
+    mutationFn: (ventaId: string) =>
+      solicitar<ComprobanteResponse>(`/ventas/${ventaId}/comprobante/anular`, { metodo: 'PUT' }),
+    onSuccess: async (_, ventaId) => {
+      await Promise.all([
+        consultas.invalidateQueries({ queryKey: clavesVentas.todas }),
+        consultas.invalidateQueries({ queryKey: clavesVentas.una(ventaId) }),
+      ])
     },
   })
 }

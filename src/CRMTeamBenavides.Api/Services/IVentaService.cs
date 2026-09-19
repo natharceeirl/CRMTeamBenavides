@@ -16,4 +16,7 @@ public interface IVentaService
     Task<ServiceResult<VentaDetalleResponse>> CreateAsync(CreateVentaRequest request);
     Task<ServiceResult<VentaDetalleResponse>> ConfirmarCotizacionAsync(Guid id);
     Task<ServiceResult<VentaDetalleResponse>> AnularAsync(Guid id);
+    Task<ServiceResult<ComprobanteResponse>> GetComprobanteAsync(Guid ventaId);
+    Task<ServiceResult<ComprobanteResponse>> RegistrarComprobanteAsync(Guid ventaId, RegistrarComprobanteRequest request);
+    Task<ServiceResult<ComprobanteResponse>> AnularComprobanteAsync(Guid ventaId);
 }
