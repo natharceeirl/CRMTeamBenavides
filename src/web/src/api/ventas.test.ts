@@ -3,7 +3,9 @@ import {
   ESTADO_VENTA,
   nombresEstadoVenta,
   puedeAnular,
+  puedeAnularComprobante,
   puedeConfirmar,
+  puedeRegistrarComprobante,
   rutaVentas,
 } from './ventas'
 
@@ -43,5 +45,25 @@ describe('rutaVentas', () => {
     expect(rutaVentas({ clienteId: 'c1', ordenServicioId: 'o1' })).toBe(
       '/ventas?clienteId=c1&ordenServicioId=o1',
     )
+  })
+})
+
+describe('comprobantes', () => {
+  it('solo se registra en una venta confirmada', () => {
+    expect(puedeRegistrarComprobante(ESTADO_VENTA.confirmada, false)).toBe(true)
+    expect(puedeRegistrarComprobante(ESTADO_VENTA.cotizacion, false)).toBe(false)
+    expect(puedeRegistrarComprobante(ESTADO_VENTA.anulada, false)).toBe(false)
+  })
+
+  it('no se registra dos veces sobre la misma venta', () => {
+    // El backend rechaza el duplicado; la web ni siquiera ofrece el formulario.
+    expect(puedeRegistrarComprobante(ESTADO_VENTA.confirmada, true)).toBe(false)
+  })
+
+  it('solo se anula el comprobante emitido', () => {
+    expect(puedeAnularComprobante('Emitido')).toBe(true)
+    expect(puedeAnularComprobante('Anulado')).toBe(false)
+    expect(puedeAnularComprobante(null)).toBe(false)
+    expect(puedeAnularComprobante(undefined)).toBe(false)
   })
 })

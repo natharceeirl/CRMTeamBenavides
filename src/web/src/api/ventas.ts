@@ -28,6 +28,14 @@ export const puedeConfirmar = (estadoId: number) => estadoId === ESTADO_VENTA.co
 /** Se anula cualquier cosa que no esté ya anulada; si estaba confirmada, el stock vuelve. */
 export const puedeAnular = (estadoId: number) => estadoId !== ESTADO_VENTA.anulada
 
+/** Solo lleva comprobante una venta confirmada que todavía no tiene uno. */
+export const puedeRegistrarComprobante = (estadoId: number, tieneComprobante: boolean) =>
+  estadoId === ESTADO_VENTA.confirmada && !tieneComprobante
+
+/** Se anula el comprobante emitido; uno ya anulado no se toca. */
+export const puedeAnularComprobante = (estadoComprobante: string | null | undefined) =>
+  estadoComprobante === 'Emitido'
+
 export type FiltrosVentas = {
   estado?: number
   clienteId?: string

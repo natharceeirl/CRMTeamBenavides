@@ -1,8 +1,15 @@
 import { Button, Form, Input, Modal, Popconfirm, Space, Table, Tag, type TableProps } from 'antd'
 import { useState } from 'react'
-import { useAnularComprobante, useRegistrarComprobante, useVenta } from '../api/ventas'
+import {
+  puedeAnularComprobante,
+  puedeRegistrarComprobante,
+  useAnularComprobante,
+  useRegistrarComprobante,
+  useVenta,
+} from '../api/ventas'
 import type { DetalleVentaResponse, RegistrarComprobanteRequest } from '../api/tipos'
 import { AvisoError } from './AvisoError'
+import { colores } from '../theme/tokens'
 import { fechaHora, importe, referenciaOrden, soles } from '../utils/formato'
 
 type Props = {
@@ -124,11 +131,24 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
                           </span>
                         )}
                         {' '}
-                        <Tag color={datos.comprobante.estado === 'Emitido' ? 'success' : 'default'}>
+                        <Tag
+                          style={{
+                            marginInlineEnd: 0,
+                            background: puedeAnularComprobante(datos.comprobante.estado)
+                              ? colores.acento600
+                              : 'transparent',
+                            color: puedeAnularComprobante(datos.comprobante.estado)
+                              ? colores.blanco
+                              : colores.textoSecundario,
+                            borderColor: puedeAnularComprobante(datos.comprobante.estado)
+                              ? colores.acento600
+                              : colores.neutro300,
+                          }}
+                        >
                           {datos.comprobante.estado}
                         </Tag>
                       </div>
-                      {datos.comprobante.estado === 'Emitido' && (
+                      {puedeAnularComprobante(datos.comprobante.estado) && (
                         <Popconfirm
                           title="¿Anular comprobante?"
                           description="El comprobante quedará registrado administrativamente como Anulado."
@@ -143,7 +163,7 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
                         </Popconfirm>
                       )}
                     </div>
-                  ) : datos.estadoId === 1 ? (
+                  ) : puedeRegistrarComprobante(datos.estadoId, false) ? (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                       <span className="texto-secundario">Sin comprobante registrado</span>
                       {!mostrarForm && (
@@ -160,13 +180,13 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
             </tbody>
           </table>
 
-          {mostrarForm && !datos.comprobante && datos.estadoId === 1 && (
+          {mostrarForm && puedeRegistrarComprobante(datos.estadoId, Boolean(datos.comprobante)) && (
             <div
               style={{
                 marginTop: 16,
                 padding: 16,
-                background: 'var(--ant-color-fill-alter, #fafafa)',
-                border: '1px solid var(--ant-color-border-secondary, #f0f0f0)',
+                background: colores.neutro100,
+                border: `1px solid ${colores.neutro300}`,
                 borderRadius: 8,
               }}
             >
