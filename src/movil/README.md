@@ -44,15 +44,23 @@ debe dejar pasar el puerto 5021.
 | `lib/auth` | Estado de sesión con Riverpod y lectura de los claims del token |
 | `lib/pantallas` | Pantallas: login, inicio, clientes, ficha de cliente y unidades |
 | `lib/rutas.dart` | Rutas y guardia de sesión |
-| `lib/tema.dart` | Colores de marca, en un solo archivo, como en la web |
+| `lib/tema.dart` | Colores y tipografías de marca, en un solo archivo, como en la web |
+| `assets/fonts` | Space Grotesk para títulos e IBM Plex Sans para texto |
 
 ## Pendientes
 
-- El backend todavía no expone `GET /api/auth/me` ni manda los roles en el
-  token, así que la app no puede ocultar secciones por permiso.
-- Faltan las tipografías Space Grotesk e IBM Plex Sans; hay que empaquetarlas.
-- Falta el logo en negativo y el ícono de la app.
-- El historial de órdenes se conecta cuando salga esa API.
+- **Ícono de la app:** sigue el de Flutter. Falta el logo en PNG del Ingeniero.
+- **Firma de release:** `android/app/build.gradle.kts` firma con la clave de
+  depuración. Para publicar hace falta un keystore propio, con sus credenciales
+  fuera del repositorio.
+- **Cuenta de Google Play** (pago único) y **cuenta de Apple Developer**, que
+  además exige un Mac para compilar iOS.
+- **Identificador de la app:** Android usa `pe.natharce.crm_team_benavides` y
+  iOS `pe.natharce.crmTeamBenavides`. Conviene unificarlos antes de publicar,
+  porque después no se pueden cambiar.
+- **Menús por rol:** la app ya recibe los roles desde `/api/auth/me`, pero no
+  esconde nada todavía; falta la matriz de permisos del cliente.
+- Agregar repuestos y cambiar el estado de la orden se hacen desde la web.
 - Android permite tráfico HTTP sin cifrar solo en la compilación de depuración
   (`android/app/src/debug/AndroidManifest.xml`). En producción la API va por
   HTTPS.

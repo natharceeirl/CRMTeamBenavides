@@ -50,7 +50,11 @@ class PantallaTablero extends ConsumerWidget {
             const SizedBox(height: 24),
             const Text(
               'Resumen general',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                fontFamily: Marca.fuenteTitulos,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 8),
             Card(
@@ -110,6 +114,7 @@ class _Indicador extends StatelessWidget {
               Text(
                 valor,
                 style: TextStyle(
+                  fontFamily: Marca.fuenteTitulos,
                   fontSize: compacto ? 20 : 28,
                   fontWeight: FontWeight.w700,
                   color: alerta ? Marca.acento : Marca.texto,

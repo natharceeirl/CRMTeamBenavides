@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fondo de marca, igual que en la web y en el tema de la app. -->
+    <color name="fondo_marca">#F3F2F2</color>
+</resources>

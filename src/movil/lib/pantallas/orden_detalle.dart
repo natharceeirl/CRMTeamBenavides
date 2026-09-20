@@ -98,7 +98,11 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                     children: [
                       Text(
                         '${datos.orden.unidad} · ${datos.orden.vehiculoPlaca}',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                        style: const TextStyle(
+                          fontFamily: Marca.fuenteTitulos,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       _Dato('Estado', nombreEstadoOrden(datos.orden.estadoId)),
@@ -121,7 +125,11 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                 padding: EdgeInsets.fromLTRB(20, 16, 20, 4),
                 child: Text(
                   'Diagnóstico',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    fontFamily: Marca.fuenteTitulos,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               Padding(
@@ -170,7 +178,11 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                 padding: EdgeInsets.fromLTRB(20, 24, 20, 4),
                 child: Text(
                   'Trabajos y repuestos',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    fontFamily: Marca.fuenteTitulos,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               if (datos.detalles.isEmpty)
@@ -200,7 +212,11 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                     const Text('Total', style: TextStyle(fontWeight: FontWeight.w600)),
                     Text(
                       soles(datos.total),
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                      style: const TextStyle(
+                          fontFamily: Marca.fuenteTitulos,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
                     ),
                   ],
                 ),

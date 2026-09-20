@@ -137,7 +137,7 @@ class _HojaChatbotState extends ConsumerState<_HojaChatbot> {
             ListTile(
               title: const Text(
                 'Asistente Team Benavides',
-                style: TextStyle(fontWeight: FontWeight.w700),
+                style: TextStyle(fontFamily: Marca.fuenteTitulos, fontWeight: FontWeight.w700),
               ),
               trailing: IconButton(
                 icon: const Icon(Icons.close),

@@ -53,7 +53,11 @@ class PantallaClienteDetalle extends ConsumerWidget {
               padding: EdgeInsets.fromLTRB(20, 16, 20, 4),
               child: Text(
                 'Unidades',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                  fontFamily: Marca.fuenteTitulos,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             vehiculos.when(

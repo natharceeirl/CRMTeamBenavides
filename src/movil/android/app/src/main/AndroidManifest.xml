@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- La app vive de la API: sin esto, la compilacion de release se queda sin
+         red, porque Flutter solo declara el permiso en debug y profile. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
         android:label="CRM Team Benavides"
         android:name="${applicationName}"

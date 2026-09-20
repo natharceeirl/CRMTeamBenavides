@@ -79,6 +79,7 @@ class _PantallaLoginState extends ConsumerState<PantallaLogin> {
                     const Text(
                       'Iniciar sesión',
                       style: TextStyle(
+                        fontFamily: Marca.fuenteTitulos,
                         fontSize: 30,
                         fontWeight: FontWeight.w700,
                         color: Marca.texto,
