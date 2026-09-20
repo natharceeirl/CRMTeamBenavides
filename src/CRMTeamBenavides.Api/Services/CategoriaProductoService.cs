@@ -31,6 +31,7 @@ public class CategoriaProductoService : ICategoriaProductoService
     public async Task<ServiceResult<CategoriaProductoResponse>> GetByIdAsync(Guid id)
     {
         var categoria = await _context.CategoriasProducto
+            .AsNoTracking()
             .Include(c => c.Productos)
             .FirstOrDefaultAsync(c => c.Id == id && c.Activo);
 

@@ -17,6 +17,7 @@ public class ClienteService : IClienteService
     public async Task<List<ClienteResponse>> GetAllAsync()
     {
         return await _context.Clientes
+            .AsNoTracking()
             .Where(c => c.Activo)
             .OrderBy(c => c.NombreCompleto)
             .Select(c => MapToResponse(c))
@@ -26,6 +27,7 @@ public class ClienteService : IClienteService
     public async Task<ServiceResult<ClienteResponse>> GetByIdAsync(Guid id)
     {
         var cliente = await _context.Clientes
+            .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == id && c.Activo);
 
         return cliente is null

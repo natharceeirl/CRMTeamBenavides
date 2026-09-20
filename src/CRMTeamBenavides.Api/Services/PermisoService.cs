@@ -24,7 +24,9 @@ public class PermisoService : IPermisoService
 
     public async Task<ServiceResult<PermisoResponse>> GetByIdAsync(Guid id)
     {
-        var permiso = await _context.Permisos.FirstOrDefaultAsync(p => p.Id == id && p.Activo);
+        var permiso = await _context.Permisos
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == id && p.Activo);
 
         return permiso is null
             ? ServiceResult<PermisoResponse>.NotFound()

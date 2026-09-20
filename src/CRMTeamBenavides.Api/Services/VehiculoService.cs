@@ -17,6 +17,7 @@ public class VehiculoService : IVehiculoService
     public async Task<List<VehiculoResponse>> GetAllAsync(Guid? clienteId)
     {
         var query = _context.Vehiculos
+            .AsNoTracking()
             .Include(v => v.Cliente)
             .Where(v => v.Activo);
 
@@ -34,6 +35,7 @@ public class VehiculoService : IVehiculoService
     public async Task<ServiceResult<VehiculoResponse>> GetByIdAsync(Guid id)
     {
         var vehiculo = await _context.Vehiculos
+            .AsNoTracking()
             .Include(v => v.Cliente)
             .FirstOrDefaultAsync(v => v.Id == id && v.Activo);
 

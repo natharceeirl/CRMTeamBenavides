@@ -18,6 +18,7 @@ public class RolService : IRolService
     public async Task<List<RolResponse>> GetAllAsync()
     {
         return await _context.Roles
+            .AsNoTracking()
             .Where(r => r.Activo)
             .OrderBy(r => r.Nombre)
             .Select(r => MapToResponse(r))
@@ -26,7 +27,9 @@ public class RolService : IRolService
 
     public async Task<ServiceResult<RolResponse>> GetByIdAsync(Guid id)
     {
-        var rol = await _context.Roles.FirstOrDefaultAsync(r => r.Id == id && r.Activo);
+        var rol = await _context.Roles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == id && r.Activo);
 
         return rol is null
             ? ServiceResult<RolResponse>.NotFound()
@@ -124,6 +127,7 @@ public class RolService : IRolService
         }
 
         var permisos = await _context.RolPermisos
+            .AsNoTracking()
             .Where(rp => rp.RolId == rolId)
             .Include(rp => rp.Permiso)
             .Select(rp => new PermisoResponse(
