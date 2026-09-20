@@ -232,23 +232,27 @@ public class OrdenServicioService : IOrdenServicioService
         // --- Caso 1: Repuesto / Producto de inventario ---
         if (request.ProductoId.HasValue)
         {
-            var producto = await _context.Productos
-                .FirstOrDefaultAsync(p => p.Id == request.ProductoId.Value && p.Activo);
-
-            if (producto is null)
-            {
-                return ServiceResult<DetalleServicioResponse>.Invalid("El producto indicado no existe o está inactivo.");
-            }
-
-            if (producto.StockActual < request.Cantidad)
-            {
-                return ServiceResult<DetalleServicioResponse>.Invalid(
-                    $"Stock insuficiente para el producto '{producto.Nombre}'. Stock disponible: {producto.StockActual}, solicitado: {request.Cantidad}.");
-            }
-
             await using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
+                // Bloqueo pesimista a nivel de fila (FOR UPDATE) para evitar condiciones de carrera en stock
+                await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT \"Id\" FROM \"Productos\" WHERE \"Id\" = {request.ProductoId.Value} FOR UPDATE");
+
+                var producto = await _context.Productos
+                    .FirstOrDefaultAsync(p => p.Id == request.ProductoId.Value && p.Activo);
+
+                if (producto is null)
+                {
+                    return ServiceResult<DetalleServicioResponse>.Invalid("El producto indicado no existe o está inactivo.");
+                }
+
+                if (producto.StockActual < request.Cantidad)
+                {
+                    return ServiceResult<DetalleServicioResponse>.Invalid(
+                        $"Stock insuficiente para el producto '{producto.Nombre}'. Stock disponible: {producto.StockActual}, solicitado: {request.Cantidad}.");
+                }
+
                 producto.StockActual -= request.Cantidad;
                 producto.FechaModificacion = DateTime.UtcNow;
 
@@ -372,6 +376,10 @@ public class OrdenServicioService : IOrdenServicioService
             await using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
+                // Bloqueo pesimista a nivel de fila (FOR UPDATE) para evitar condiciones de carrera en stock
+                await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT \"Id\" FROM \"Productos\" WHERE \"Id\" = {detalle.ProductoId.Value} FOR UPDATE");
+
                 var producto = await _context.Productos
                     .FirstOrDefaultAsync(p => p.Id == detalle.ProductoId.Value);
 
@@ -477,12 +485,26 @@ public class OrdenServicioService : IOrdenServicioService
                     .Where(d => d.OrdenServicioId == orden.Id && d.Activo && d.ProductoId != null)
                     .ToListAsync();
 
+                var orderedProductIds = repuestosActivos
+                    .Select(r => r.ProductoId!.Value)
+                    .Distinct()
+                    .OrderBy(pId => pId)
+                    .ToList();
+
+                // Bloqueo pesimista a nivel de fila (FOR UPDATE) en orden determinista para evitar deadlocks y condiciones de carrera
+                foreach (var prodId in orderedProductIds)
+                {
+                    await _context.Database.ExecuteSqlInterpolatedAsync(
+                        $"SELECT \"Id\" FROM \"Productos\" WHERE \"Id\" = {prodId} FOR UPDATE");
+                }
+
+                var productos = await _context.Productos
+                    .Where(p => orderedProductIds.Contains(p.Id))
+                    .ToDictionaryAsync(p => p.Id);
+
                 foreach (var repuesto in repuestosActivos)
                 {
-                    var producto = await _context.Productos
-                        .FirstOrDefaultAsync(p => p.Id == repuesto.ProductoId!.Value);
-
-                    if (producto is not null)
+                    if (productos.TryGetValue(repuesto.ProductoId!.Value, out var producto))
                     {
                         producto.StockActual += repuesto.Cantidad;
                         producto.FechaModificacion = DateTime.UtcNow;
