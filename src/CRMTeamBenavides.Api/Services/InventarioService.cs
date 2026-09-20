@@ -244,18 +244,22 @@ public class InventarioService : IInventarioService
             return ServiceResult<ProductoResponse>.Invalid("El motivo de la entrada es obligatorio.");
         }
 
-        var producto = await _context.Productos
-            .Include(p => p.Categoria)
-            .FirstOrDefaultAsync(p => p.Id == productoId && p.Activo);
-
-        if (producto is null)
-        {
-            return ServiceResult<ProductoResponse>.NotFound();
-        }
-
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
+            // Bloqueo pesimista a nivel de fila (FOR UPDATE) para evitar condiciones de carrera en stock
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT \"Id\" FROM \"Productos\" WHERE \"Id\" = {productoId} FOR UPDATE");
+
+            var producto = await _context.Productos
+                .Include(p => p.Categoria)
+                .FirstOrDefaultAsync(p => p.Id == productoId && p.Activo);
+
+            if (producto is null)
+            {
+                return ServiceResult<ProductoResponse>.NotFound();
+            }
+
             producto.StockActual += request.Cantidad;
             producto.FechaModificacion = DateTime.UtcNow;
 
@@ -294,24 +298,28 @@ public class InventarioService : IInventarioService
             return ServiceResult<ProductoResponse>.Invalid("El motivo de la salida es obligatorio.");
         }
 
-        var producto = await _context.Productos
-            .Include(p => p.Categoria)
-            .FirstOrDefaultAsync(p => p.Id == productoId && p.Activo);
-
-        if (producto is null)
-        {
-            return ServiceResult<ProductoResponse>.NotFound();
-        }
-
-        if (producto.StockActual < request.Cantidad)
-        {
-            return ServiceResult<ProductoResponse>.Invalid(
-                $"Stock insuficiente. Stock disponible: {producto.StockActual}, solicitado: {request.Cantidad}.");
-        }
-
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
+            // Bloqueo pesimista a nivel de fila (FOR UPDATE) para evitar condiciones de carrera en stock
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT \"Id\" FROM \"Productos\" WHERE \"Id\" = {productoId} FOR UPDATE");
+
+            var producto = await _context.Productos
+                .Include(p => p.Categoria)
+                .FirstOrDefaultAsync(p => p.Id == productoId && p.Activo);
+
+            if (producto is null)
+            {
+                return ServiceResult<ProductoResponse>.NotFound();
+            }
+
+            if (producto.StockActual < request.Cantidad)
+            {
+                return ServiceResult<ProductoResponse>.Invalid(
+                    $"Stock insuficiente. Stock disponible: {producto.StockActual}, solicitado: {request.Cantidad}.");
+            }
+
             producto.StockActual -= request.Cantidad;
             producto.FechaModificacion = DateTime.UtcNow;
 
@@ -350,20 +358,24 @@ public class InventarioService : IInventarioService
             return ServiceResult<ProductoResponse>.Invalid("El motivo del ajuste es obligatorio.");
         }
 
-        var producto = await _context.Productos
-            .Include(p => p.Categoria)
-            .FirstOrDefaultAsync(p => p.Id == productoId && p.Activo);
-
-        if (producto is null)
-        {
-            return ServiceResult<ProductoResponse>.NotFound();
-        }
-
-        var diferencia = Math.Abs(request.NuevoStock - producto.StockActual);
-
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
+            // Bloqueo pesimista a nivel de fila (FOR UPDATE) para evitar condiciones de carrera en stock
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT \"Id\" FROM \"Productos\" WHERE \"Id\" = {productoId} FOR UPDATE");
+
+            var producto = await _context.Productos
+                .Include(p => p.Categoria)
+                .FirstOrDefaultAsync(p => p.Id == productoId && p.Activo);
+
+            if (producto is null)
+            {
+                return ServiceResult<ProductoResponse>.NotFound();
+            }
+
+            var diferencia = Math.Abs(request.NuevoStock - producto.StockActual);
+
             producto.StockActual       = request.NuevoStock;
             producto.FechaModificacion = DateTime.UtcNow;
 
