@@ -17,6 +17,7 @@ using CRMTeamBenavides.Api.Features.Yamaha;
 using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Data.Seed;
+using CRMTeamBenavides.Api.Middleware;
 using CRMTeamBenavides.Domain.Entities;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -25,6 +26,9 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(
@@ -130,6 +134,8 @@ builder.Services
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 // Configure the HTTP request pipeline and initial seeding.
 using (var seedScope = app.Services.CreateScope())

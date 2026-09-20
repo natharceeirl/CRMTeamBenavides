@@ -21,23 +21,36 @@ public class UsuarioService : IUsuarioService
     public async Task<List<UsuarioResponse>> GetAllAsync()
     {
         var usuarios = await _userManager.Users
+            .AsNoTracking()
             .Where(u => u.Activo)
             .OrderBy(u => u.NombreCompleto)
             .ToListAsync();
 
-        var responses = new List<UsuarioResponse>();
-        foreach (var usuario in usuarios)
-        {
-            var roles = await GetRoleNamesAsync(usuario.Id);
-            responses.Add(MapToResponse(usuario, roles));
-        }
+        var usuarioIds = usuarios.Select(u => u.Id).ToList();
 
-        return responses;
+        var rolesPorUsuario = await _context.UsuarioRoles
+            .AsNoTracking()
+            .Where(ur => usuarioIds.Contains(ur.UsuarioId))
+            .Select(ur => new { ur.UsuarioId, ur.Rol.Nombre })
+            .ToListAsync();
+
+        var rolesLookup = rolesPorUsuario
+            .GroupBy(x => x.UsuarioId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Nombre).ToList());
+
+        return usuarios.Select(usuario =>
+            MapToResponse(
+                usuario,
+                rolesLookup.TryGetValue(usuario.Id, out var roles) ? roles : new List<string>()
+            )).ToList();
     }
 
     public async Task<ServiceResult<UsuarioResponse>> GetByIdAsync(Guid id)
     {
-        var usuario = await _userManager.Users.FirstOrDefaultAsync(u => u.Id == id && u.Activo);
+        var usuario = await _userManager.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == id && u.Activo);
+
         if (usuario is null)
         {
             return ServiceResult<UsuarioResponse>.NotFound();
@@ -191,8 +204,8 @@ public class UsuarioService : IUsuarioService
     private async Task<List<string>> GetRoleNamesAsync(Guid usuarioId)
     {
         return await _context.UsuarioRoles
+            .AsNoTracking()
             .Where(ur => ur.UsuarioId == usuarioId)
-            .Include(ur => ur.Rol)
             .Select(ur => ur.Rol.Nombre)
             .ToListAsync();
     }

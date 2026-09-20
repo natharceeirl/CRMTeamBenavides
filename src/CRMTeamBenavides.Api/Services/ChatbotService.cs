@@ -62,6 +62,7 @@ public class ChatbotService : IChatbotService
         }
 
         var faqsActivas = await _context.FaqItems
+            .AsNoTracking()
             .Where(f => f.Activo)
             .ToListAsync();
 
@@ -176,14 +177,19 @@ public class ChatbotService : IChatbotService
             Activo                = true
         };
 
-        if (resuelto)
-        {
-            bestMatch!.VecesConsultada++;
-            bestMatch.FechaModificacion = DateTime.UtcNow;
-        }
-
         _context.ConsultasChatbot.Add(consulta);
         await _context.SaveChangesAsync();
+
+        if (resuelto && bestMatch != null)
+        {
+            await _context.FaqItems
+                .Where(f => f.Id == bestMatch.Id)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(f => f.VecesConsultada, f => f.VecesConsultada + 1)
+                    .SetProperty(f => f.FechaModificacion, DateTime.UtcNow));
+
+            bestMatch.VecesConsultada++;
+        }
 
         if (resuelto)
         {
