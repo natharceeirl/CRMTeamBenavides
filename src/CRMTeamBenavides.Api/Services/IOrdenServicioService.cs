@@ -5,7 +5,7 @@ namespace CRMTeamBenavides.Api.Services;
 
 public interface IOrdenServicioService
 {
-    Task<List<OrdenServicioResponse>> GetAllAsync(Guid? vehiculoId, EstadoOrdenServicio? estado);
+    Task<List<OrdenServicioResponse>> GetAllAsync(Guid? vehiculoId, EstadoOrdenServicio? estado, Guid? clienteId = null);
     Task<ServiceResult<OrdenServicioDetalleResponse>> GetByIdAsync(Guid id);
     Task<ServiceResult<OrdenServicioResponse>> CreateAperturaAsync(AperturaOrdenServicioRequest request);
     Task<ServiceResult<OrdenServicioResponse>> RegistrarDiagnosticoAsync(Guid id, RegistrarDiagnosticoRequest request);

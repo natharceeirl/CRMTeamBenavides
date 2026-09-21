@@ -62,10 +62,21 @@ class ApiHttp {
     }
   }
 
-  /// El backend no tiene logout: se descarta la sesión local.
   Future<void> cerrarSesion() async {
-    _sesion = null;
-    await _almacen.borrar();
+    try {
+      final token = _sesion?.accessToken;
+      if (token != null) {
+        await _dioSinToken.post<void>(
+          '/api/auth/logout',
+          options: Options(headers: {'Authorization': 'Bearer $token'}),
+        );
+      }
+    } catch (_) {
+      // Si la API falla o no hay conexión, el logout local procede de todas formas.
+    } finally {
+      _sesion = null;
+      await _almacen.borrar();
+    }
   }
 
   Future<List<ClienteApi>> clientes() async {
@@ -91,11 +102,19 @@ class ApiHttp {
     return UsuarioActualApi.desdeJson(datos);
   }
 
-  Future<List<OrdenServicioApi>> ordenes({int? estado}) async {
-    final ruta = estado == null
-        ? '/api/ordenes-servicio'
-        : '/api/ordenes-servicio?estado=$estado';
-    final datos = await _lista(ruta);
+  Future<List<OrdenServicioApi>> ordenes({int? estado, String? clienteId}) async {
+    final parametros = <String, String>{};
+    if (estado != null) {
+      parametros['estado'] = estado.toString();
+    }
+    if (clienteId != null && clienteId.isNotEmpty) {
+      parametros['clienteId'] = clienteId;
+    }
+    final uri = Uri(
+      path: '/api/ordenes-servicio',
+      queryParameters: parametros.isEmpty ? null : parametros,
+    );
+    final datos = await _lista(uri.toString());
     return datos.map(OrdenServicioApi.desdeJson).toList();
   }
 

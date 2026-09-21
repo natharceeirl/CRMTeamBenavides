@@ -145,4 +145,25 @@ public class AuthService : IAuthService
 
         return ServiceResult<MeResponse>.Success(response);
     }
+
+    public async Task<ServiceResult<bool>> LogoutAsync(Guid usuarioId)
+    {
+        var activeTokens = await _context.RefreshTokens
+            .Where(rt => rt.UsuarioId == usuarioId && rt.FechaRevocacion == null)
+            .ToListAsync();
+
+        var now = DateTime.UtcNow;
+        foreach (var token in activeTokens)
+        {
+            token.FechaRevocacion = now;
+            token.FechaExpiracion = now;
+        }
+
+        if (activeTokens.Count > 0)
+        {
+            await _context.SaveChangesAsync();
+        }
+
+        return ServiceResult<bool>.Success(true);
+    }
 }

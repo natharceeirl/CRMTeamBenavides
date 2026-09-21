@@ -98,6 +98,11 @@ final ordenesProvider = FutureProvider.autoDispose<List<OrdenServicioApi>>(
   (ref) => ref.watch(apiProvider).ordenes(),
 );
 
+final ordenesClienteProvider =
+    FutureProvider.autoDispose.family<List<OrdenServicioApi>, String>(
+  (ref, clienteId) => ref.watch(apiProvider).ordenes(clienteId: clienteId),
+);
+
 final ordenProvider =
     FutureProvider.autoDispose.family<OrdenServicioDetalleApi, String>(
   (ref, id) => ref.watch(apiProvider).orden(id),

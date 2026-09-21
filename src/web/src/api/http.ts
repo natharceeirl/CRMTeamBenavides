@@ -207,7 +207,20 @@ export async function iniciarSesion(datos: SolicitudLogin): Promise<Sesion> {
   return nueva
 }
 
-/** El backend todavía no expone logout, así que se descarta la sesión local. */
-export function terminarSesion(): void {
-  guardarSesion(null)
+/** Cierra la sesión en el servidor y limpia el almacenamiento local. */
+export async function terminarSesion(): Promise<void> {
+  try {
+    if (sesion) {
+      await fetch(`${RUTA_BASE}/auth/logout`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${sesion.accessToken}`,
+        },
+      })
+    }
+  } catch {
+    // Si la llamada falla o no hay conexión, la sesión local se descarta de todas formas.
+  } finally {
+    guardarSesion(null)
+  }
 }

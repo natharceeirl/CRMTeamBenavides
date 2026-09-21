@@ -58,20 +58,21 @@ export const permiteEditarDetalles = (estadoId: number) =>
 
 export const clavesOrdenes = {
   todas: ['ordenes'] as const,
-  lista: (estado?: number, vehiculoId?: string) =>
-    ['ordenes', 'lista', estado ?? 'todos', vehiculoId ?? 'todos'] as const,
+  lista: (estado?: number, vehiculoId?: string, clienteId?: string) =>
+    ['ordenes', 'lista', estado ?? 'todos', vehiculoId ?? 'todos', clienteId ?? 'todos'] as const,
   una: (id: string) => ['ordenes', id] as const,
 }
 
-export function useOrdenes(filtros: { estado?: number; vehiculoId?: string } = {}) {
-  const { estado, vehiculoId } = filtros
+export function useOrdenes(filtros: { estado?: number; vehiculoId?: string; clienteId?: string } = {}) {
+  const { estado, vehiculoId, clienteId } = filtros
 
   return useQuery({
-    queryKey: clavesOrdenes.lista(estado, vehiculoId),
+    queryKey: clavesOrdenes.lista(estado, vehiculoId, clienteId),
     queryFn: () => {
       const parametros = new URLSearchParams()
       if (estado !== undefined) parametros.set('estado', String(estado))
       if (vehiculoId) parametros.set('vehiculoId', vehiculoId)
+      if (clienteId) parametros.set('clienteId', clienteId)
       const consulta = parametros.toString()
       return solicitar<OrdenServicioResponse[]>(
         `/ordenes-servicio${consulta ? `?${consulta}` : ''}`,

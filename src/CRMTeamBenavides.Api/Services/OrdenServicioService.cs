@@ -17,7 +17,7 @@ public class OrdenServicioService : IOrdenServicioService
         _userManager = userManager;
     }
 
-    public async Task<List<OrdenServicioResponse>> GetAllAsync(Guid? vehiculoId, EstadoOrdenServicio? estado)
+    public async Task<List<OrdenServicioResponse>> GetAllAsync(Guid? vehiculoId, EstadoOrdenServicio? estado, Guid? clienteId = null)
     {
         var query = _context.OrdenesServicio
             .Where(o => o.Activo);
@@ -30,6 +30,11 @@ public class OrdenServicioService : IOrdenServicioService
         if (estado.HasValue)
         {
             query = query.Where(o => o.Estado == estado.Value);
+        }
+
+        if (clienteId.HasValue)
+        {
+            query = query.Where(o => o.Vehiculo.ClienteId == clienteId.Value);
         }
 
         // Proyección a tipo anónimo: EF Core genera un único JOIN en SQL y trae solo las columnas necesarias.

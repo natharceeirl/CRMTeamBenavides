@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../api/estados.dart';
 import '../auth/sesion.dart';
+import '../formato.dart';
 import '../tema.dart';
 import 'comunes.dart';
 
@@ -106,11 +108,55 @@ class PantallaClienteDetalle extends ConsumerWidget {
               },
             ),
             const Padding(
-              padding: EdgeInsets.fromLTRB(20, 16, 20, 0),
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 4),
               child: Text(
-                'El historial de órdenes se conecta cuando salga esa API.',
-                style: TextStyle(color: Marca.textoSecundario),
+                'Órdenes de servicio',
+                style: TextStyle(
+                  fontFamily: Marca.fuenteTitulos,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
+            ),
+            ref.watch(ordenesClienteProvider(clienteId)).when(
+              loading: () => const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (error, _) => AvisoError(
+                error: error,
+                alReintentar: () => ref.invalidate(ordenesClienteProvider(clienteId)),
+              ),
+              data: (lista) {
+                if (lista.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: ListaVacia(
+                      mensaje: 'Este cliente no tiene órdenes de servicio.',
+                    ),
+                  );
+                }
+
+                return Column(
+                  children: [
+                    for (final orden in lista)
+                      Card(
+                        child: ListTile(
+                          title: Text(
+                            '${orden.unidad} · ${orden.vehiculoPlaca}',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: Text(
+                            '${nombreEstadoOrden(orden.estadoId)} · ${fechaHora(orden.fechaApertura)}',
+                            style: const TextStyle(color: Marca.textoSecundario),
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => context.go('/ordenes/${orden.id}'),
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
           ],
         ),

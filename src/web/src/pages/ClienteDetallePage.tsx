@@ -8,13 +8,16 @@ import { ModalCliente } from '../components/ModalCliente'
 import { ModalVehiculo } from '../components/ModalVehiculo'
 import { useCliente } from '../api/clientes'
 import { useEliminarVehiculo, useVehiculos } from '../api/vehiculos'
-import type { VehiculoResponse } from '../api/tipos'
-import { entero } from '../utils/formato'
+import { useOrdenes } from '../api/ordenes'
+import { EstadoOrdenApiTag } from '../components/EstadoOrdenApiTag'
+import type { OrdenServicioResponse, VehiculoResponse } from '../api/tipos'
+import { entero, fechaHora, referenciaOrden } from '../utils/formato'
 
 export function ClienteDetallePage() {
   const { id } = useParams()
   const cliente = useCliente(id)
   const vehiculos = useVehiculos(id)
+  const ordenes = useOrdenes({ clienteId: id })
   const eliminarVehiculo = useEliminarVehiculo()
 
   const [editandoCliente, setEditandoCliente] = useState(false)
@@ -60,6 +63,35 @@ export function ClienteDetallePage() {
           </Popconfirm>
         </Space>
       ),
+    },
+  ]
+
+  const columnasOrdenes: TableProps<OrdenServicioResponse>['columns'] = [
+    {
+      title: 'Orden',
+      dataIndex: 'id',
+      className: 'num',
+      render: (ordenId: string) => (
+        <Link to={`/ordenes/${ordenId}`}>
+          <strong>{referenciaOrden(ordenId)}</strong>
+        </Link>
+      ),
+    },
+    {
+      title: 'Unidad',
+      key: 'unidad',
+      render: (_, o) => `${o.vehiculoMarca} ${o.vehiculoModelo} · ${o.vehiculoPlaca}`,
+    },
+    {
+      title: 'Estado',
+      key: 'estado',
+      render: (_, o) => <EstadoOrdenApiTag estadoId={o.estadoId} />,
+    },
+    {
+      title: 'Fecha',
+      dataIndex: 'fechaApertura',
+      className: 'num',
+      render: (fecha: string) => fechaHora(fecha),
     },
   ]
 
@@ -135,9 +167,14 @@ export function ClienteDetallePage() {
               <div className="seccion-titulo">
                 <h2>Historial de órdenes</h2>
               </div>
-              <p className="texto-secundario">
-                Se conecta cuando salga la API de órdenes de servicio, prevista para el sábado 19/09.
-              </p>
+              <Table
+                rowKey="id"
+                columns={columnasOrdenes}
+                dataSource={ordenes.data ?? []}
+                pagination={false}
+                loading={ordenes.isPending}
+                locale={{ emptyText: 'Este cliente todavía no tiene órdenes de servicio' }}
+              />
             </section>
           </div>
           <aside>

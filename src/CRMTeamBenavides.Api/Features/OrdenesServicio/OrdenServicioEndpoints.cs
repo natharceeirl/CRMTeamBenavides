@@ -9,9 +9,9 @@ public static class OrdenServicioEndpoints
     {
         var group = app.MapGroup("/api/ordenes-servicio").RequireAuthorization();
 
-        group.MapGet("/", async (Guid? vehiculoId, EstadoOrdenServicio? estado, IOrdenServicioService service) =>
+        group.MapGet("/", async (Guid? vehiculoId, EstadoOrdenServicio? estado, Guid? clienteId, IOrdenServicioService service) =>
         {
-            var ordenes = await service.GetAllAsync(vehiculoId, estado);
+            var ordenes = await service.GetAllAsync(vehiculoId, estado, clienteId);
             return Results.Ok(ordenes);
         })
         .WithName("GetOrdenesServicio");
