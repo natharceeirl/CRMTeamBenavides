@@ -12,7 +12,7 @@ import 'pantallas/orden_detalle.dart';
 /// login, y con sesión el login redirige al inicio.
 final routerProvider = Provider<GoRouter>((ref) {
   final aviso = ValueNotifier<int>(0);
-  ref.listen(sesionProvider, (_, _) => aviso.value++);
+  ref.listen(sesionProvider, (_, __) => aviso.value++);
   ref.onDispose(aviso.dispose);
 
   return GoRouter(
