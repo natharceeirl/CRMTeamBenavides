@@ -115,3 +115,17 @@ final resumenProvider = FutureProvider.autoDispose<ResumenDashboardApi>(
 final faqsProvider = FutureProvider.autoDispose<List<FaqApi>>(
   (ref) => ref.watch(apiProvider).faqs(),
 );
+
+final productosProvider = FutureProvider.autoDispose<List<ProductoApi>>(
+  (ref) => ref.watch(apiProvider).productos(),
+);
+
+final categoriasProductoProvider =
+    FutureProvider.autoDispose<List<CategoriaProductoApi>>(
+  (ref) => ref.watch(apiProvider).categoriasProducto(),
+);
+
+final movimientosProductoProvider =
+    FutureProvider.autoDispose.family<List<MovimientoInventarioApi>, String>(
+  (ref, productoId) => ref.watch(apiProvider).movimientosDeProducto(productoId),
+);

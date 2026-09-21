@@ -136,6 +136,21 @@ class ApiHttp {
     }
   }
 
+  Future<List<ProductoApi>> productos() async {
+    final datos = await _lista('/api/productos');
+    return datos.map(ProductoApi.desdeJson).toList();
+  }
+
+  Future<List<CategoriaProductoApi>> categoriasProducto() async {
+    final datos = await _lista('/api/categorias-producto');
+    return datos.map(CategoriaProductoApi.desdeJson).toList();
+  }
+
+  Future<List<MovimientoInventarioApi>> movimientosDeProducto(String id) async {
+    final datos = await _lista('/api/productos/$id/movimientos');
+    return datos.map(MovimientoInventarioApi.desdeJson).toList();
+  }
+
   Future<ResumenDashboardApi> resumenDashboard() async {
     final datos = await _pedir<Map<String, dynamic>>('/api/dashboard/resumen');
     return ResumenDashboardApi.desdeJson(datos);

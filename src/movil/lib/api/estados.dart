@@ -34,3 +34,23 @@ bool permiteDiagnostico(int estadoId) => !esEstadoTerminal(estadoId);
 
 /// Las que siguen físicamente en el taller.
 bool estaEnTaller(int estadoId) => !esEstadoTerminal(estadoId);
+
+/// Tipos de movimiento de inventario, iguales a los del backend
+/// (enum TipoMovimientoInventario). La API los manda como número en `tipoId`
+/// y como texto en `tipo`.
+class TipoMovimiento {
+  const TipoMovimiento._();
+
+  static const entrada = 0;
+  static const salida = 1;
+  static const ajuste = 2;
+}
+
+const nombresTipoMovimiento = <int, String>{
+  TipoMovimiento.entrada: 'Entrada',
+  TipoMovimiento.salida: 'Salida',
+  TipoMovimiento.ajuste: 'Ajuste',
+};
+
+String nombreTipoMovimiento(int tipoId) =>
+    nombresTipoMovimiento[tipoId] ?? 'Desconocido';

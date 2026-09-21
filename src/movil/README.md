@@ -10,10 +10,17 @@ App en Flutter para Android e iOS. Consume la misma API que la web
 - La sesión se guarda en el almacenamiento seguro del dispositivo, así que la app
   no vuelve a pedir la contraseña al reabrirse.
 - Navegación con go_router y guardia de sesión: sin sesión, solo el login.
+- Tablero con el resumen de `/api/dashboard/resumen`.
+- Órdenes: lista con búsqueda, filtro «solo en taller» y ficha de la orden, donde
+  el técnico puede registrar el diagnóstico.
+- Inventario: consulta de repuestos con búsqueda por código, nombre o categoría,
+  filtro de bajo stock, filtro por categoría y ficha con los últimos movimientos.
 - Clientes: lista con búsqueda y ficha con sus unidades.
 - Unidades: lista con búsqueda.
+- Chatbot: consulta de FAQs y derivación a un asesor.
 
-Todo es de solo lectura por ahora. Crear y editar se hace desde la web.
+Salvo el diagnóstico de la orden, todo es de solo lectura. Crear y editar se hace
+desde la web, que es donde vive la operación completa.
 
 ## Cómo correrla
 
@@ -42,7 +49,7 @@ debe dejar pasar el puerto 5021.
 |---|---|
 | `lib/api` | Cliente HTTP con Dio, modelos de los contratos del backend y almacenamiento de la sesión |
 | `lib/auth` | Estado de sesión con Riverpod y lectura de los claims del token |
-| `lib/pantallas` | Pantallas: login, inicio, clientes, ficha de cliente y unidades |
+| `lib/pantallas` | Pantallas: login, inicio, tablero, órdenes, inventario, clientes, unidades y chatbot |
 | `lib/rutas.dart` | Rutas y guardia de sesión |
 | `lib/tema.dart` | Colores y tipografías de marca, en un solo archivo, como en la web |
 | `assets/fonts` | Space Grotesk para títulos e IBM Plex Sans para texto |
@@ -60,7 +67,13 @@ debe dejar pasar el puerto 5021.
   porque después no se pueden cambiar.
 - **Menús por rol:** la app ya recibe los roles desde `/api/auth/me`, pero no
   esconde nada todavía; falta la matriz de permisos del cliente.
-- Agregar repuestos y cambiar el estado de la orden se hacen desde la web.
+- Agregar repuestos y cambiar el estado de la orden se hacen desde la web. El
+  inventario en la app es consulta: las entradas, salidas y ajustes también.
+- **Inventario con catálogos grandes:** la pantalla trae la lista completa y
+  filtra en el dispositivo, como el resto de la app. `GET /api/productos` ya
+  acepta `categoriaId`, `busqueda` y `bajoStock`; si el catálogo real crece,
+  conviene pasar el filtrado al servidor.
+- **Ventas en la app:** falta; hoy solo están en la web.
 - Android permite tráfico HTTP sin cifrar solo en la compilación de depuración
   (`android/app/src/debug/AndroidManifest.xml`). En producción la API va por
   HTTPS.

@@ -359,3 +359,111 @@ class RespuestaChatbotApi {
   final bool requiereAgente;
   final List<FaqApi> sugerencias;
 }
+
+class CategoriaProductoApi {
+  const CategoriaProductoApi({
+    required this.id,
+    required this.nombre,
+    required this.cantidadProductos,
+    required this.activo,
+  });
+
+  factory CategoriaProductoApi.desdeJson(Map<String, dynamic> json) =>
+      CategoriaProductoApi(
+        id: json['id'] as String,
+        nombre: json['nombre'] as String? ?? '',
+        cantidadProductos: json['cantidadProductos'] as int? ?? 0,
+        activo: json['activo'] as bool? ?? true,
+      );
+
+  final String id;
+  final String nombre;
+  final int cantidadProductos;
+  final bool activo;
+}
+
+class ProductoApi {
+  const ProductoApi({
+    required this.id,
+    required this.codigo,
+    required this.nombre,
+    required this.unidad,
+    required this.precioVenta,
+    required this.stockActual,
+    required this.stockMinimo,
+    required this.esBajoStock,
+    required this.categoriaId,
+    required this.categoriaNombre,
+    required this.activo,
+    this.descripcion,
+  });
+
+  factory ProductoApi.desdeJson(Map<String, dynamic> json) => ProductoApi(
+        id: json['id'] as String,
+        codigo: json['codigo'] as String? ?? '',
+        nombre: json['nombre'] as String? ?? '',
+        descripcion: json['descripcion'] as String?,
+        unidad: json['unidad'] as String? ?? '',
+        precioVenta: (json['precioVenta'] as num? ?? 0).toDouble(),
+        stockActual: json['stockActual'] as int? ?? 0,
+        stockMinimo: json['stockMinimo'] as int? ?? 0,
+        esBajoStock: json['esBajoStock'] as bool? ?? false,
+        categoriaId: json['categoriaId'] as String? ?? '',
+        categoriaNombre: json['categoriaNombre'] as String? ?? '',
+        activo: json['activo'] as bool? ?? true,
+      );
+
+  final String id;
+  final String codigo;
+  final String nombre;
+  final String? descripcion;
+  final String unidad;
+  final double precioVenta;
+  final int stockActual;
+  final int stockMinimo;
+
+  /// Lo calcula el backend; la app solo lo pinta, no lo recalcula.
+  final bool esBajoStock;
+  final String categoriaId;
+  final String categoriaNombre;
+  final bool activo;
+
+  bool get agotado => stockActual <= 0;
+}
+
+class MovimientoInventarioApi {
+  const MovimientoInventarioApi({
+    required this.id,
+    required this.productoId,
+    required this.productoCodigo,
+    required this.productoNombre,
+    required this.tipo,
+    required this.tipoId,
+    required this.cantidad,
+    required this.fechaCreacion,
+    this.motivo,
+  });
+
+  factory MovimientoInventarioApi.desdeJson(Map<String, dynamic> json) =>
+      MovimientoInventarioApi(
+        id: json['id'] as String,
+        productoId: json['productoId'] as String? ?? '',
+        productoCodigo: json['productoCodigo'] as String? ?? '',
+        productoNombre: json['productoNombre'] as String? ?? '',
+        tipo: json['tipo'] as String? ?? '',
+        tipoId: json['tipoId'] as int? ?? 0,
+        cantidad: json['cantidad'] as int? ?? 0,
+        motivo: json['motivo'] as String?,
+        fechaCreacion: DateTime.parse(json['fechaCreacion'] as String),
+      );
+
+  final String id;
+  final String productoId;
+  final String productoCodigo;
+  final String productoNombre;
+  final String tipo;
+  final int tipoId;
+  final int cantidad;
+  final String? motivo;
+  final DateTime fechaCreacion;
+}
