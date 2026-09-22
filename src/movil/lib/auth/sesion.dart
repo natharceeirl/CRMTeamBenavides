@@ -129,3 +129,11 @@ final movimientosProductoProvider =
     FutureProvider.autoDispose.family<List<MovimientoInventarioApi>, String>(
   (ref, productoId) => ref.watch(apiProvider).movimientosDeProducto(productoId),
 );
+
+final ventasProvider = FutureProvider.autoDispose<List<VentaApi>>(
+  (ref) => ref.watch(apiProvider).ventas(),
+);
+
+final ventaProvider = FutureProvider.autoDispose.family<VentaDetalleApi, String>(
+  (ref, id) => ref.watch(apiProvider).venta(id),
+);

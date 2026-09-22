@@ -5,7 +5,7 @@ import '../auth/sesion.dart';
 import '../tema.dart';
 import 'chatbot.dart';
 import 'clientes.dart';
-import 'inventario.dart';
+import 'tienda.dart';
 import 'ordenes.dart';
 import 'tablero.dart';
 import 'unidades.dart';
@@ -28,7 +28,7 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final titulos = ['Tablero', 'Órdenes', 'Inventario', 'Clientes', 'Unidades'];
+    final titulos = ['Tablero', 'Órdenes', 'Tienda', 'Clientes', 'Unidades'];
     final subtitulo = sesion.roles.isEmpty
         ? (sesion.usuario?.nombre ?? '')
         : '${sesion.usuario?.nombre ?? ''} · ${sesion.roles.join(', ')}';
@@ -58,7 +58,7 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
         children: const [
           PantallaTablero(),
           PantallaOrdenes(),
-          PantallaInventario(),
+          PantallaTienda(),
           PantallaClientes(),
           PantallaUnidades(),
         ],
@@ -86,9 +86,9 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
             label: 'Órdenes',
           ),
           NavigationDestination(
-            icon: Icon(Icons.inventory_2_outlined),
-            selectedIcon: Icon(Icons.inventory_2),
-            label: 'Inventario',
+            icon: Icon(Icons.storefront_outlined),
+            selectedIcon: Icon(Icons.storefront),
+            label: 'Tienda',
           ),
           NavigationDestination(
             icon: Icon(Icons.people_outline),

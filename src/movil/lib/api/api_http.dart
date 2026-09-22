@@ -151,6 +151,27 @@ class ApiHttp {
     return datos.map(MovimientoInventarioApi.desdeJson).toList();
   }
 
+  Future<List<VentaApi>> ventas({int? estado, String? clienteId}) async {
+    final parametros = <String, String>{};
+    if (estado != null) {
+      parametros['estado'] = estado.toString();
+    }
+    if (clienteId != null && clienteId.isNotEmpty) {
+      parametros['clienteId'] = clienteId;
+    }
+    final uri = Uri(
+      path: '/api/ventas',
+      queryParameters: parametros.isEmpty ? null : parametros,
+    );
+    final datos = await _lista(uri.toString());
+    return datos.map(VentaApi.desdeJson).toList();
+  }
+
+  Future<VentaDetalleApi> venta(String id) async {
+    final datos = await _pedir<Map<String, dynamic>>('/api/ventas/$id');
+    return VentaDetalleApi.desdeJson(datos);
+  }
+
   Future<ResumenDashboardApi> resumenDashboard() async {
     final datos = await _pedir<Map<String, dynamic>>('/api/dashboard/resumen');
     return ResumenDashboardApi.desdeJson(datos);

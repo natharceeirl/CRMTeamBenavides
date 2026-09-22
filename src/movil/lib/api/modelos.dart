@@ -467,3 +467,139 @@ class MovimientoInventarioApi {
   final String? motivo;
   final DateTime fechaCreacion;
 }
+
+class VentaApi {
+  const VentaApi({
+    required this.id,
+    required this.clienteId,
+    required this.clienteNombre,
+    required this.estado,
+    required this.estadoId,
+    required this.fecha,
+    required this.total,
+    required this.cantidadItems,
+    required this.activo,
+    this.ordenServicioId,
+  });
+
+  factory VentaApi.desdeJson(Map<String, dynamic> json) => VentaApi(
+        id: json['id'] as String,
+        clienteId: json['clienteId'] as String? ?? '',
+        clienteNombre: json['clienteNombre'] as String? ?? '',
+        ordenServicioId: json['ordenServicioId'] as String?,
+        estado: json['estado'] as String? ?? '',
+        estadoId: json['estadoId'] as int? ?? 0,
+        fecha: DateTime.parse(json['fecha'] as String),
+        total: (json['total'] as num? ?? 0).toDouble(),
+        cantidadItems: json['cantidadItems'] as int? ?? 0,
+        activo: json['activo'] as bool? ?? true,
+      );
+
+  final String id;
+  final String clienteId;
+  final String clienteNombre;
+  final String? ordenServicioId;
+  final String estado;
+  final int estadoId;
+  final DateTime fecha;
+  final double total;
+  final int cantidadItems;
+  final bool activo;
+
+  /// La API no da correlativo todavía: se usa el inicio del id, como en órdenes.
+  String get referencia => '#${id.substring(0, 8).toUpperCase()}';
+
+  bool get vieneDeOrden => ordenServicioId != null;
+}
+
+class DetalleVentaApi {
+  const DetalleVentaApi({
+    required this.id,
+    required this.productoCodigo,
+    required this.productoNombre,
+    required this.cantidad,
+    required this.precioUnitario,
+    required this.subtotal,
+  });
+
+  factory DetalleVentaApi.desdeJson(Map<String, dynamic> json) => DetalleVentaApi(
+        id: json['id'] as String,
+        productoCodigo: json['productoCodigo'] as String? ?? '',
+        productoNombre: json['productoNombre'] as String? ?? '',
+        cantidad: json['cantidad'] as int? ?? 0,
+        precioUnitario: (json['precioUnitario'] as num? ?? 0).toDouble(),
+        subtotal: (json['subtotal'] as num? ?? 0).toDouble(),
+      );
+
+  final String id;
+  final String productoCodigo;
+  final String productoNombre;
+  final int cantidad;
+  final double precioUnitario;
+  final double subtotal;
+}
+
+class ComprobanteApi {
+  const ComprobanteApi({
+    required this.id,
+    required this.tipo,
+    required this.estado,
+    this.serie,
+    this.numero,
+  });
+
+  factory ComprobanteApi.desdeJson(Map<String, dynamic> json) => ComprobanteApi(
+        id: json['id'] as String,
+        tipo: json['tipo'] as String? ?? '',
+        serie: json['serie'] as String?,
+        numero: json['numero'] as String?,
+        estado: json['estado'] as String? ?? '',
+      );
+
+  final String id;
+  final String tipo;
+  final String? serie;
+  final String? numero;
+  final String estado;
+
+  /// «F001-000123», o solo el tipo si todavía no tiene serie ni número.
+  String get referencia {
+    final partes = [serie, numero].whereType<String>().where((p) => p.isNotEmpty);
+    return partes.isEmpty ? tipo : '$tipo ${partes.join('-')}';
+  }
+}
+
+class VentaDetalleApi {
+  const VentaDetalleApi({
+    required this.venta,
+    required this.detalles,
+    this.clienteDocumento,
+    this.clienteTelefono,
+    this.comprobante,
+  });
+
+  factory VentaDetalleApi.desdeJson(Map<String, dynamic> json) {
+    final comprobante = json['comprobante'] as Map<String, dynamic>?;
+
+    return VentaDetalleApi(
+      venta: VentaApi.desdeJson({
+        ...json,
+        // El detalle no trae cantidadItems: se cuenta de las líneas.
+        'cantidadItems': (json['detalles'] as List<dynamic>? ?? const []).length,
+      }),
+      clienteDocumento: json['clienteDocumento'] as String?,
+      clienteTelefono: json['clienteTelefono'] as String?,
+      detalles: (json['detalles'] as List<dynamic>? ?? const [])
+          .map((detalle) => DetalleVentaApi.desdeJson(detalle as Map<String, dynamic>))
+          .toList(),
+      comprobante:
+          comprobante == null ? null : ComprobanteApi.desdeJson(comprobante),
+    );
+  }
+
+  final VentaApi venta;
+  final String? clienteDocumento;
+  final String? clienteTelefono;
+  final List<DetalleVentaApi> detalles;
+  final ComprobanteApi? comprobante;
+}

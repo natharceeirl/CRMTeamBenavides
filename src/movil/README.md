@@ -13,8 +13,11 @@ App en Flutter para Android e iOS. Consume la misma API que la web
 - Tablero con el resumen de `/api/dashboard/resumen`.
 - Órdenes: lista con búsqueda, filtro «solo en taller» y ficha de la orden, donde
   el técnico puede registrar el diagnóstico.
-- Inventario: consulta de repuestos con búsqueda por código, nombre o categoría,
-  filtro de bajo stock, filtro por categoría y ficha con los últimos movimientos.
+- Tienda, que agrupa las dos caras del mostrador:
+  - Repuestos: búsqueda por código, nombre o categoría, filtro de bajo stock,
+    filtro por categoría y ficha con los últimos movimientos.
+  - Ventas: búsqueda por cliente o referencia, filtro por estado, cuánto suman
+    las vigentes y ficha con el detalle y el comprobante.
 - Clientes: lista con búsqueda y ficha con sus unidades.
 - Unidades: lista con búsqueda.
 - Chatbot: consulta de FAQs y derivación a un asesor.
@@ -49,7 +52,7 @@ debe dejar pasar el puerto 5021.
 |---|---|
 | `lib/api` | Cliente HTTP con Dio, modelos de los contratos del backend y almacenamiento de la sesión |
 | `lib/auth` | Estado de sesión con Riverpod y lectura de los claims del token |
-| `lib/pantallas` | Pantallas: login, inicio, tablero, órdenes, inventario, clientes, unidades y chatbot |
+| `lib/pantallas` | Pantallas: login, inicio, tablero, órdenes, tienda (repuestos y ventas), clientes, unidades y chatbot |
 | `lib/rutas.dart` | Rutas y guardia de sesión |
 | `lib/tema.dart` | Colores y tipografías de marca, en un solo archivo, como en la web |
 | `assets/fonts` | Space Grotesk para títulos e IBM Plex Sans para texto |
@@ -67,13 +70,14 @@ debe dejar pasar el puerto 5021.
   porque después no se pueden cambiar.
 - **Menús por rol:** la app ya recibe los roles desde `/api/auth/me`, pero no
   esconde nada todavía; falta la matriz de permisos del cliente.
-- Agregar repuestos y cambiar el estado de la orden se hacen desde la web. El
-  inventario en la app es consulta: las entradas, salidas y ajustes también.
-- **Inventario con catálogos grandes:** la pantalla trae la lista completa y
-  filtra en el dispositivo, como el resto de la app. `GET /api/productos` ya
-  acepta `categoriaId`, `busqueda` y `bajoStock`; si el catálogo real crece,
-  conviene pasar el filtrado al servidor.
-- **Ventas en la app:** falta; hoy solo están en la web.
+- Agregar repuestos y cambiar el estado de la orden se hacen desde la web. La
+  tienda en la app es consulta: registrar entradas, salidas y ajustes de stock,
+  y crear, confirmar o anular una venta y su comprobante, también.
+- **Catálogos grandes:** repuestos y ventas traen la lista completa y filtran en
+  el dispositivo, como el resto de la app. `GET /api/productos` acepta
+  `categoriaId`, `busqueda` y `bajoStock`, y `GET /api/ventas` acepta `estado`,
+  `clienteId` y rango de fechas; si los datos reales crecen, conviene pasar el
+  filtrado al servidor.
 - Android permite tráfico HTTP sin cifrar solo en la compilación de depuración
   (`android/app/src/debug/AndroidManifest.xml`). En producción la API va por
   HTTPS.

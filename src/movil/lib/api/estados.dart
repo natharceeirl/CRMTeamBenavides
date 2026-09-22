@@ -54,3 +54,25 @@ const nombresTipoMovimiento = <int, String>{
 
 String nombreTipoMovimiento(int tipoId) =>
     nombresTipoMovimiento[tipoId] ?? 'Desconocido';
+
+/// Estados de la venta, iguales a los del backend (enum EstadoVenta). La API
+/// los manda como número en `estadoId` y como texto en `estado`.
+class EstadoVenta {
+  const EstadoVenta._();
+
+  static const cotizacion = 0;
+  static const confirmada = 1;
+  static const anulada = 2;
+}
+
+const nombresEstadoVenta = <int, String>{
+  EstadoVenta.cotizacion: 'Cotización',
+  EstadoVenta.confirmada: 'Confirmada',
+  EstadoVenta.anulada: 'Anulada',
+};
+
+String nombreEstadoVenta(int estadoId) =>
+    nombresEstadoVenta[estadoId] ?? 'Desconocido';
+
+/// Una venta anulada ya no cuenta para caja ni para stock.
+bool esVentaVigente(int estadoId) => estadoId != EstadoVenta.anulada;
