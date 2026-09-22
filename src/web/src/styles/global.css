@@ -540,3 +540,142 @@ h4 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/* --- Gráficos ---------------------------------------------------------- */
+/* Los colores de los trazos los pone el componente desde tokens.ts; acá solo
+   va la geometría y el texto, que usa fichas de texto y nunca el color del
+   dato. */
+
+.grafico-vacio {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--color-texto-secundario);
+}
+
+.grafico-leyenda {
+  display: flex;
+  gap: 20px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--color-texto-secundario);
+}
+
+.grafico-leyenda li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.grafico-leyenda-marca {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.grafico-barra-fila {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr) 64px;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.grafico-barra-etiqueta {
+  font-size: 14px;
+  color: var(--color-texto-secundario);
+  overflow-wrap: anywhere;
+}
+
+/* La pista es el blanco de golpe del cursor: más alta que la barra, para que
+   no haya que apuntar fino. */
+.grafico-barra-pista {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  border-radius: 2px;
+}
+
+.grafico-barra-pista:focus-visible {
+  outline: 2px solid var(--color-acento-600);
+  outline-offset: 2px;
+}
+
+.grafico-barra-marca {
+  height: 20px;
+  min-width: 2px;
+  /* Punta redondeada del lado del dato, cuadrada contra la línea de base. */
+  border-radius: 0 4px 4px 0;
+  transition: filter 120ms ease;
+}
+
+.grafico-barra-pista:hover .grafico-barra-marca,
+.grafico-barra-pista:focus-visible .grafico-barra-marca {
+  filter: brightness(1.08);
+}
+
+.grafico-barra-valor {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.grafico-area {
+  position: relative;
+  width: 100%;
+}
+
+.grafico-area svg {
+  display: block;
+}
+
+.grafico-area svg:focus-visible {
+  outline: 2px solid var(--color-acento-600);
+  outline-offset: 2px;
+}
+
+.grafico-eje-texto {
+  font-family: var(--fuente-texto);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  fill: var(--color-texto-secundario);
+}
+
+.grafico-punta-valor {
+  font-family: var(--fuente-texto);
+  font-size: 13px;
+  font-weight: 600;
+  fill: var(--color-texto);
+}
+
+.grafico-tooltip {
+  position: absolute;
+  top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-divisor-suave);
+  border-radius: 4px;
+  background: var(--color-blanco);
+  box-shadow: 0 2px 8px rgb(32 30 29 / 12%);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.grafico-tooltip strong {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.grafico-tooltip span {
+  font-size: 12px;
+  color: var(--color-texto-secundario);
+}
+
+@media (width <= 900px) {
+  .grafico-barra-fila {
+    grid-template-columns: 110px minmax(0, 1fr) 56px;
+  }
+}

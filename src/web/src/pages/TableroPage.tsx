@@ -5,8 +5,15 @@ import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { EstadoOrdenApiTag } from '../components/EstadoOrdenApiTag'
 import { Indicadores } from '../components/Indicadores'
+import { GraficoBarras } from '../components/GraficoBarras'
 import { esEstadoTerminal, useOrdenes } from '../api/ordenes'
-import { enTaller, rangoDelPeriodo, useResumenDashboard, type Periodo } from '../api/reportes'
+import {
+  barrasPorEstado,
+  enTaller,
+  rangoDelPeriodo,
+  useResumenDashboard,
+  type Periodo,
+} from '../api/reportes'
 import type { OrdenServicioResponse } from '../api/tipos'
 import { entero, fechaHora, referenciaOrden } from '../utils/formato'
 
@@ -105,6 +112,19 @@ export function TableroPage() {
             },
           ]}
         />
+        <section>
+          <div className="seccion-titulo">
+            <h2>Órdenes por estado</h2>
+          </div>
+          <GraficoBarras
+            datos={datos ? barrasPorEstado(datos) : []}
+            unidad="órdenes"
+            leyenda={[{ texto: 'En taller' }, { texto: 'Cerradas', atenuada: true }]}
+            cargando={resumen.isPending}
+            vacio="Todavía no hay órdenes registradas"
+          />
+        </section>
+
         <section>
           <div className="seccion-titulo">
             <h2>Órdenes en taller</h2>

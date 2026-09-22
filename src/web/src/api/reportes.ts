@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { solicitar } from './http'
+import { ESTADO, esEstadoTerminal, nombresEstado } from './ordenes'
+import type { BarraDato } from '../components/GraficoBarras'
 import type {
   DashboardResumenResponse,
   OrdenServicioReporteResponse,
@@ -95,4 +97,30 @@ export function useStockBajo() {
 export function enTaller(resumen: DashboardResumenResponse): number {
   const { abierta, diagnostico, aprobada, enProceso, lista } = resumen.ordenesServicio
   return abierta + diagnostico + aprobada + enProceso + lista
+}
+
+/**
+ * El resumen del tablero, listo para el gráfico de barras.
+ *
+ * Va en el orden del flujo, no de mayor a menor: así se lee dónde se están
+ * acumulando las órdenes. Entregada y Cancelada salen atenuadas porque son
+ * contexto: lo que el taller mira es lo que todavía tiene adentro.
+ */
+export function barrasPorEstado(resumen: DashboardResumenResponse): BarraDato[] {
+  const ordenes = resumen.ordenesServicio
+  const conteos: readonly (readonly [number, number])[] = [
+    [ESTADO.abierta, ordenes.abierta],
+    [ESTADO.diagnostico, ordenes.diagnostico],
+    [ESTADO.aprobada, ordenes.aprobada],
+    [ESTADO.enProceso, ordenes.enProceso],
+    [ESTADO.lista, ordenes.lista],
+    [ESTADO.entregada, ordenes.entregada],
+    [ESTADO.cancelada, ordenes.cancelada],
+  ]
+
+  return conteos.map(([estadoId, valor]) => ({
+    etiqueta: nombresEstado[estadoId],
+    valor,
+    atenuada: esEstadoTerminal(estadoId),
+  }))
 }

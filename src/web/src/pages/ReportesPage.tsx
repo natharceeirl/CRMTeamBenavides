@@ -4,6 +4,8 @@ import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { EstadoOrdenApiTag } from '../components/EstadoOrdenApiTag'
 import { Indicadores } from '../components/Indicadores'
+import { GraficoArea } from '../components/GraficoArea'
+import { GraficoBarras } from '../components/GraficoBarras'
 import {
   rangoDelPeriodo,
   useReporteOrdenes,
@@ -12,12 +14,14 @@ import {
   useStockBajo,
   type Periodo,
 } from '../api/reportes'
+import { ESTADO_VENTA } from '../api/ventas'
 import type {
   OrdenServicioReporteResponse,
   StockBajoResponse,
   VentaReporteResponse,
 } from '../api/tipos'
 import { entero, fechaHora, referenciaOrden, soles } from '../utils/formato'
+import { serieDiaria } from '../utils/series'
 
 const columnasOrdenes: TableProps<OrdenServicioReporteResponse>['columns'] = [
   {
@@ -107,6 +111,26 @@ export function ReportesPage() {
 
   const datos = resumen.data
 
+  // Las tablas de abajo son la vista completa; los gráficos son la lectura
+  // rápida del mismo periodo.
+  const ordenesPorDia = serieDiaria(
+    ordenes.data ?? [],
+    (orden) => orden.fechaApertura,
+    () => 1,
+    rango,
+  )
+  const ventasPorDia = serieDiaria(
+    (ventas.data ?? []).filter((venta) => venta.estadoId !== ESTADO_VENTA.anulada),
+    (venta) => venta.fecha,
+    (venta) => venta.total,
+    rango,
+  )
+  // Los ocho más cortos de stock: la lista completa sigue en la tabla.
+  const faltantes = [...(stockBajo.data ?? [])]
+    .sort((uno, otro) => otro.diferencia - uno.diferencia)
+    .slice(0, 8)
+    .map((producto) => ({ etiqueta: producto.nombre, valor: producto.diferencia }))
+
   return (
     <>
       <BarraSuperior
@@ -136,6 +160,18 @@ export function ReportesPage() {
 
         <section>
           <div className="seccion-titulo">
+            <h2>Órdenes abiertas por día</h2>
+          </div>
+          <GraficoArea
+            puntos={ordenesPorDia}
+            nombreSerie="Órdenes abiertas"
+            entero
+            cargando={ordenes.isPending}
+          />
+        </section>
+
+        <section>
+          <div className="seccion-titulo">
             <h2>Órdenes de servicio del periodo</h2>
           </div>
           <Table
@@ -145,6 +181,22 @@ export function ReportesPage() {
             pagination={{ pageSize: 10 }}
             loading={ordenes.isPending}
             locale={{ emptyText: 'Sin órdenes en el periodo' }}
+          />
+        </section>
+
+        <section>
+          <div className="seccion-titulo">
+            <h2>Vendido por día</h2>
+          </div>
+          <p className="texto-secundario" style={{ marginBottom: 16 }}>
+            Cotizaciones y ventas confirmadas. Las anuladas no suman.
+          </p>
+          <GraficoArea
+            puntos={ventasPorDia}
+            nombreSerie="Vendido"
+            formatearValor={soles}
+            formatearEje={(monto) => entero(Math.round(monto))}
+            cargando={ventas.isPending}
           />
         </section>
 
@@ -169,6 +221,14 @@ export function ReportesPage() {
           <p className="texto-secundario" style={{ marginBottom: 16 }}>
             Este listado no depende del periodo: es la foto del inventario ahora mismo.
           </p>
+          <div style={{ marginBottom: 24 }}>
+            <GraficoBarras
+              datos={faltantes}
+              unidad="unidades por debajo del mínimo"
+              cargando={stockBajo.isPending}
+              vacio="Ningún producto por debajo del mínimo"
+            />
+          </div>
           <Table
             rowKey="productoId"
             columns={columnasStock}

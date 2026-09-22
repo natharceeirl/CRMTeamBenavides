@@ -17,6 +17,10 @@ export const colores = {
   acento800: '#7c1405',
   neutro100: '#f8f4f4',
   neutro300: '#d7d3d3',
+  // Gris de atenuación de los gráficos: la serie que es contexto, no el dato.
+  // Validado contra el fondo #f3f2f2: 3,25:1 de contraste y ΔE 12,1 en
+  // deuteranopía frente al acento, así que la pareja se distingue.
+  neutro500: '#8b8583',
   neutro800: '#444141',
   marcaRojo: '#ff0000',
   marcaNegro: '#000000',
@@ -45,6 +49,7 @@ export function aplicarVariablesCss(raiz: HTMLElement = document.documentElement
     '--color-acento-800': colores.acento800,
     '--color-neutro-100': colores.neutro100,
     '--color-neutro-300': colores.neutro300,
+    '--color-neutro-500': colores.neutro500,
     '--color-neutro-800': colores.neutro800,
     '--fuente-titulos': fuentes.titulos,
     '--fuente-texto': fuentes.texto,
