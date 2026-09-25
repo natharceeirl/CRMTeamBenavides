@@ -95,10 +95,7 @@ export function UnidadesPage() {
       <div className="pagina">
         <section>
           <AvisoError error={vehiculos.error ?? eliminar.error} />
-          <p className="texto-secundario" style={{ marginBottom: 16 }}>
-            El tipo de unidad, la serie, el número de motor y el medidor en horas todavía no existen en la API. Paolo los
-            agrega por migración cuando el Ingeniero confirme el modelo.
-          </p>
+          {/* El tipo de unidad, la serie, el número de motor y el medidor en horas todavía no existen en la API. */}
           <div className="filtros">
             <Input
               id="buscar-unidades"

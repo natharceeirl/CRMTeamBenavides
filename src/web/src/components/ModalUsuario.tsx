@@ -99,7 +99,7 @@ export function ModalUsuario({ abierto, usuario, onCerrar }: Readonly<Props>) {
             label="Contraseña"
             name="password"
             rules={[{ required: true, message: 'Ingresa una contraseña' }]}
-            extra="La define quien crea el usuario; luego se cambia desde el backend."
+            extra="La define quien crea el usuario."
           >
             <Input.Password autoComplete="new-password" />
           </Form.Item>

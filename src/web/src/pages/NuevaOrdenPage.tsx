@@ -96,11 +96,8 @@ export function NuevaOrdenPage() {
                 <Input.TextArea rows={3} placeholder="Qué pide el cliente y qué síntomas reporta" />
               </Form.Item>
             </div>
-            <p className="texto-secundario">
-              La lectura del medidor, la fecha de entrega prometida, la prioridad, los accesorios recibidos y las fotos
-              de ingreso todavía no existen en la API. Están en el mockup y hay que confirmarlos con el Ingeniero antes
-              de que Paolo los agregue por migración.
-            </p>
+            {/* La lectura del medidor, la fecha de entrega prometida, la prioridad, los accesorios recibidos y las
+                fotos de ingreso están en el mockup pero todavía no existen en la API. */}
           </section>
         </Form>
       </div>

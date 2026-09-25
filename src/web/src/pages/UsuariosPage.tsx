@@ -158,7 +158,7 @@ export function UsuariosPage() {
               children: (
                 <>
                   <p className="texto-secundario" style={{ marginBottom: 16 }}>
-                    Los roles y permisos salen de la API. La matriz definitiva la confirma el cliente.
+                    La matriz de roles y permisos se define con Team Benavides.
                   </p>
                   <div className="filtros">
                     <Button

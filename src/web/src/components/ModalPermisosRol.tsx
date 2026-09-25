@@ -45,9 +45,7 @@ export function ModalPermisosRol({ abierto, rol, onCerrar }: Readonly<Props>) {
       <AvisoError error={catalogo.error ?? permisosDelRol.error ?? asignar.error ?? quitar.error} />
       {cargando && <Spin />}
       {!cargando && (catalogo.data ?? []).length === 0 && (
-        <p className="texto-secundario">
-          El catálogo de permisos está vacío. Los siembra el backend: pídeselos a Paolo.
-        </p>
+        <p className="texto-secundario">Todavía no hay permisos configurados.</p>
       )}
       <Space direction="vertical" size="small">
         {(catalogo.data ?? []).map((permiso) => (

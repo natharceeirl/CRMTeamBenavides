@@ -65,7 +65,7 @@ export function LoginPage() {
             Ingresar
           </Button>
         </Form>
-        <a href="#recuperar">¿Olvidaste tu contraseña?</a>
+        {/* La recuperación de contraseña vuelve cuando la API tenga su endpoint. */}
       </div>
     </div>
   )

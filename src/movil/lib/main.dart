@@ -14,7 +14,7 @@ class AplicacionCrm extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp.router(
-      title: 'CRM Team Benavides',
+      title: 'Team Benavides',
       debugShowCheckedModeBanner: false,
       theme: temaTeamBenavides(),
       routerConfig: ref.watch(routerProvider),

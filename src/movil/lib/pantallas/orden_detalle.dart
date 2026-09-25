@@ -224,8 +224,7 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
               const Padding(
                 padding: EdgeInsets.fromLTRB(20, 24, 20, 0),
                 child: Text(
-                  'Agregar repuestos y cambiar el estado se hace desde la web; en la app '
-                  'todavía no está.',
+                  'Los repuestos y el cambio de estado se registran desde la web.',
                   style: TextStyle(color: Marca.textoSecundario),
                 ),
               ),
