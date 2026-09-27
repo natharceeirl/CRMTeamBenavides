@@ -22,15 +22,24 @@ Sistema de gestión a medida (no SaaS) para el taller de post-venta y la tienda 
 
 ## Cronograma
 
-**Go Live fijo: viernes 02/10/2026, con todo el alcance.** Nada se mueve a después del Go Live. Los sábados 19/09 y 26/09 son días de trabajo. El detalle día por día está en la guía del equipo (`guia.pdf`).
+**El Go Live se aplazó (27/09).** Todo el alcance, incluidos los cambios de la reunión del 25/09, se entrega junto antes del Go Live: no se divide en fases ni se deja nada para después. Si el trabajo no entra, se mueve la fecha, no el alcance.
+
+**Fecha propuesta: viernes 20/11/2026**, pendiente de confirmar con el cliente. El plan día por día está en [docs/plan-implementacion.md](docs/plan-implementacion.md).
 
 | Semana | Back-end | Front-end |
 |---|---|---|
-| 14–19/09 | Modelo de datos, autenticación, API de clientes, unidades, usuarios, roles, configuración y órdenes de servicio | Wireframes, login web, clientes y unidades en web y Flutter, flujo de órdenes en web |
-| 21–26/09 | Inventario, adaptador Yamaha con mock, ventas y cotizaciones, comprobantes, reportes, chatbot y script de migración | Órdenes en móvil, inventario, ventas, dashboard en web y móvil, widget de chatbot |
-| 28/09–02/10 | Migración real, importación y backup, correcciones de UAT, despliegue | Validación de datos migrados, pruebas de punta a punta, correcciones de UAT, soporte al arranque |
+| 1 · 28/09–02/10 | Permisos y reglas por rol, unidades, clientes, costo y umbrales, OS base | Permisos en web y app, unidades, clientes, timeline de la OS |
+| 2 · 05–09/10 | OS completa: servicios, IGV, correlativo, búsqueda, formato de atención, avances y aprobación de Gerencia | Servicios y OS en la web; app del técnico |
+| 3 · 12–16/10 | Configuración, tipo de cambio, ventas con servicios y pagos, OS con su venta, comprobantes, importador de Excel | OS imprimible, configuración, ventas y comprobantes |
+| 4 · 19–23/10 | Caja, adelantos, pedidos de Lima | Caja, adelantos, pedidos de Lima |
+| 5 · 26–30/10 | Auditoría, portal del cliente, fotos | Auditoría, perfil Cliente en la app, fotos |
+| 6 · 02–06/11 | Ganancias, reportes por rol, citas | Ganancias, reportes, agenda |
+| 7 · 09–13/11 | Almacenes y margen | Citas en la app, almacenes, pruebas de punta a punta |
+| 8 · 16–20/11 | UAT 16–17/11, capacitación 18/11, Go Live 20/11 | UAT, capacitación y salida |
 
-UAT: 30/09 y 01/10. Capacitación: 01/10.
+- Cada lunes a las 12:00, en la reunión con el cliente, se muestra en el ambiente de pruebas lo terminado la semana anterior y se recogen las respuestas que necesita la semana siguiente.
+- El jueves 08/10 es feriado. Los sábados son margen, no plan.
+- Antes del aplazamiento el Go Live era el 02/10/2026, según la guía `guia.pdf`. Lo construido hasta el 25/09 está en `develop` (`23af577`).
 
 ## Alcance
 
@@ -38,27 +47,42 @@ La referencia es el **alcance funcional y técnico aprobado**, no el Gantt del c
 
 Módulos aprobados: análisis y diseño funcional, UI/UX, backend/API, base de datos, clientes (CRM), unidades, órdenes de servicio, cotizaciones y ventas de repuestos y servicios, inventario, comprobantes, usuarios y roles, reportes y dashboard, configuración, chatbot inicial, integración Yamaha, web administrativa, app Android/iOS, QA, despliegue, capacitación y documentación. La migración de datos es una fase del cronograma.
 
+### Cambios de la reunión del 25/09
+
+El detalle por módulo está en [docs/resumen-cambios-reunion.md](docs/resumen-cambios-reunion.md). Todo entra antes del Go Live.
+
+- **Se agrega:** portal del cliente, permisos reales en el backend, aprobaciones de Gerencia, historial de la OS, servicios y mano de obra con IGV, nuevo modelo de unidades, stock configurable, métodos de pago, adelantos y saldo, pedidos de Lima, caja, ganancias, citas y agenda, tipo de cambio manual, configuración ampliada, auditoría y el formato de atención del cliente en la OS.
+- **Se cambia:** modelo de unidades, flujo de la OS, permisos por rol, estructura de servicios, ventas y comprobantes, alertas de stock y la relación OS–venta–comprobante, sin doble descuento de stock.
+- **Se mantiene:** los estados actuales de la OS y las pantallas del portal del cliente como referencia visual.
+
 ### Integraciones
 
-- **Yamaha:** adaptador con modo mock y modo real, elegido por configuración, con tareas en segundo plano en Hangfire. El Ingeniero ya gestiona credenciales y documentación con el cliente; mientras tanto se trabaja con el mock.
+- **Yamaha:** adaptador con modo mock y modo real, elegido por configuración, con tareas en segundo plano en Hangfire. Hoy solo existe el cliente HTTP con su configuración. El modo mock o real y el registro de llamadas se agregan en la semana 7; las operaciones, cuando el Ingeniero consiga la documentación y las credenciales. Hangfire se instala cuando haya trabajos reales.
 - **Chatbot:** atención inicial, preguntas frecuentes y derivación a un asesor. Va como widget en la web y la app, e integrado con WhatsApp. Los costos de Meta, del proveedor de mensajería o de IA son del cliente; proveedor y cuenta sin definir.
-- **Comprobantes:** solo se registra la información (tipo, serie, número, cliente, detalle, IGV 18 %, total y estado). No hay emisión electrónica ante SUNAT.
+- **Comprobantes:** solo se registra la información: tipo, serie, número, cliente, OS y venta, repuestos y servicios, IGV 18 %, método de pago, total, observaciones y estado. No hay emisión electrónica; el alcance de SUNAT, OSE o PSE se valida después.
+- **Excel:** importación de clientes, unidades y repuestos con costo y stock, con errores por fila.
 - **ERP:** no es una integración. En el tablero de Trello, «ERP» nombra los módulos internos. Falta confirmar qué quiere decir en el Gantt.
 - **Web:** es un canal, no una integración.
 
 ### Fuera de alcance
 
-No se construye sin aprobación del cliente: emisión electrónica ante SUNAT, chatbot con IA generativa, campañas de marketing, agenda de citas, venta de unidades nuevas, pagos en línea, compras a proveedores, integración con un ERP externo e integración de correo.
+No se construye sin aprobación del cliente: emisión electrónica ante SUNAT, chatbot con IA generativa, campañas de marketing, venta de unidades nuevas, pagos en línea, compras a proveedores, integración con un ERP externo e integración de correo. La agenda de citas estaba en esta lista y entró con los cambios del 25/09.
 
 Una funcionalidad que no esté en el alcance se marca «por confirmar» y se registra como cambio de alcance antes de construirla.
 
 ## Funcionalidad
 
-El detalle está en el mapa funcional: https://claude.ai/code/artifact/708d0351-bbde-48cd-9768-7d63fc62c3cc. Incluye roles, flujos F1–F8, módulos M01–M11 y las pantallas del mockup.
+El mapa funcional (https://claude.ai/code/artifact/708d0351-bbde-48cd-9768-7d63fc62c3cc) sigue sirviendo para módulos y pantallas. En estados, roles y acceso del cliente manda el resumen de cambios del 25/09.
 
-- **Flujo central, la orden de servicio (propuesta, pendiente de validar con el cliente):** `Recepción → Diagnóstico → Esperando aprobación → En reparación ⇄ Esperando repuesto → Control de calidad → Lista para entrega → Entregada`. Puede pasar a `Anulada` desde Recepción o Diagnóstico, con motivo.
-- **Roles propuestos (por confirmar):** Administrador, Gerencia, Asesor de servicio, Técnico, Almacén, Vendedor/caja y Cliente.
-- **App:** una sola app con perfil Técnico y perfil Cliente (por confirmar).
+- **Orden de servicio:** se mantienen los estados actuales: `Abierta → Diagnóstico → Aprobada → En proceso → Lista → Entregada`. Puede pasar a `Cancelada` desde cualquier estado anterior a `Entregada`, y de `Lista` vuelve a `En proceso` si hay un reingreso. Se agregan historial de estados con usuario y hora, fecha estimada de entrega, aprobación de Gerencia y los campos del formato de atención del cliente.
+- **Roles definitivos:**
+  - Gerencia/Admin: acceso total, administra usuarios y permisos, y aprueba los cambios importantes de la OS.
+  - Recepción: clientes, unidades y OS, según permisos.
+  - Técnico: solo sus OS; registra diagnóstico, servicios, repuestos, mano de obra y avances. No cambia precios ni da la aprobación final.
+  - Vendedor: ventas y comprobantes de sus ventas. No cambia precios ni aplica descuentos.
+  - Cliente: solo sus unidades, OS, documentos y comprobantes; aprueba o rechaza presupuestos.
+- Los permisos se aplican en el backend con policies; ocultar botones no basta.
+- **App:** una sola app con perfil Técnico y perfil Cliente. El cliente activa su cuenta con su DNI y un código que genera el personal autorizado. Referencia visual del perfil Cliente: [docs/referencias/app-cliente.html](docs/referencias/app-cliente.html).
 
 ## Stack
 
@@ -98,9 +122,18 @@ Principios del documento técnico que no se negocian:
 - Pendiente: `main` (`f4806a0`) y `develop` (raíz `7775b93`) tienen historias sin relación, porque `develop` se rehízo sobre la rama del back. Hay que resolverlo antes del despliegue.
 - Estructura:
   - `CRMTeamBenavides.slnx` y `src/CRMTeamBenavides.Api`: la API .NET 10 con entidades de dominio, servicios, endpoints por área en `Features/`, `ApplicationDbContext` y migraciones.
-  - `src/web`: la web administrativa en React + TypeScript + Vite + Ant Design. Por ahora son wireframes con datos de ejemplo; ver `src/web/README.md`.
-  - `src/movil`: la app en Flutter (Riverpod, Dio y go_router) con login, navegación, clientes y unidades contra la misma API; ver `src/movil/README.md`.
+  - `src/web`: la web administrativa en React + TypeScript + Vite + Ant Design, conectada a la API: tablero, órdenes, clientes, unidades, repuestos, ventas y comprobantes, reportes, chatbot y usuarios; ver `src/web/README.md`.
+  - `src/movil`: la app en Flutter (Riverpod, Dio y go_router) contra la misma API: tablero, órdenes con diagnóstico, tienda con repuestos y ventas, clientes, unidades y asistente; ver `src/movil/README.md`.
+  - `docs/`: resumen de cambios del 25/09, plan de implementación, referencia visual del portal del cliente y prompt del mockup.
 - Convenciones del backend: dominio en español, identificadores `Guid`, `BaseEntity` con campos de auditoría y borrado lógico (`Activo`).
+- Reglas de base de datos (detalle en el plan):
+  - Una migración de EF por bloque, con nombre en español. En producción se aplica con un script idempotente revisado; la API no migra sola al arrancar.
+  - Índices únicos filtrados por `Activo`. Hoy `Vehiculos.Placa` y `Productos.Codigo` no lo están y una placa dada de baja no se puede volver a registrar.
+  - Montos en `numeric(12,2)` y tipo de cambio en `numeric(10,4)`.
+  - Estados y tipos como enum o catálogo, nunca texto libre.
+  - Todo cambio de stock usa el bloqueo `FOR UPDATE` de `InventarioService`.
+  - Correlativos con secuencia de PostgreSQL o fila bloqueada, nunca `MAX()+1`.
+  - `CreadoPorId` y `ModificadoPorId` hoy solo los llena el chatbot; el interceptor de auditoría los completará en todas las tablas.
 - Configuración local: la cadena de conexión y `JwtSettings:SecretKey` van en `dotnet user-secrets`, nunca en `appsettings.json`.
 - En desarrollo, el documento OpenAPI se sirve en `/openapi/v1.json`.
 
@@ -132,27 +165,42 @@ Web, Android e iOS comparten la identidad de Team Benavides.
 
 ## Información pedida al cliente
 
-El Ingeniero la solicitó el 15/09:
+Cada respuesta tiene fecha límite porque el módulo que la necesita empieza ese día; la lista completa está en el plan, en «Lo que necesitamos del cliente y para cuándo». Lo más próximo:
 
-- Servicios, mantenimiento, inventario y una función adicional: ejemplos reales de operaciones y los datos necesarios para crear las tablas.
-- Matriz de roles y permisos.
-- Flujo exacto de estados de las órdenes.
-- Logotipo en PNG, tipografía y colores.
+- Lunes 28/09: confirmar la fecha del Go Live, hosting, lista de usuarios con su rol e identificadores de motos acuáticas y generadores.
+- Jueves 01/10: catálogo de servicios con su precio de mano de obra.
+- Lunes 05/10: almacenes y si cada uno lleva stock propio.
+- Martes 06/10: campos del formato de atención y qué aprueba Gerencia.
+- Jueves 15/10: Excel de migración.
+
+De lo pedido el 15/09, la matriz de roles y el flujo de estados quedaron resueltos en el resumen de cambios. Falta el logo en negativo y el ícono cuadrado de la app.
 
 ## Decisiones pendientes
 
+- Fecha del Go Live: propuesta el viernes 20/11/2026.
 - Hosting y proveedor.
-- Detalles de la orden: control de calidad, aprobación por ítem y cobro del diagnóstico.
-- Acceso del cliente a la app: invitación del taller o autorregistro.
+- Qué acciones aprueba Gerencia.
+- Presupuesto: aprobación completa o por ítem, y cobro del diagnóstico si se rechaza.
+- Formato de atención: qué campos van estructurados y si la firma es impresa o en pantalla.
+- Almacenes: cuántos hay y si cada uno lleva su propio stock. Si lo llevan, el cambio se adelanta a la semana 3.
+- Caja: una o por usuario, y si se abre y se cierra cada día.
+- Pedidos de Lima: qué son y qué estados tienen.
+- Ganancias: si entran servicios y mano de obra, y si se usa costo promedio o último costo.
+- Citas: quién las pide y si la agenda es por técnico.
+- Métodos de pago, series y correlativos, y para qué se usa el tipo de cambio.
+- Cuentas de Play Store y App Store a nombre de la empresa.
 - Proveedor y cuenta de WhatsApp, y si habrá avisos salientes.
 - Operaciones reales de la API de Yamaha.
-- Almacenes, sucursales y medios de pago.
+- Alcance de SUNAT, OSE o PSE.
 - Qué significa «ERP» en el Gantt.
 
 ## Recursos
 
+- Plan de implementación: [docs/plan-implementacion.md](docs/plan-implementacion.md). Versión visual: https://claude.ai/artifact/UyERKrdu6H5VUbopk3GTXT. Las páginas de claude.ai son privadas hasta que su dueño las comparte, así que la referencia del equipo es la copia del repositorio.
+- Resumen de cambios de la reunión del 25/09: [docs/resumen-cambios-reunion.md](docs/resumen-cambios-reunion.md).
+- Referencia visual del portal del cliente: [docs/referencias/app-cliente.html](docs/referencias/app-cliente.html). Versión publicada: https://claude.ai/artifact/JqzMRP5fjiEZXdRDvFmjDL
 - Documento técnico: `Team_Benavides_Resumen Técnico.pdf` (no está en el repositorio).
-- Guía día a día del equipo: `guia.pdf` (no está en el repositorio).
+- Guía día a día original, con el Go Live del 02/10: `guia.pdf` (no está en el repositorio). La reemplaza el plan de implementación.
 - Mapa funcional: https://claude.ai/code/artifact/708d0351-bbde-48cd-9768-7d63fc62c3cc
 - Tablero de Trello (privado): https://trello.com/b/7arP1dsL. Para leerlo, usar la exportación JSON; el conector de Trello está autorizado en otro espacio de trabajo.
 - Prompt del mockup para Claude Design: [docs/prompt-claude-design.md](docs/prompt-claude-design.md)
