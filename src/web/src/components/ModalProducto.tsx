@@ -16,8 +16,9 @@ type Campos = {
   descripcion?: string
   unidad?: string
   precioVenta: number
+  costo?: number
   stockInicial?: number
-  stockMinimo: number
+  stockMinimo?: number | null
 }
 
 const sinVacios = (valor?: string) => (valor && valor.trim() !== '' ? valor.trim() : null)
@@ -42,7 +43,8 @@ export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) 
       descripcion: sinVacios(campos.descripcion),
       unidad: sinVacios(campos.unidad),
       precioVenta: campos.precioVenta,
-      stockMinimo: campos.stockMinimo,
+      costo: campos.costo ?? 0,
+      stockMinimo: campos.stockMinimo != null && !Number.isNaN(campos.stockMinimo) ? campos.stockMinimo : null,
     }
 
     // El stock inicial solo existe al crear: después se mueve por entradas,
@@ -79,8 +81,9 @@ export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) 
           descripcion: producto?.descripcion ?? '',
           unidad: producto?.unidad ?? 'unidad',
           precioVenta: producto?.precioVenta ?? 0,
+          costo: producto?.costo ?? 0,
           stockInicial: 0,
-          stockMinimo: producto?.stockMinimo ?? 0,
+          stockMinimo: producto?.stockMinimo ?? undefined,
         }}
       >
         <Form.Item
@@ -114,7 +117,14 @@ export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) 
         <Form.Item
           label="Precio de venta"
           name="precioVenta"
-          rules={[{ required: true, message: 'Ingresa el precio' }]}
+          rules={[{ required: true, message: 'Ingresa el precio de venta' }]}
+        >
+          <InputNumber min={0} precision={2} style={{ width: '100%' }} />
+        </Form.Item>
+        <Form.Item
+          label="Costo"
+          name="costo"
+          rules={[{ required: true, message: 'Ingresa el costo' }]}
         >
           <InputNumber min={0} precision={2} style={{ width: '100%' }} />
         </Form.Item>
@@ -126,9 +136,9 @@ export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) 
         <Form.Item
           label="Stock mínimo"
           name="stockMinimo"
-          rules={[{ required: true, message: 'Ingresa el stock mínimo' }]}
+          help="Opcional. Si se deja vacío, tomará el stock mínimo de la categoría o 4 por defecto."
         >
-          <InputNumber min={0} style={{ width: '100%' }} />
+          <InputNumber min={0} style={{ width: '100%' }} placeholder="Hereda categoría o 4" />
         </Form.Item>
       </Form>
     </Modal>

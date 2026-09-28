@@ -24,7 +24,8 @@ public class CategoriaProductoService : ICategoriaProductoService
                 c.Nombre,
                 c.Productos.Count(p => p.Activo),
                 c.Activo,
-                c.FechaCreacion))
+                c.FechaCreacion,
+                c.StockMinimoDefault))
             .ToListAsync();
     }
 
@@ -47,7 +48,8 @@ public class CategoriaProductoService : ICategoriaProductoService
             categoria.Nombre,
             cantidadProductos,
             categoria.Activo,
-            categoria.FechaCreacion));
+            categoria.FechaCreacion,
+            categoria.StockMinimoDefault));
     }
 
     public async Task<ServiceResult<CategoriaProductoResponse>> CreateAsync(CreateCategoriaProductoRequest request)
@@ -55,6 +57,11 @@ public class CategoriaProductoService : ICategoriaProductoService
         if (string.IsNullOrWhiteSpace(request.Nombre))
         {
             return ServiceResult<CategoriaProductoResponse>.Invalid("El nombre de la categoría es obligatorio.");
+        }
+
+        if (request.StockMinimoDefault.HasValue && request.StockMinimoDefault.Value < 0)
+        {
+            return ServiceResult<CategoriaProductoResponse>.Invalid("El stock mínimo por defecto debe ser mayor o igual a 0.");
         }
 
         var nombreNormalizado = request.Nombre.Trim();
@@ -70,6 +77,7 @@ public class CategoriaProductoService : ICategoriaProductoService
         var categoria = new CategoriaProducto
         {
             Nombre = nombreNormalizado,
+            StockMinimoDefault = request.StockMinimoDefault,
             FechaCreacion = DateTime.UtcNow,
             Activo = true
         };
@@ -82,7 +90,8 @@ public class CategoriaProductoService : ICategoriaProductoService
             categoria.Nombre,
             0,
             categoria.Activo,
-            categoria.FechaCreacion));
+            categoria.FechaCreacion,
+            categoria.StockMinimoDefault));
     }
 
     public async Task<ServiceResult<CategoriaProductoResponse>> UpdateAsync(Guid id, UpdateCategoriaProductoRequest request)
@@ -101,6 +110,11 @@ public class CategoriaProductoService : ICategoriaProductoService
             return ServiceResult<CategoriaProductoResponse>.Invalid("El nombre de la categoría es obligatorio.");
         }
 
+        if (request.StockMinimoDefault.HasValue && request.StockMinimoDefault.Value < 0)
+        {
+            return ServiceResult<CategoriaProductoResponse>.Invalid("El stock mínimo por defecto debe ser mayor o igual a 0.");
+        }
+
         var nombreNormalizado = request.Nombre.Trim();
 
         var nombreDuplicado = await _context.CategoriasProducto
@@ -112,6 +126,7 @@ public class CategoriaProductoService : ICategoriaProductoService
         }
 
         categoria.Nombre = nombreNormalizado;
+        categoria.StockMinimoDefault = request.StockMinimoDefault;
         categoria.FechaModificacion = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -123,7 +138,8 @@ public class CategoriaProductoService : ICategoriaProductoService
             categoria.Nombre,
             cantidadProductos,
             categoria.Activo,
-            categoria.FechaCreacion));
+            categoria.FechaCreacion,
+            categoria.StockMinimoDefault));
     }
 
     public async Task<ServiceResult<bool>> DeleteAsync(Guid id)

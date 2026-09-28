@@ -54,15 +54,35 @@ public class ClienteService : IClienteService
             return ServiceResult<ClienteResponse>.Invalid("NombreCompleto es obligatorio.");
         }
 
+        var (tipoDoc, numDoc, errorDoc) = ValidarYResolverDocumento(request.TipoDocumento, request.NumeroDocumento, request.DocumentoIdentidad);
+        if (errorDoc is not null)
+        {
+            return ServiceResult<ClienteResponse>.Invalid(errorDoc);
+        }
+
+        if (!string.IsNullOrWhiteSpace(numDoc))
+        {
+            var existeDoc = await _context.Clientes
+                .AnyAsync(c => c.Activo && (c.NumeroDocumento == numDoc || c.DocumentoIdentidad == numDoc));
+            if (existeDoc)
+            {
+                return ServiceResult<ClienteResponse>.Invalid($"Ya existe un cliente activo registrado con el número de documento '{numDoc}'.");
+            }
+        }
+
         var cliente = new Cliente
         {
-            NombreCompleto = request.NombreCompleto.Trim(),
-            RazonSocial = request.RazonSocial,
-            DocumentoIdentidad = request.DocumentoIdentidad,
-            Telefono = request.Telefono,
-            Email = request.Email,
-            Direccion = request.Direccion,
-            Observaciones = request.Observaciones
+            NombreCompleto     = request.NombreCompleto.Trim(),
+            RazonSocial        = request.RazonSocial?.Trim(),
+            TipoDocumento      = tipoDoc,
+            NumeroDocumento    = numDoc,
+            DocumentoIdentidad = numDoc,
+            Telefono           = request.Telefono?.Trim(),
+            Email              = request.Email?.Trim(),
+            Direccion          = request.Direccion?.Trim(),
+            Observaciones      = request.Observaciones?.Trim(),
+            FechaCreacion      = DateTime.UtcNow,
+            Activo             = true
         };
 
         _context.Clientes.Add(cliente);
@@ -86,14 +106,32 @@ public class ClienteService : IClienteService
             return ServiceResult<ClienteResponse>.Invalid("NombreCompleto es obligatorio.");
         }
 
-        cliente.NombreCompleto = request.NombreCompleto.Trim();
-        cliente.RazonSocial = request.RazonSocial;
-        cliente.DocumentoIdentidad = request.DocumentoIdentidad;
-        cliente.Telefono = request.Telefono;
-        cliente.Email = request.Email;
-        cliente.Direccion = request.Direccion;
-        cliente.Observaciones = request.Observaciones;
-        cliente.FechaModificacion = DateTime.UtcNow;
+        var (tipoDoc, numDoc, errorDoc) = ValidarYResolverDocumento(request.TipoDocumento, request.NumeroDocumento, request.DocumentoIdentidad);
+        if (errorDoc is not null)
+        {
+            return ServiceResult<ClienteResponse>.Invalid(errorDoc);
+        }
+
+        if (!string.IsNullOrWhiteSpace(numDoc))
+        {
+            var existeDoc = await _context.Clientes
+                .AnyAsync(c => c.Activo && c.Id != id && (c.NumeroDocumento == numDoc || c.DocumentoIdentidad == numDoc));
+            if (existeDoc)
+            {
+                return ServiceResult<ClienteResponse>.Invalid($"Ya existe un cliente activo registrado con el número de documento '{numDoc}'.");
+            }
+        }
+
+        cliente.NombreCompleto     = request.NombreCompleto.Trim();
+        cliente.RazonSocial        = request.RazonSocial?.Trim();
+        cliente.TipoDocumento      = tipoDoc;
+        cliente.NumeroDocumento    = numDoc;
+        cliente.DocumentoIdentidad = numDoc;
+        cliente.Telefono           = request.Telefono?.Trim();
+        cliente.Email              = request.Email?.Trim();
+        cliente.Direccion          = request.Direccion?.Trim();
+        cliente.Observaciones      = request.Observaciones?.Trim();
+        cliente.FechaModificacion  = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
 
@@ -118,14 +156,58 @@ public class ClienteService : IClienteService
         return ServiceResult<bool>.Success(true);
     }
 
+    private static (TipoDocumentoCliente? tipo, string? numero, string? error) ValidarYResolverDocumento(
+        TipoDocumentoCliente? tipoRequest,
+        string? numeroDocRequest,
+        string? docIdentidadRequest)
+    {
+        var numero = (numeroDocRequest ?? docIdentidadRequest)?.Trim();
+        if (string.IsNullOrWhiteSpace(numero))
+        {
+            return (tipoRequest, null, null);
+        }
+
+        var tipo = tipoRequest;
+        if (!tipo.HasValue)
+        {
+            if (numero.Length == 8 && System.Text.RegularExpressions.Regex.IsMatch(numero, @"^\d{8}$"))
+            {
+                tipo = TipoDocumentoCliente.DNI;
+            }
+            else if (numero.Length == 11 && System.Text.RegularExpressions.Regex.IsMatch(numero, @"^\d{11}$"))
+            {
+                tipo = TipoDocumentoCliente.RUC;
+            }
+            else
+            {
+                tipo = TipoDocumentoCliente.Otro;
+            }
+        }
+
+        if (tipo == TipoDocumentoCliente.DNI && !System.Text.RegularExpressions.Regex.IsMatch(numero, @"^\d{8}$"))
+        {
+            return (tipo, numero, "El DNI debe contener exactamente 8 dígitos numéricos.");
+        }
+
+        if (tipo == TipoDocumentoCliente.RUC && !System.Text.RegularExpressions.Regex.IsMatch(numero, @"^\d{11}$"))
+        {
+            return (tipo, numero, "El RUC debe contener exactamente 11 dígitos numéricos.");
+        }
+
+        return (tipo, numero, null);
+    }
+
     private static ClienteResponse MapToResponse(Cliente cliente) => new(
         cliente.Id,
         cliente.NombreCompleto,
         cliente.RazonSocial,
-        cliente.DocumentoIdentidad,
+        cliente.NumeroDocumento ?? cliente.DocumentoIdentidad,
         cliente.Telefono,
         cliente.Email,
         cliente.Direccion,
         cliente.Observaciones,
-        cliente.Activo);
+        cliente.Activo,
+        cliente.TipoDocumento?.ToString(),
+        cliente.TipoDocumento.HasValue ? (int)cliente.TipoDocumento.Value : null,
+        cliente.NumeroDocumento ?? cliente.DocumentoIdentidad);
 }

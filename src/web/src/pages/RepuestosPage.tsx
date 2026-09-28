@@ -58,10 +58,22 @@ export function RepuestosPage() {
     },
     {
       title: 'Mínimo',
-      dataIndex: 'stockMinimo',
+      dataIndex: 'stockMinimoEfectivo',
       align: 'right',
       className: 'num',
-      render: (minimo: number) => entero(minimo),
+      render: (minimo: number, producto) => (
+        <span title={producto.stockMinimo != null ? 'Mínimo propio' : 'Mínimo por categoría o default'}>
+          {entero(minimo ?? producto.stockMinimo ?? 4)}
+          {producto.stockMinimo == null && <span style={{ opacity: 0.6, fontSize: '0.85em' }}>*</span>}
+        </span>
+      ),
+    },
+    {
+      title: 'Costo',
+      dataIndex: 'costo',
+      align: 'right',
+      className: 'num',
+      render: (costo: number) => soles(costo),
     },
     {
       title: 'Precio',
@@ -137,11 +149,25 @@ export function RepuestosPage() {
       ),
     },
     { title: 'Cantidad', dataIndex: 'cantidad', align: 'right', className: 'num' },
+    {
+      title: 'Costo Unit.',
+      dataIndex: 'costoUnitario',
+      align: 'right',
+      className: 'num',
+      render: (costo: number | null) => (costo != null ? soles(costo) : '—'),
+    },
     { title: 'Motivo', dataIndex: 'motivo', render: (motivo: string | null) => motivo ?? '—' },
   ]
 
   const columnasCategorias: TableProps<CategoriaProductoResponse>['columns'] = [
     { title: 'Categoría', dataIndex: 'nombre', render: (nombre: string) => <strong>{nombre}</strong> },
+    {
+      title: 'Stock Mín. Def.',
+      dataIndex: 'stockMinimoDefault',
+      align: 'right',
+      className: 'num',
+      render: (minimo: number | null) => (minimo != null ? entero(minimo) : '— (4)'),
+    },
     { title: 'Productos', dataIndex: 'cantidadProductos', align: 'right', className: 'num' },
     {
       title: '',

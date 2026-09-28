@@ -33,7 +33,7 @@ public class InventarioService : IInventarioService
 
         if (bajoStock.HasValue && bajoStock.Value)
         {
-            query = query.Where(p => p.StockActual <= p.StockMinimo);
+            query = query.Where(p => p.StockActual <= (p.StockMinimo ?? (p.Categoria.StockMinimoDefault ?? 4)));
         }
 
         return await query
@@ -75,9 +75,14 @@ public class InventarioService : IInventarioService
             return ServiceResult<ProductoResponse>.Invalid("El stock inicial debe ser mayor o igual a 0.");
         }
 
-        if (request.StockMinimo < 0)
+        if (request.StockMinimo.HasValue && request.StockMinimo.Value < 0)
         {
             return ServiceResult<ProductoResponse>.Invalid("El stock mínimo debe ser mayor o igual a 0.");
+        }
+
+        if (request.Costo < 0)
+        {
+            return ServiceResult<ProductoResponse>.Invalid("El costo debe ser mayor o igual a 0.");
         }
 
         var categoria = await _context.CategoriasProducto
@@ -108,6 +113,7 @@ public class InventarioService : IInventarioService
             Descripcion   = string.IsNullOrWhiteSpace(request.Descripcion) ? null : request.Descripcion.Trim(),
             Unidad        = unidad,
             PrecioVenta   = request.PrecioVenta,
+            Costo         = request.Costo,
             StockActual   = request.StockInicial,
             StockMinimo   = request.StockMinimo,
             FechaCreacion = DateTime.UtcNow,
@@ -127,6 +133,7 @@ public class InventarioService : IInventarioService
                     ProductoId    = producto.Id,
                     Tipo          = TipoMovimientoInventario.Entrada,
                     Cantidad      = request.StockInicial,
+                    CostoUnitario = request.Costo,
                     Motivo        = "Inventario inicial",
                     FechaCreacion = DateTime.UtcNow,
                     Activo        = true
@@ -177,9 +184,14 @@ public class InventarioService : IInventarioService
             return ServiceResult<ProductoResponse>.Invalid("El precio de venta debe ser mayor o igual a 0.");
         }
 
-        if (request.StockMinimo < 0)
+        if (request.StockMinimo.HasValue && request.StockMinimo.Value < 0)
         {
             return ServiceResult<ProductoResponse>.Invalid("El stock mínimo debe ser mayor o igual a 0.");
+        }
+
+        if (request.Costo.HasValue && request.Costo.Value < 0)
+        {
+            return ServiceResult<ProductoResponse>.Invalid("El costo debe ser mayor o igual a 0.");
         }
 
         var categoria = await _context.CategoriasProducto
@@ -206,6 +218,10 @@ public class InventarioService : IInventarioService
         producto.Descripcion       = string.IsNullOrWhiteSpace(request.Descripcion) ? null : request.Descripcion.Trim();
         producto.Unidad            = string.IsNullOrWhiteSpace(request.Unidad) ? "unidad" : request.Unidad.Trim();
         producto.PrecioVenta       = request.PrecioVenta;
+        if (request.Costo.HasValue)
+        {
+            producto.Costo = request.Costo.Value;
+        }
         producto.StockMinimo       = request.StockMinimo;
         producto.FechaModificacion = DateTime.UtcNow;
 
@@ -268,6 +284,7 @@ public class InventarioService : IInventarioService
                 ProductoId    = producto.Id,
                 Tipo          = TipoMovimientoInventario.Entrada,
                 Cantidad      = request.Cantidad,
+                CostoUnitario = request.CostoUnitario ?? producto.Costo,
                 Motivo        = request.Motivo.Trim(),
                 FechaCreacion = DateTime.UtcNow,
                 Activo        = true
@@ -328,6 +345,7 @@ public class InventarioService : IInventarioService
                 ProductoId    = producto.Id,
                 Tipo          = TipoMovimientoInventario.Salida,
                 Cantidad      = request.Cantidad,
+                CostoUnitario = producto.Costo,
                 Motivo        = request.Motivo.Trim(),
                 FechaCreacion = DateTime.UtcNow,
                 Activo        = true
@@ -384,6 +402,7 @@ public class InventarioService : IInventarioService
                 ProductoId    = producto.Id,
                 Tipo          = TipoMovimientoInventario.Ajuste,
                 Cantidad      = diferencia,
+                CostoUnitario = request.CostoUnitario ?? producto.Costo,
                 Motivo        = request.Motivo.Trim(),
                 FechaCreacion = DateTime.UtcNow,
                 Activo        = true
@@ -425,7 +444,8 @@ public class InventarioService : IInventarioService
                 m.Motivo,
                 m.OrdenServicioId,
                 m.VentaId,
-                m.FechaCreacion))
+                m.FechaCreacion,
+                m.CostoUnitario))
             .ToListAsync();
 
         return ServiceResult<List<MovimientoInventarioResponse>>.Success(movimientos);
@@ -476,22 +496,29 @@ public class InventarioService : IInventarioService
                 m.Motivo,
                 m.OrdenServicioId,
                 m.VentaId,
-                m.FechaCreacion))
+                m.FechaCreacion,
+                m.CostoUnitario))
             .ToListAsync();
     }
 
-    private static ProductoResponse MapToResponse(Producto p) => new(
-        p.Id,
-        p.Codigo,
-        p.Nombre,
-        p.Descripcion,
-        p.Unidad,
-        p.PrecioVenta,
-        p.StockActual,
-        p.StockMinimo,
-        p.StockActual <= p.StockMinimo,
-        p.CategoriaId,
-        p.Categoria?.Nombre ?? string.Empty,
-        p.Activo,
-        p.FechaCreacion);
+    private static ProductoResponse MapToResponse(Producto p)
+    {
+        int minimoEfectivo = p.ObtenerStockMinimoEfectivo();
+        return new ProductoResponse(
+            p.Id,
+            p.Codigo,
+            p.Nombre,
+            p.Descripcion,
+            p.Unidad,
+            p.PrecioVenta,
+            p.StockActual,
+            p.StockMinimo,
+            p.StockActual <= minimoEfectivo,
+            p.CategoriaId,
+            p.Categoria?.Nombre ?? string.Empty,
+            p.Activo,
+            p.FechaCreacion,
+            p.Costo,
+            minimoEfectivo);
+    }
 }

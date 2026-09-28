@@ -30,13 +30,31 @@ export function ClienteDetallePage() {
       key: 'unidad',
       render: (_, vehiculo) => `${vehiculo.marca} ${vehiculo.modelo} ${vehiculo.anio ?? ''}`.trim(),
     },
-    { title: 'Placa', dataIndex: 'placa', className: 'num' },
     {
-      title: 'Kilometraje',
-      dataIndex: 'kilometraje',
+      title: 'Placa / VIN',
+      key: 'identificador',
+      className: 'num',
+      render: (_, vehiculo) => (
+        <div>
+          {vehiculo.placa && <div><strong>{vehiculo.placa}</strong></div>}
+          {vehiculo.numeroSerieVIN && (
+            <div style={{ fontSize: '0.85em', opacity: 0.75 }}>VIN: {vehiculo.numeroSerieVIN}</div>
+          )}
+          {!vehiculo.placa && !vehiculo.numeroSerieVIN && '—'}
+        </div>
+      ),
+    },
+    {
+      title: 'Medidor',
+      key: 'medidor',
       align: 'right',
       className: 'num',
-      render: (valor: number | null) => (valor === null ? '—' : `${entero(valor)} km`),
+      render: (_, vehiculo) => {
+        const lectura = vehiculo.lecturaMedidorActual ?? vehiculo.kilometraje
+        if (lectura == null) return '—'
+        const unidad = vehiculo.tipoMedidor === 'HorasUso' || vehiculo.tipoMedidorId === 1 ? 'hrs' : 'km'
+        return `${entero(lectura)} ${unidad}`
+      },
     },
     {
       title: '',
@@ -133,7 +151,12 @@ export function ClienteDetallePage() {
         <Indicadores
           tamano="mediano"
           items={[
-            { etiqueta: 'Documento', valor: datos.documentoIdentidad ?? '—' },
+            {
+              etiqueta: 'Documento',
+              valor: datos.numeroDocumento
+                ? `${datos.tipoDocumento === 'DNI' || datos.tipoDocumentoId === 0 ? 'DNI' : datos.tipoDocumento === 'RUC' || datos.tipoDocumentoId === 1 ? 'RUC' : 'Doc'}: ${datos.numeroDocumento}`
+                : (datos.documentoIdentidad ?? '—'),
+            },
             { etiqueta: 'Teléfono', valor: datos.telefono ?? '—' },
             { etiqueta: 'Unidades', valor: unidadesCliente.length },
           ]}

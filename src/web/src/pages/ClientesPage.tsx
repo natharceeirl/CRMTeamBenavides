@@ -38,7 +38,25 @@ export function ClientesPage() {
         </Link>
       ),
     },
-    { title: 'Documento', dataIndex: 'documentoIdentidad', className: 'num', render: (valor: string | null) => valor ?? '—' },
+    {
+      title: 'Documento',
+      key: 'documento',
+      className: 'num',
+      render: (_, cliente) => {
+        const doc = cliente.numeroDocumento || cliente.documentoIdentidad
+        if (!doc) return '—'
+        const etiquetaTipo =
+          cliente.tipoDocumento ??
+          (cliente.tipoDocumentoId === 0
+            ? 'DNI'
+            : cliente.tipoDocumentoId === 1
+              ? 'RUC'
+              : cliente.tipoDocumentoId === 2
+                ? 'Otro'
+                : null)
+        return etiquetaTipo ? `${etiquetaTipo}: ${doc}` : doc
+      },
+    },
     { title: 'Teléfono', dataIndex: 'telefono', className: 'num', render: (valor: string | null) => valor ?? '—' },
     { title: 'Correo', dataIndex: 'email', render: (valor: string | null) => valor ?? '—' },
     {
@@ -73,7 +91,14 @@ export function ClientesPage() {
 
   const busqueda = texto.toLowerCase()
   const visibles = (clientes.data ?? []).filter((cliente) =>
-    [cliente.nombreCompleto, cliente.razonSocial, cliente.documentoIdentidad, cliente.telefono, cliente.email]
+    [
+      cliente.nombreCompleto,
+      cliente.razonSocial,
+      cliente.numeroDocumento,
+      cliente.documentoIdentidad,
+      cliente.telefono,
+      cliente.email,
+    ]
       .filter(Boolean)
       .join(' ')
       .toLowerCase()

@@ -38,6 +38,9 @@ export type ClienteResponse = {
   nombreCompleto: string
   razonSocial: string | null
   documentoIdentidad: string | null
+  tipoDocumento?: string | null
+  tipoDocumentoId?: number | null
+  numeroDocumento?: string | null
   telefono: string | null
   email: string | null
   direccion: string | null
@@ -50,6 +53,8 @@ export type ClienteRequest = {
   nombreCompleto: string
   razonSocial: string | null
   documentoIdentidad: string | null
+  tipoDocumento?: number | string | null
+  numeroDocumento?: string | null
   telefono: string | null
   email: string | null
   direccion: string | null
@@ -76,6 +81,7 @@ export type VehiculoResponse = {
   tipoMedidorId?: number
   horasUso?: number | null
   valorEstimado?: number | null
+  lecturaMedidorActual?: number | null
 }
 
 export type VehiculoRequest = {
@@ -93,6 +99,7 @@ export type VehiculoRequest = {
   tipoMedidor?: number | string
   horasUso?: number | null
   valorEstimado?: number | null
+  lecturaMedidorActual?: number | null
 }
 
 export type UsuarioResponse = {
@@ -262,10 +269,12 @@ export type CategoriaProductoResponse = {
   cantidadProductos: number
   activo: boolean
   fechaCreacion: string
+  stockMinimoDefault?: number | null
 }
 
 export type CategoriaProductoRequest = {
   nombre: string
+  stockMinimoDefault?: number | null
 }
 
 export type ProductoResponse = {
@@ -275,8 +284,10 @@ export type ProductoResponse = {
   descripcion: string | null
   unidad: string
   precioVenta: number
+  costo?: number
   stockActual: number
-  stockMinimo: number
+  stockMinimo?: number | null
+  stockMinimoEfectivo?: number
   esBajoStock: boolean
   categoriaId: string
   categoriaNombre: string
@@ -291,8 +302,9 @@ export type CrearProductoRequest = {
   descripcion: string | null
   unidad: string | null
   precioVenta: number
+  costo?: number
   stockInicial: number
-  stockMinimo: number
+  stockMinimo?: number | null
 }
 
 /** Al actualizar no se toca el stock: eso va por entradas, salidas o ajustes. */
@@ -303,12 +315,14 @@ export type ActualizarProductoRequest = {
   descripcion: string | null
   unidad: string | null
   precioVenta: number
-  stockMinimo: number
+  costo?: number
+  stockMinimo?: number | null
 }
 
 export type EntradaRequest = {
   cantidad: number
   motivo: string
+  costoUnitario?: number | null
 }
 
 export type SalidaRequest = {
@@ -319,6 +333,7 @@ export type SalidaRequest = {
 export type AjusteRequest = {
   nuevoStock: number
   motivo: string
+  costoUnitario?: number | null
 }
 
 export type MovimientoInventarioResponse = {
@@ -333,6 +348,7 @@ export type MovimientoInventarioResponse = {
   ordenServicioId: string | null
   ventaId: string | null
   fechaCreacion: string
+  costoUnitario?: number | null
 }
 
 export type VentaResponse = {

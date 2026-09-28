@@ -90,24 +90,43 @@ public class VehiculoService : IVehiculoService
             }
         }
 
+        decimal? lecturaActual = request.LecturaMedidorActual;
+        int? kilometraje = request.Kilometraje;
+        decimal? horasUso = request.HorasUso;
+
+        if (lecturaActual.HasValue)
+        {
+            if (request.TipoMedidor == TipoMedidor.Kilometraje)
+                kilometraje = (int)Math.Round(lecturaActual.Value);
+            else
+                horasUso = lecturaActual.Value;
+        }
+        else
+        {
+            lecturaActual = request.TipoMedidor == TipoMedidor.Kilometraje
+                ? (kilometraje.HasValue ? (decimal?)kilometraje.Value : null)
+                : horasUso;
+        }
+
         var vehiculo = new Vehiculo
         {
-            ClienteId       = request.ClienteId,
-            Placa           = placaNormalizada,
-            TipoUnidad      = request.TipoUnidad,
-            Marca           = request.Marca.Trim(),
-            Modelo          = request.Modelo.Trim(),
-            Anio            = request.Anio,
-            NumeroSerieVIN  = string.IsNullOrWhiteSpace(request.NumeroSerieVIN) ? null : request.NumeroSerieVIN.Trim().ToUpperInvariant(),
-            NumeroMotor     = string.IsNullOrWhiteSpace(request.NumeroMotor) ? null : request.NumeroMotor.Trim().ToUpperInvariant(),
-            TipoMedidor     = request.TipoMedidor,
-            Kilometraje     = request.Kilometraje,
-            HorasUso        = request.HorasUso,
-            ValorEstimado   = request.ValorEstimado,
-            Color           = request.Color?.Trim(),
-            Observaciones   = request.Observaciones?.Trim(),
-            FechaCreacion   = DateTime.UtcNow,
-            Activo          = true
+            ClienteId            = request.ClienteId,
+            Placa                = placaNormalizada,
+            TipoUnidad           = request.TipoUnidad,
+            Marca                = request.Marca.Trim(),
+            Modelo               = request.Modelo.Trim(),
+            Anio                 = request.Anio,
+            NumeroSerieVIN       = string.IsNullOrWhiteSpace(request.NumeroSerieVIN) ? null : request.NumeroSerieVIN.Trim().ToUpperInvariant(),
+            NumeroMotor          = string.IsNullOrWhiteSpace(request.NumeroMotor) ? null : request.NumeroMotor.Trim().ToUpperInvariant(),
+            TipoMedidor          = request.TipoMedidor,
+            Kilometraje          = kilometraje,
+            HorasUso             = horasUso,
+            LecturaMedidorActual = lecturaActual,
+            ValorEstimado        = request.ValorEstimado,
+            Color                = request.Color?.Trim(),
+            Observaciones        = request.Observaciones?.Trim(),
+            FechaCreacion        = DateTime.UtcNow,
+            Activo               = true
         };
 
         _context.Vehiculos.Add(vehiculo);
@@ -161,22 +180,41 @@ public class VehiculoService : IVehiculoService
             }
         }
 
-        vehiculo.ClienteId       = request.ClienteId;
-        vehiculo.Cliente         = cliente;
-        vehiculo.Placa           = placaNormalizada;
-        vehiculo.TipoUnidad      = request.TipoUnidad;
-        vehiculo.Marca           = request.Marca.Trim();
-        vehiculo.Modelo          = request.Modelo.Trim();
-        vehiculo.Anio            = request.Anio;
-        vehiculo.NumeroSerieVIN  = string.IsNullOrWhiteSpace(request.NumeroSerieVIN) ? null : request.NumeroSerieVIN.Trim().ToUpperInvariant();
-        vehiculo.NumeroMotor     = string.IsNullOrWhiteSpace(request.NumeroMotor) ? null : request.NumeroMotor.Trim().ToUpperInvariant();
-        vehiculo.TipoMedidor     = request.TipoMedidor;
-        vehiculo.Kilometraje     = request.Kilometraje;
-        vehiculo.HorasUso        = request.HorasUso;
-        vehiculo.ValorEstimado   = request.ValorEstimado;
-        vehiculo.Color           = request.Color?.Trim();
-        vehiculo.Observaciones   = request.Observaciones?.Trim();
-        vehiculo.FechaModificacion = DateTime.UtcNow;
+        decimal? lecturaActual = request.LecturaMedidorActual;
+        int? kilometraje = request.Kilometraje;
+        decimal? horasUso = request.HorasUso;
+
+        if (lecturaActual.HasValue)
+        {
+            if (request.TipoMedidor == TipoMedidor.Kilometraje)
+                kilometraje = (int)Math.Round(lecturaActual.Value);
+            else
+                horasUso = lecturaActual.Value;
+        }
+        else
+        {
+            lecturaActual = request.TipoMedidor == TipoMedidor.Kilometraje
+                ? (kilometraje.HasValue ? (decimal?)kilometraje.Value : null)
+                : horasUso;
+        }
+
+        vehiculo.ClienteId            = request.ClienteId;
+        vehiculo.Cliente              = cliente;
+        vehiculo.Placa                = placaNormalizada;
+        vehiculo.TipoUnidad           = request.TipoUnidad;
+        vehiculo.Marca                = request.Marca.Trim();
+        vehiculo.Modelo               = request.Modelo.Trim();
+        vehiculo.Anio                 = request.Anio;
+        vehiculo.NumeroSerieVIN       = string.IsNullOrWhiteSpace(request.NumeroSerieVIN) ? null : request.NumeroSerieVIN.Trim().ToUpperInvariant();
+        vehiculo.NumeroMotor          = string.IsNullOrWhiteSpace(request.NumeroMotor) ? null : request.NumeroMotor.Trim().ToUpperInvariant();
+        vehiculo.TipoMedidor          = request.TipoMedidor;
+        vehiculo.Kilometraje          = kilometraje;
+        vehiculo.HorasUso             = horasUso;
+        vehiculo.LecturaMedidorActual = lecturaActual;
+        vehiculo.ValorEstimado        = request.ValorEstimado;
+        vehiculo.Color                = request.Color?.Trim();
+        vehiculo.Observaciones        = request.Observaciones?.Trim();
+        vehiculo.FechaModificacion    = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
 
@@ -211,7 +249,7 @@ public class VehiculoService : IVehiculoService
     private static VehiculoResponse MapToResponse(Vehiculo vehiculo) => new(
         vehiculo.Id,
         vehiculo.ClienteId,
-        vehiculo.Cliente.NombreCompleto,
+        vehiculo.Cliente?.NombreCompleto ?? string.Empty,
         vehiculo.Placa,
         vehiculo.Marca,
         vehiculo.Modelo,
@@ -227,5 +265,6 @@ public class VehiculoService : IVehiculoService
         vehiculo.TipoMedidor.ToString(),
         (int)vehiculo.TipoMedidor,
         vehiculo.HorasUso,
-        vehiculo.ValorEstimado);
+        vehiculo.ValorEstimado,
+        vehiculo.LecturaMedidorActual ?? (vehiculo.TipoMedidor == TipoMedidor.Kilometraje ? (vehiculo.Kilometraje.HasValue ? (decimal?)vehiculo.Kilometraje.Value : null) : vehiculo.HorasUso));
 }

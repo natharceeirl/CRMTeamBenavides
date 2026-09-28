@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Input, Popconfirm, Space, Table, type TableProps } from 'antd'
+import { Button, Input, Popconfirm, Space, Table, Tag, type TableProps } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import { Link } from 'react-router'
 import { BarraSuperior } from '../components/BarraSuperior'
@@ -8,6 +8,14 @@ import { ModalVehiculo } from '../components/ModalVehiculo'
 import { useEliminarVehiculo, useVehiculos } from '../api/vehiculos'
 import type { VehiculoResponse } from '../api/tipos'
 import { entero } from '../utils/formato'
+
+const tiposUnidadNombres: Record<number, string> = {
+  0: 'Motocicleta',
+  1: 'Cuatrimoto',
+  2: 'Moto acuática',
+  3: 'Generador',
+  4: 'Otro',
+}
 
 export function UnidadesPage() {
   const [texto, setTexto] = useState('')
@@ -24,6 +32,15 @@ export function UnidadesPage() {
 
   const columnas: TableProps<VehiculoResponse>['columns'] = [
     {
+      title: 'Tipo',
+      key: 'tipoUnidad',
+      render: (_, vehiculo) => (
+        <Tag style={{ marginInlineEnd: 0 }}>
+          {vehiculo.tipoUnidad || (vehiculo.tipoUnidadId != null ? tiposUnidadNombres[vehiculo.tipoUnidadId] : 'Unidad')}
+        </Tag>
+      ),
+    },
+    {
       title: 'Unidad',
       key: 'unidad',
       render: (_, vehiculo) => (
@@ -32,13 +49,31 @@ export function UnidadesPage() {
         </strong>
       ),
     },
-    { title: 'Placa', dataIndex: 'placa', className: 'num' },
     {
-      title: 'Kilometraje',
-      dataIndex: 'kilometraje',
+      title: 'Placa / VIN',
+      key: 'identificador',
+      className: 'num',
+      render: (_, vehiculo) => (
+        <div>
+          {vehiculo.placa && <div><strong>{vehiculo.placa}</strong></div>}
+          {vehiculo.numeroSerieVIN && (
+            <div style={{ fontSize: '0.85em', opacity: 0.75 }}>VIN: {vehiculo.numeroSerieVIN}</div>
+          )}
+          {!vehiculo.placa && !vehiculo.numeroSerieVIN && '—'}
+        </div>
+      ),
+    },
+    {
+      title: 'Medidor',
+      key: 'medidor',
       align: 'right',
       className: 'num',
-      render: (valor: number | null) => (valor === null ? '—' : `${entero(valor)} km`),
+      render: (_, vehiculo) => {
+        const lectura = vehiculo.lecturaMedidorActual ?? vehiculo.kilometraje
+        if (lectura == null) return '—'
+        const unidad = vehiculo.tipoMedidor === 'HorasUso' || vehiculo.tipoMedidorId === 1 ? 'hrs' : 'km'
+        return `${entero(lectura)} ${unidad}`
+      },
     },
     { title: 'Color', dataIndex: 'color', render: (valor: string | null) => valor ?? '—' },
     {
@@ -76,7 +111,15 @@ export function UnidadesPage() {
 
   const busqueda = texto.toLowerCase()
   const visibles = (vehiculos.data ?? []).filter((vehiculo) =>
-    [vehiculo.marca, vehiculo.modelo, vehiculo.placa, vehiculo.clienteNombre]
+    [
+      vehiculo.marca,
+      vehiculo.modelo,
+      vehiculo.placa,
+      vehiculo.numeroSerieVIN,
+      vehiculo.numeroMotor,
+      vehiculo.clienteNombre,
+    ]
+      .filter(Boolean)
       .join(' ')
       .toLowerCase()
       .includes(busqueda),
@@ -95,12 +138,11 @@ export function UnidadesPage() {
       <div className="pagina">
         <section>
           <AvisoError error={vehiculos.error ?? eliminar.error} />
-          {/* El tipo de unidad, la serie, el número de motor y el medidor en horas todavía no existen en la API. */}
           <div className="filtros">
             <Input
               id="buscar-unidades"
               prefix={<SearchOutlined />}
-              placeholder="Buscar por modelo, placa o propietario"
+              placeholder="Buscar por modelo, placa, serie/VIN o propietario"
               allowClear
               value={texto}
               onChange={(evento) => setTexto(evento.target.value)}

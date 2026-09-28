@@ -78,21 +78,40 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
 
         // --- Índices únicos ---
         modelBuilder.Entity<Usuario>().HasIndex(u => u.Email).IsUnique();
-        modelBuilder.Entity<Producto>().HasIndex(p => p.Codigo).IsUnique();
         modelBuilder.Entity<Rol>().HasIndex(r => r.Nombre).IsUnique();
         modelBuilder.Entity<Permiso>().HasIndex(p => p.Codigo).IsUnique();
 
-        // Vehiculo: placa opcional con índice único filtrado por unidades activas con placa
+        // Producto e Inventario: precisión monetaria (numeric(12,2)) e índices
+        modelBuilder.Entity<Producto>(entity =>
+        {
+            entity.Property(p => p.PrecioVenta).HasPrecision(12, 2);
+            entity.Property(p => p.Costo).HasPrecision(12, 2);
+            entity.HasIndex(p => p.Codigo).IsUnique();
+        });
+
+        modelBuilder.Entity<MovimientoInventario>(entity =>
+        {
+            entity.Property(m => m.CostoUnitario).HasPrecision(12, 2);
+        });
+
+        // Vehiculo: placa opcional con índice único filtrado por unidades activas con placa, índices de búsqueda y precisión
         modelBuilder.Entity<Vehiculo>(entity =>
         {
+            entity.Property(v => v.LecturaMedidorActual).HasPrecision(12, 2);
+            entity.Property(v => v.ValorEstimado).HasPrecision(12, 2);
+            entity.Property(v => v.HorasUso).HasPrecision(12, 2);
+
             entity.HasIndex(v => v.Placa)
                 .IsUnique()
                 .HasFilter("\"Activo\" = true AND \"Placa\" IS NOT NULL AND \"Placa\" <> ''");
 
             entity.HasIndex(v => v.NumeroSerieVIN);
+            entity.HasIndex(v => v.NumeroMotor);
+            entity.HasIndex(v => v.Modelo);
+            entity.HasIndex(v => v.Marca);
         });
 
-        // Relación Usuario-Cliente (ownership base para Portal Cliente)
+        // Relación Usuario-Cliente e índice único filtrado de NumeroDocumento para clientes activos
         modelBuilder.Entity<Cliente>(entity =>
         {
             entity.HasOne(c => c.Usuario)
@@ -103,6 +122,10 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
             entity.HasIndex(c => c.UsuarioId)
                 .IsUnique()
                 .HasFilter("\"Activo\" = true AND \"UsuarioId\" IS NOT NULL");
+
+            entity.HasIndex(c => c.NumeroDocumento)
+                .IsUnique()
+                .HasFilter("\"Activo\" = true AND \"NumeroDocumento\" IS NOT NULL AND \"NumeroDocumento\" <> ''");
         });
 
         // --- Propiedades calculadas ---

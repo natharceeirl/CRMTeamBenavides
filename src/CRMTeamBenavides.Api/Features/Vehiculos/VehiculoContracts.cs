@@ -21,7 +21,8 @@ public record VehiculoResponse(
     string TipoMedidor = "Kilometraje",
     int TipoMedidorId = 0,
     decimal? HorasUso = null,
-    decimal? ValorEstimado = null);
+    decimal? ValorEstimado = null,
+    decimal? LecturaMedidorActual = null);
 
 public record CreateVehiculoRequest(
     Guid ClienteId,
@@ -37,7 +38,8 @@ public record CreateVehiculoRequest(
     string? NumeroMotor = null,
     TipoMedidor TipoMedidor = TipoMedidor.Kilometraje,
     decimal? HorasUso = null,
-    decimal? ValorEstimado = null);
+    decimal? ValorEstimado = null,
+    decimal? LecturaMedidorActual = null);
 
 public record UpdateVehiculoRequest(
     Guid ClienteId,
@@ -53,4 +55,5 @@ public record UpdateVehiculoRequest(
     string? NumeroMotor = null,
     TipoMedidor TipoMedidor = TipoMedidor.Kilometraje,
     decimal? HorasUso = null,
-    decimal? ValorEstimado = null);
+    decimal? ValorEstimado = null,
+    decimal? LecturaMedidorActual = null);

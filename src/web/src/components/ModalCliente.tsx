@@ -1,4 +1,4 @@
-import { Form, Input, Modal } from 'antd'
+import { Form, Input, Modal, Select } from 'antd'
 import { useGuardarCliente } from '../api/clientes'
 import type { ClienteRequest, ClienteResponse } from '../api/tipos'
 import { AvisoError } from './AvisoError'
@@ -12,7 +12,8 @@ type Props = {
 type Campos = {
   nombreCompleto: string
   razonSocial?: string
-  documentoIdentidad?: string
+  tipoDocumento?: number | null
+  numeroDocumento?: string
   telefono?: string
   email?: string
   direccion?: string
@@ -26,10 +27,13 @@ export function ModalCliente({ abierto, cliente, onCerrar }: Readonly<Props>) {
   const guardar = useGuardarCliente()
 
   const enviar = async (campos: Campos) => {
+    const doc = sinVacios(campos.numeroDocumento)
     const datos: ClienteRequest = {
       nombreCompleto: campos.nombreCompleto.trim(),
       razonSocial: sinVacios(campos.razonSocial),
-      documentoIdentidad: sinVacios(campos.documentoIdentidad),
+      tipoDocumento: campos.tipoDocumento != null ? Number(campos.tipoDocumento) : null,
+      numeroDocumento: doc,
+      documentoIdentidad: doc,
       telefono: sinVacios(campos.telefono),
       email: sinVacios(campos.email),
       direccion: sinVacios(campos.direccion),
@@ -64,7 +68,20 @@ export function ModalCliente({ abierto, cliente, onCerrar }: Readonly<Props>) {
         initialValues={{
           nombreCompleto: cliente?.nombreCompleto ?? '',
           razonSocial: cliente?.razonSocial ?? '',
-          documentoIdentidad: cliente?.documentoIdentidad ?? '',
+          tipoDocumento:
+            cliente?.tipoDocumentoId ??
+            (cliente?.tipoDocumento === 'DNI'
+              ? 0
+              : cliente?.tipoDocumento === 'RUC'
+                ? 1
+                : cliente?.tipoDocumento === 'Otro'
+                  ? 2
+                  : cliente?.documentoIdentidad?.length === 8
+                    ? 0
+                    : cliente?.documentoIdentidad?.length === 11
+                      ? 1
+                      : undefined),
+          numeroDocumento: cliente?.numeroDocumento ?? cliente?.documentoIdentidad ?? '',
           telefono: cliente?.telefono ?? '',
           email: cliente?.email ?? '',
           direccion: cliente?.direccion ?? '',
@@ -81,9 +98,37 @@ export function ModalCliente({ abierto, cliente, onCerrar }: Readonly<Props>) {
         <Form.Item label="Razón social" name="razonSocial">
           <Input placeholder="Solo si el cliente es empresa" />
         </Form.Item>
-        {/* El backend guarda un solo campo de documento: el tipo (DNI/RUC/CE) está pendiente. */}
-        <Form.Item label="Documento (DNI o RUC)" name="documentoIdentidad">
-          <Input />
+        <Form.Item label="Tipo de documento" name="tipoDocumento">
+          <Select
+            allowClear
+            placeholder="Seleccionar tipo de documento"
+            options={[
+              { value: 0, label: 'DNI (8 dígitos)' },
+              { value: 1, label: 'RUC (11 dígitos)' },
+              { value: 2, label: 'Otro' },
+            ]}
+          />
+        </Form.Item>
+        <Form.Item
+          label="Número de documento"
+          name="numeroDocumento"
+          rules={[
+            ({ getFieldValue }) => ({
+              validator(_, value) {
+                if (!value || !value.trim()) return Promise.resolve()
+                const tipo = getFieldValue('tipoDocumento')
+                if (tipo === 0 && !/^\d{8}$/.test(value.trim())) {
+                  return Promise.reject(new Error('El DNI debe tener exactamente 8 dígitos numéricos'))
+                }
+                if (tipo === 1 && !/^\d{11}$/.test(value.trim())) {
+                  return Promise.reject(new Error('El RUC debe tener exactamente 11 dígitos numéricos'))
+                }
+                return Promise.resolve()
+              },
+            }),
+          ]}
+        >
+          <Input placeholder="DNI, RUC o documento de identidad" />
         </Form.Item>
         <Form.Item label="Teléfono" name="telefono">
           <Input />

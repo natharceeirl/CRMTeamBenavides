@@ -1,12 +1,28 @@
 namespace CRMTeamBenavides.Domain.Entities;
 
+public enum TipoDocumentoCliente
+{
+    DNI,
+    RUC,
+    Otro
+}
+
 public class Cliente : BaseEntity
 {
     public string NombreCompleto { get; set; } = string.Empty;
 
     /// <summary>Si el cliente es una empresa (ej. flota).</summary>
     public string? RazonSocial { get; set; }
-    public string? DocumentoIdentidad { get; set; } // DNI / RUC
+
+    /// <summary>Tipo de documento oficial de identidad (DNI, RUC, Otro).</summary>
+    public TipoDocumentoCliente? TipoDocumento { get; set; }
+
+    /// <summary>Número de documento de identidad validado.</summary>
+    public string? NumeroDocumento { get; set; }
+
+    /// <summary>DNI / RUC histórico (mantenido por retrocompatibilidad de consultas).</summary>
+    public string? DocumentoIdentidad { get; set; }
+
     public string? Telefono { get; set; }
     public string? Email { get; set; }
     public string? Direccion { get; set; }
@@ -51,6 +67,9 @@ public class Vehiculo : BaseEntity
     public TipoMedidor TipoMedidor { get; set; } = TipoMedidor.Kilometraje;
     public int? Kilometraje { get; set; }
     public decimal? HorasUso { get; set; }
+
+    /// <summary>Lectura actual del medidor de la unidad (kilometraje u horas según TipoMedidor).</summary>
+    public decimal? LecturaMedidorActual { get; set; }
 
     /// <summary>Valor comercial o estimado de la unidad si aplica.</summary>
     public decimal? ValorEstimado { get; set; }

@@ -1,3 +1,5 @@
+using CRMTeamBenavides.Domain.Entities;
+
 namespace CRMTeamBenavides.Api.Features.Clientes;
 
 public record ClienteResponse(
@@ -9,7 +11,10 @@ public record ClienteResponse(
     string? Email,
     string? Direccion,
     string? Observaciones,
-    bool Activo);
+    bool Activo,
+    string? TipoDocumento = null,
+    int? TipoDocumentoId = null,
+    string? NumeroDocumento = null);
 
 public record CreateClienteRequest(
     string NombreCompleto,
@@ -18,7 +23,9 @@ public record CreateClienteRequest(
     string? Telefono,
     string? Email,
     string? Direccion,
-    string? Observaciones);
+    string? Observaciones,
+    TipoDocumentoCliente? TipoDocumento = null,
+    string? NumeroDocumento = null);
 
 public record UpdateClienteRequest(
     string NombreCompleto,
@@ -27,4 +34,6 @@ public record UpdateClienteRequest(
     string? Telefono,
     string? Email,
     string? Direccion,
-    string? Observaciones);
+    string? Observaciones,
+    TipoDocumentoCliente? TipoDocumento = null,
+    string? NumeroDocumento = null);

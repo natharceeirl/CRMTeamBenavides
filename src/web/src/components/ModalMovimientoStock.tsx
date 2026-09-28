@@ -15,6 +15,7 @@ type Props = {
 type Campos = {
   cantidad?: number
   nuevoStock?: number
+  costoUnitario?: number | null
   motivo: string
 }
 
@@ -40,12 +41,17 @@ export function ModalMovimientoStock({ abierto, tipo, producto, onCerrar }: Read
       return
     }
 
+    const costo =
+      campos.costoUnitario != null && !Number.isNaN(campos.costoUnitario)
+        ? campos.costoUnitario
+        : null
+
     await mover.mutateAsync({
       id: producto.id,
       tipo,
       datos: esAjuste
-        ? { nuevoStock: campos.nuevoStock ?? 0, motivo: campos.motivo.trim() }
-        : { cantidad: campos.cantidad ?? 0, motivo: campos.motivo.trim() },
+        ? { nuevoStock: campos.nuevoStock ?? 0, motivo: campos.motivo.trim(), costoUnitario: costo }
+        : { cantidad: campos.cantidad ?? 0, motivo: campos.motivo.trim(), costoUnitario: costo },
     })
 
     cerrar()
@@ -71,7 +77,12 @@ export function ModalMovimientoStock({ abierto, tipo, producto, onCerrar }: Read
         layout="vertical"
         requiredMark={false}
         onFinish={enviar}
-        initialValues={{ cantidad: 1, nuevoStock: producto?.stockActual ?? 0, motivo: '' }}
+        initialValues={{
+          cantidad: 1,
+          nuevoStock: producto?.stockActual ?? 0,
+          costoUnitario: producto?.costo ?? undefined,
+          motivo: '',
+        }}
       >
         {esAjuste ? (
           <Form.Item
@@ -88,6 +99,20 @@ export function ModalMovimientoStock({ abierto, tipo, producto, onCerrar }: Read
             rules={[{ required: true, message: 'Indica la cantidad' }]}
           >
             <InputNumber min={1} style={{ width: '100%' }} />
+          </Form.Item>
+        )}
+        {(tipo === 'entradas' || esAjuste) && (
+          <Form.Item
+            label="Costo unitario"
+            name="costoUnitario"
+            help="Opcional. Si se deja vacío, tomará el costo registrado del producto."
+          >
+            <InputNumber
+              min={0}
+              precision={2}
+              style={{ width: '100%' }}
+              placeholder={producto?.costo != null ? `S/ ${producto.costo}` : 'S/ 0.00'}
+            />
           </Form.Item>
         )}
         <Form.Item

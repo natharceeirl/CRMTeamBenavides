@@ -14,10 +14,15 @@ type Props = {
 
 type Campos = {
   clienteId: string
-  placa: string
+  tipoUnidad?: number
+  placa?: string
+  numeroSerieVIN?: string
+  numeroMotor?: string
   marca: string
   modelo: string
   anio?: number
+  tipoMedidor?: number
+  lecturaMedidorActual?: number
   kilometraje?: number
   color?: string
   observaciones?: string
@@ -31,13 +36,25 @@ export function ModalVehiculo({ abierto, vehiculo, clienteFijo, onCerrar }: Read
   const { data: clientes } = useClientes()
 
   const enviar = async (campos: Campos) => {
+    const medidor =
+      campos.lecturaMedidorActual != null && !Number.isNaN(campos.lecturaMedidorActual)
+        ? campos.lecturaMedidorActual
+        : campos.kilometraje != null
+          ? campos.kilometraje
+          : null
+
     const datos: VehiculoRequest = {
       clienteId: campos.clienteId,
-      placa: campos.placa.trim(),
+      tipoUnidad: campos.tipoUnidad != null ? Number(campos.tipoUnidad) : 0,
+      placa: sinVacios(campos.placa),
+      numeroSerieVIN: sinVacios(campos.numeroSerieVIN),
+      numeroMotor: sinVacios(campos.numeroMotor),
       marca: campos.marca.trim(),
       modelo: campos.modelo.trim(),
       anio: campos.anio ?? null,
-      kilometraje: campos.kilometraje ?? null,
+      tipoMedidor: campos.tipoMedidor != null ? Number(campos.tipoMedidor) : 0,
+      lecturaMedidorActual: medidor,
+      kilometraje: campos.kilometraje ?? (medidor != null ? Math.round(medidor) : null),
       color: sinVacios(campos.color),
       observaciones: sinVacios(campos.observaciones),
     }
@@ -69,10 +86,15 @@ export function ModalVehiculo({ abierto, vehiculo, clienteFijo, onCerrar }: Read
         onFinish={enviar}
         initialValues={{
           clienteId: vehiculo?.clienteId ?? clienteFijo,
+          tipoUnidad: vehiculo?.tipoUnidadId ?? 0,
           placa: vehiculo?.placa ?? '',
+          numeroSerieVIN: vehiculo?.numeroSerieVIN ?? '',
+          numeroMotor: vehiculo?.numeroMotor ?? '',
           marca: vehiculo?.marca ?? 'Yamaha',
           modelo: vehiculo?.modelo ?? '',
           anio: vehiculo?.anio ?? undefined,
+          tipoMedidor: vehiculo?.tipoMedidorId ?? 0,
+          lecturaMedidorActual: vehiculo?.lecturaMedidorActual ?? vehiculo?.kilometraje ?? undefined,
           kilometraje: vehiculo?.kilometraje ?? undefined,
           color: vehiculo?.color ?? '',
           observaciones: vehiculo?.observaciones ?? '',
@@ -92,10 +114,38 @@ export function ModalVehiculo({ abierto, vehiculo, clienteFijo, onCerrar }: Read
             />
           </Form.Item>
         )}
-        {/* La placa es obligatoria en el backend; las unidades sin placa (náutica y
-            línea de fuerza) quedan pendientes de que el Ingeniero confirme el modelo. */}
-        <Form.Item label="Placa" name="placa" rules={[{ required: true, message: 'Ingresa la placa' }]}>
-          <Input />
+        <Form.Item label="Tipo de unidad" name="tipoUnidad">
+          <Select
+            options={[
+              { value: 0, label: 'Motocicleta' },
+              { value: 1, label: 'Cuatrimoto' },
+              { value: 2, label: 'Moto acuática' },
+              { value: 3, label: 'Generador' },
+              { value: 4, label: 'Otro' },
+            ]}
+          />
+        </Form.Item>
+        <Form.Item
+          label="Placa"
+          name="placa"
+          rules={[
+            ({ getFieldValue }) => ({
+              validator(_, value) {
+                if (!value && !getFieldValue('numeroSerieVIN')) {
+                  return Promise.reject(new Error('Ingresa la placa o el VIN / Nro. de serie'))
+                }
+                return Promise.resolve()
+              },
+            }),
+          ]}
+        >
+          <Input placeholder="Requerido si no tiene VIN / Serie" />
+        </Form.Item>
+        <Form.Item label="VIN / Nro. de serie" name="numeroSerieVIN">
+          <Input placeholder="Requerido para náutica / línea de fuerza sin placa" />
+        </Form.Item>
+        <Form.Item label="Nro. de motor" name="numeroMotor">
+          <Input placeholder="Número o serie de motor" />
         </Form.Item>
         <Form.Item label="Marca" name="marca" rules={[{ required: true, message: 'Ingresa la marca' }]}>
           <Input />
@@ -106,8 +156,16 @@ export function ModalVehiculo({ abierto, vehiculo, clienteFijo, onCerrar }: Read
         <Form.Item label="Año" name="anio">
           <InputNumber min={1970} max={2100} style={{ width: '100%' }} />
         </Form.Item>
-        <Form.Item label="Kilometraje" name="kilometraje">
-          <InputNumber min={0} style={{ width: '100%' }} />
+        <Form.Item label="Tipo de medidor" name="tipoMedidor">
+          <Select
+            options={[
+              { value: 0, label: 'Kilómetros (km)' },
+              { value: 1, label: 'Horas (hrs)' },
+            ]}
+          />
+        </Form.Item>
+        <Form.Item label="Lectura actual del medidor" name="lecturaMedidorActual">
+          <InputNumber min={0} precision={2} style={{ width: '100%' }} placeholder="Km u horas actuales" />
         </Form.Item>
         <Form.Item label="Color" name="color">
           <Input />

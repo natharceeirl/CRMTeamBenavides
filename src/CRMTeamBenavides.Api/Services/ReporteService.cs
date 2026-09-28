@@ -138,8 +138,8 @@ public class ReporteService : IReporteService
     public async Task<List<StockBajoResponse>> GetStockBajoAsync()
     {
         return await _context.Productos
-            .Where(p => p.Activo && p.StockActual <= p.StockMinimo)
-            .OrderBy(p => p.StockActual - p.StockMinimo) // los más críticos primero
+            .Where(p => p.Activo && p.StockActual <= (p.StockMinimo ?? (p.Categoria.StockMinimoDefault ?? 4)))
+            .OrderBy(p => p.StockActual - (p.StockMinimo ?? (p.Categoria.StockMinimoDefault ?? 4))) // los más críticos primero
             .Select(p => new StockBajoResponse(
                 p.Id,
                 p.Codigo,
@@ -147,8 +147,8 @@ public class ReporteService : IReporteService
                 p.CategoriaId,
                 p.Categoria.Nombre,
                 p.StockActual,
-                p.StockMinimo,
-                p.StockMinimo - p.StockActual, // Diferencia: cuánto falta para llegar al mínimo
+                p.StockMinimo ?? (p.Categoria.StockMinimoDefault ?? 4),
+                (p.StockMinimo ?? (p.Categoria.StockMinimoDefault ?? 4)) - p.StockActual, // Diferencia: cuánto falta para llegar al mínimo
                 p.PrecioVenta))
             .ToListAsync();
     }

@@ -1,4 +1,4 @@
-import { Form, Input, Modal } from 'antd'
+import { Form, Input, InputNumber, Modal } from 'antd'
 import { useGuardarCategoria } from '../api/inventario'
 import type { CategoriaProductoResponse } from '../api/tipos'
 import { AvisoError } from './AvisoError'
@@ -11,6 +11,7 @@ type Props = {
 
 type Campos = {
   nombre: string
+  stockMinimoDefault?: number | null
 }
 
 export function ModalCategoria({ abierto, categoria, onCerrar }: Readonly<Props>) {
@@ -23,7 +24,16 @@ export function ModalCategoria({ abierto, categoria, onCerrar }: Readonly<Props>
   }
 
   const enviar = async (campos: Campos) => {
-    await guardar.mutateAsync({ id: categoria?.id, datos: { nombre: campos.nombre.trim() } })
+    await guardar.mutateAsync({
+      id: categoria?.id,
+      datos: {
+        nombre: campos.nombre.trim(),
+        stockMinimoDefault:
+          campos.stockMinimoDefault != null && !Number.isNaN(campos.stockMinimoDefault)
+            ? campos.stockMinimoDefault
+            : null,
+      },
+    })
     cerrar()
   }
 
@@ -44,10 +54,20 @@ export function ModalCategoria({ abierto, categoria, onCerrar }: Readonly<Props>
         layout="vertical"
         requiredMark={false}
         onFinish={enviar}
-        initialValues={{ nombre: categoria?.nombre ?? '' }}
+        initialValues={{
+          nombre: categoria?.nombre ?? '',
+          stockMinimoDefault: categoria?.stockMinimoDefault ?? undefined,
+        }}
       >
         <Form.Item label="Nombre" name="nombre" rules={[{ required: true, message: 'Ingresa el nombre' }]}>
           <Input placeholder="Lubricantes, frenos, filtros…" />
+        </Form.Item>
+        <Form.Item
+          label="Stock mínimo por defecto"
+          name="stockMinimoDefault"
+          help="Opcional. Se aplica a los productos de esta categoría que no tengan stock mínimo propio (o 4 si se deja vacío)."
+        >
+          <InputNumber min={0} placeholder="Ej: 5 (opcional)" style={{ width: '100%' }} />
         </Form.Item>
       </Form>
     </Modal>
