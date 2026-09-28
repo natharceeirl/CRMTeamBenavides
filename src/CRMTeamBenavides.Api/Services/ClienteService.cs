@@ -14,18 +14,30 @@ public class ClienteService : IClienteService
         _context = context;
     }
 
-    public async Task<List<ClienteResponse>> GetAllAsync()
+    public async Task<List<ClienteResponse>> GetAllAsync(Guid? soloClienteId = null)
     {
-        return await _context.Clientes
+        var query = _context.Clientes
             .AsNoTracking()
-            .Where(c => c.Activo)
+            .Where(c => c.Activo);
+
+        if (soloClienteId.HasValue)
+        {
+            query = query.Where(c => c.Id == soloClienteId.Value);
+        }
+
+        return await query
             .OrderBy(c => c.NombreCompleto)
             .Select(c => MapToResponse(c))
             .ToListAsync();
     }
 
-    public async Task<ServiceResult<ClienteResponse>> GetByIdAsync(Guid id)
+    public async Task<ServiceResult<ClienteResponse>> GetByIdAsync(Guid id, Guid? soloClienteId = null)
     {
+        if (soloClienteId.HasValue && id != soloClienteId.Value)
+        {
+            return ServiceResult<ClienteResponse>.NotFound();
+        }
+
         var cliente = await _context.Clientes
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == id && c.Activo);

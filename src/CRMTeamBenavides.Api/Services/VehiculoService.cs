@@ -14,14 +14,18 @@ public class VehiculoService : IVehiculoService
         _context = context;
     }
 
-    public async Task<List<VehiculoResponse>> GetAllAsync(Guid? clienteId)
+    public async Task<List<VehiculoResponse>> GetAllAsync(Guid? clienteId, Guid? soloClienteId = null)
     {
         var query = _context.Vehiculos
             .AsNoTracking()
             .Include(v => v.Cliente)
             .Where(v => v.Activo);
 
-        if (clienteId is not null)
+        if (soloClienteId.HasValue)
+        {
+            query = query.Where(v => v.ClienteId == soloClienteId.Value);
+        }
+        else if (clienteId is not null)
         {
             query = query.Where(v => v.ClienteId == clienteId);
         }
@@ -32,16 +36,24 @@ public class VehiculoService : IVehiculoService
             .ToListAsync();
     }
 
-    public async Task<ServiceResult<VehiculoResponse>> GetByIdAsync(Guid id)
+    public async Task<ServiceResult<VehiculoResponse>> GetByIdAsync(Guid id, Guid? soloClienteId = null)
     {
         var vehiculo = await _context.Vehiculos
             .AsNoTracking()
             .Include(v => v.Cliente)
             .FirstOrDefaultAsync(v => v.Id == id && v.Activo);
 
-        return vehiculo is null
-            ? ServiceResult<VehiculoResponse>.NotFound()
-            : ServiceResult<VehiculoResponse>.Success(MapToResponse(vehiculo));
+        if (vehiculo is null)
+        {
+            return ServiceResult<VehiculoResponse>.NotFound();
+        }
+
+        if (soloClienteId.HasValue && vehiculo.ClienteId != soloClienteId.Value)
+        {
+            return ServiceResult<VehiculoResponse>.NotFound();
+        }
+
+        return ServiceResult<VehiculoResponse>.Success(MapToResponse(vehiculo));
     }
 
     public async Task<ServiceResult<VehiculoResponse>> CreateAsync(CreateVehiculoRequest request)
@@ -65,24 +77,37 @@ public class VehiculoService : IVehiculoService
             return ServiceResult<VehiculoResponse>.Invalid("No se puede asignar un vehículo a un cliente inactivo.");
         }
 
-        var placaDuplicada = await _context.Vehiculos
-            .AnyAsync(v => v.Placa == request.Placa && v.Activo);
+        string? placaNormalizada = string.IsNullOrWhiteSpace(request.Placa) ? null : request.Placa.Trim().ToUpperInvariant();
 
-        if (placaDuplicada)
+        if (placaNormalizada is not null)
         {
-            return ServiceResult<VehiculoResponse>.Invalid("Ya existe un vehículo activo con esa placa.");
+            var placaDuplicada = await _context.Vehiculos
+                .AnyAsync(v => v.Placa == placaNormalizada && v.Activo);
+
+            if (placaDuplicada)
+            {
+                return ServiceResult<VehiculoResponse>.Invalid("Ya existe una unidad activa con esa placa.");
+            }
         }
 
         var vehiculo = new Vehiculo
         {
-            ClienteId = request.ClienteId,
-            Placa = request.Placa.Trim(),
-            Marca = request.Marca.Trim(),
-            Modelo = request.Modelo.Trim(),
-            Anio = request.Anio,
-            Kilometraje = request.Kilometraje,
-            Color = request.Color,
-            Observaciones = request.Observaciones
+            ClienteId       = request.ClienteId,
+            Placa           = placaNormalizada,
+            TipoUnidad      = request.TipoUnidad,
+            Marca           = request.Marca.Trim(),
+            Modelo          = request.Modelo.Trim(),
+            Anio            = request.Anio,
+            NumeroSerieVIN  = string.IsNullOrWhiteSpace(request.NumeroSerieVIN) ? null : request.NumeroSerieVIN.Trim().ToUpperInvariant(),
+            NumeroMotor     = string.IsNullOrWhiteSpace(request.NumeroMotor) ? null : request.NumeroMotor.Trim().ToUpperInvariant(),
+            TipoMedidor     = request.TipoMedidor,
+            Kilometraje     = request.Kilometraje,
+            HorasUso        = request.HorasUso,
+            ValorEstimado   = request.ValorEstimado,
+            Color           = request.Color?.Trim(),
+            Observaciones   = request.Observaciones?.Trim(),
+            FechaCreacion   = DateTime.UtcNow,
+            Activo          = true
         };
 
         _context.Vehiculos.Add(vehiculo);
@@ -123,23 +148,34 @@ public class VehiculoService : IVehiculoService
             return ServiceResult<VehiculoResponse>.Invalid("No se puede asignar un vehículo a un cliente inactivo.");
         }
 
-        var placaDuplicada = await _context.Vehiculos
-            .AnyAsync(v => v.Placa == request.Placa && v.Activo && v.Id != id);
+        string? placaNormalizada = string.IsNullOrWhiteSpace(request.Placa) ? null : request.Placa.Trim().ToUpperInvariant();
 
-        if (placaDuplicada)
+        if (placaNormalizada is not null)
         {
-            return ServiceResult<VehiculoResponse>.Invalid("Ya existe otro vehículo activo con esa placa.");
+            var placaDuplicada = await _context.Vehiculos
+                .AnyAsync(v => v.Placa == placaNormalizada && v.Activo && v.Id != id);
+
+            if (placaDuplicada)
+            {
+                return ServiceResult<VehiculoResponse>.Invalid("Ya existe otra unidad activa con esa placa.");
+            }
         }
 
-        vehiculo.ClienteId = request.ClienteId;
-        vehiculo.Cliente = cliente;
-        vehiculo.Placa = request.Placa.Trim();
-        vehiculo.Marca = request.Marca.Trim();
-        vehiculo.Modelo = request.Modelo.Trim();
-        vehiculo.Anio = request.Anio;
-        vehiculo.Kilometraje = request.Kilometraje;
-        vehiculo.Color = request.Color;
-        vehiculo.Observaciones = request.Observaciones;
+        vehiculo.ClienteId       = request.ClienteId;
+        vehiculo.Cliente         = cliente;
+        vehiculo.Placa           = placaNormalizada;
+        vehiculo.TipoUnidad      = request.TipoUnidad;
+        vehiculo.Marca           = request.Marca.Trim();
+        vehiculo.Modelo          = request.Modelo.Trim();
+        vehiculo.Anio            = request.Anio;
+        vehiculo.NumeroSerieVIN  = string.IsNullOrWhiteSpace(request.NumeroSerieVIN) ? null : request.NumeroSerieVIN.Trim().ToUpperInvariant();
+        vehiculo.NumeroMotor     = string.IsNullOrWhiteSpace(request.NumeroMotor) ? null : request.NumeroMotor.Trim().ToUpperInvariant();
+        vehiculo.TipoMedidor     = request.TipoMedidor;
+        vehiculo.Kilometraje     = request.Kilometraje;
+        vehiculo.HorasUso        = request.HorasUso;
+        vehiculo.ValorEstimado   = request.ValorEstimado;
+        vehiculo.Color           = request.Color?.Trim();
+        vehiculo.Observaciones   = request.Observaciones?.Trim();
         vehiculo.FechaModificacion = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -165,9 +201,8 @@ public class VehiculoService : IVehiculoService
         return ServiceResult<bool>.Success(true);
     }
 
-    private static string? ValidateBasicFields(string placa, string marca, string modelo)
+    private static string? ValidateBasicFields(string? placa, string marca, string modelo)
     {
-        if (string.IsNullOrWhiteSpace(placa)) return "Placa es obligatoria.";
         if (string.IsNullOrWhiteSpace(marca)) return "Marca es obligatoria.";
         if (string.IsNullOrWhiteSpace(modelo)) return "Modelo es obligatorio.";
         return null;
@@ -184,5 +219,13 @@ public class VehiculoService : IVehiculoService
         vehiculo.Kilometraje,
         vehiculo.Color,
         vehiculo.Observaciones,
-        vehiculo.Activo);
+        vehiculo.Activo,
+        vehiculo.TipoUnidad.ToString(),
+        (int)vehiculo.TipoUnidad,
+        vehiculo.NumeroSerieVIN,
+        vehiculo.NumeroMotor,
+        vehiculo.TipoMedidor.ToString(),
+        (int)vehiculo.TipoMedidor,
+        vehiculo.HorasUso,
+        vehiculo.ValorEstimado);
 }

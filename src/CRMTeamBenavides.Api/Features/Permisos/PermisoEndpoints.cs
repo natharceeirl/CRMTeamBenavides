@@ -1,3 +1,4 @@
+using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Services;
 
 namespace CRMTeamBenavides.Api.Features.Permisos;
@@ -10,6 +11,7 @@ public static class PermisoEndpoints
 
         group.MapGet("/", async (IPermisoService service) =>
             Results.Ok(await service.GetAllAsync()))
+        .RequireAuthorization(PermisosDefinidos.RolesVer)
         .WithName("GetPermisos");
 
         group.MapGet("/{id:guid}", async (Guid id, IPermisoService service) =>
@@ -17,6 +19,7 @@ public static class PermisoEndpoints
             var result = await service.GetByIdAsync(id);
             return result.IsSuccess ? Results.Ok(result.Data) : Results.NotFound();
         })
+        .RequireAuthorization(PermisosDefinidos.RolesVer)
         .WithName("GetPermisoById");
     }
 }

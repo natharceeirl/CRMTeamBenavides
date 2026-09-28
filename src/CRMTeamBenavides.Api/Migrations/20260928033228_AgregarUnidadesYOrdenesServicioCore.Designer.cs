@@ -3,6 +3,7 @@ using System;
 using CRMTeamBenavides.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CRMTeamBenavides.Api.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260928033228_AgregarUnidadesYOrdenesServicioCore")]
+    partial class AgregarUnidadesYOrdenesServicioCore
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,8 +24,6 @@ namespace CRMTeamBenavides.Api.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.HasSequence("OrdenServicioNumeroSeq");
 
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.CategoriaProducto", b =>
                 {
@@ -572,8 +573,7 @@ namespace CRMTeamBenavides.Api.Migrations
 
                     b.HasIndex("FechaIngreso");
 
-                    b.HasIndex("NumeroOrden")
-                        .IsUnique();
+                    b.HasIndex("NumeroOrden");
 
                     b.HasIndex("TecnicoAsignadoId");
 

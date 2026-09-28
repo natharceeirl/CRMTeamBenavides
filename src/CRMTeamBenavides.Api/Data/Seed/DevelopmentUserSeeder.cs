@@ -45,8 +45,7 @@ public static class DevelopmentUserSeeder
 
         // Asignar rol administrativo de forma idempotente
         var adminRol = await context.Roles
-            .FirstOrDefaultAsync(r => r.Nombre == RolSeeder.RolAdmin && r.Activo)
-            ?? await context.Roles.FirstOrDefaultAsync(r => r.Nombre == "Administrador" && r.Activo);
+            .FirstOrDefaultAsync(r => (r.Nombre == RolSeeder.RolGerenciaAdmin || r.Nombre == "Admin" || r.Nombre == "Administrador") && r.Activo);
 
         if (adminRol is not null)
         {

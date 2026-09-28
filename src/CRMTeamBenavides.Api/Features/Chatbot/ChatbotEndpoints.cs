@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Domain.Entities;
 
@@ -71,7 +72,7 @@ public static class ChatbotEndpoints
             IChatbotService service) =>
         {
             var usuarioId = ObtenerUsuarioId(user);
-            if (!usuarioId.HasValue || !await service.TieneRolAsync(usuarioId.Value, "Admin", "Administrador"))
+            if (!usuarioId.HasValue || !await service.TieneRolAsync(usuarioId.Value, RolesDefinidos.GerenciaAdmin, "Admin", "Administrador"))
             {
                 return Results.Forbid();
             }
@@ -87,7 +88,7 @@ public static class ChatbotEndpoints
             IChatbotService service) =>
         {
             var usuarioId = ObtenerUsuarioId(user);
-            if (!usuarioId.HasValue || !await service.TieneRolAsync(usuarioId.Value, "Admin", "Administrador"))
+            if (!usuarioId.HasValue || !await service.TieneRolAsync(usuarioId.Value, RolesDefinidos.GerenciaAdmin, "Admin", "Administrador"))
             {
                 return Results.Forbid();
             }
@@ -109,7 +110,7 @@ public static class ChatbotEndpoints
             IChatbotService service) =>
         {
             var usuarioId = ObtenerUsuarioId(user);
-            if (!usuarioId.HasValue || !await service.TieneRolAsync(usuarioId.Value, "Admin", "Administrador"))
+            if (!usuarioId.HasValue || !await service.TieneRolAsync(usuarioId.Value, RolesDefinidos.GerenciaAdmin, "Admin", "Administrador"))
             {
                 return Results.Forbid();
             }
@@ -131,7 +132,7 @@ public static class ChatbotEndpoints
             IChatbotService service) =>
         {
             var usuarioId = ObtenerUsuarioId(user);
-            if (!usuarioId.HasValue || !await service.TieneRolAsync(usuarioId.Value, "Admin", "Administrador"))
+            if (!usuarioId.HasValue || !await service.TieneRolAsync(usuarioId.Value, RolesDefinidos.GerenciaAdmin, "Admin", "Administrador"))
             {
                 return Results.Forbid();
             }
@@ -158,7 +159,7 @@ public static class ChatbotEndpoints
             IChatbotService service) =>
         {
             var usuarioId = ObtenerUsuarioId(user);
-            if (!usuarioId.HasValue || !await service.TieneRolAsync(usuarioId.Value, "Admin", "Administrador", "Recepcion", "Recepción"))
+            if (!usuarioId.HasValue || !await service.TieneRolAsync(usuarioId.Value, RolesDefinidos.GerenciaAdmin, RolesDefinidos.Recepcion, "Admin", "Administrador", "Recepcion", "Recepción"))
             {
                 return Results.Forbid();
             }
@@ -175,7 +176,7 @@ public static class ChatbotEndpoints
             IChatbotService service) =>
         {
             var usuarioId = ObtenerUsuarioId(user);
-            if (!usuarioId.HasValue || !await service.TieneRolAsync(usuarioId.Value, "Admin", "Administrador", "Recepcion", "Recepción"))
+            if (!usuarioId.HasValue || !await service.TieneRolAsync(usuarioId.Value, RolesDefinidos.GerenciaAdmin, RolesDefinidos.Recepcion, "Admin", "Administrador", "Recepcion", "Recepción"))
             {
                 return Results.Forbid();
             }
@@ -198,7 +199,7 @@ public static class ChatbotEndpoints
             IChatbotService service) =>
         {
             var usuarioId = ObtenerUsuarioId(user);
-            if (!usuarioId.HasValue || !await service.TieneRolAsync(usuarioId.Value, "Admin", "Administrador", "Recepcion", "Recepción"))
+            if (!usuarioId.HasValue || !await service.TieneRolAsync(usuarioId.Value, RolesDefinidos.GerenciaAdmin, RolesDefinidos.Recepcion, "Admin", "Administrador", "Recepcion", "Recepción"))
             {
                 return Results.Forbid();
             }

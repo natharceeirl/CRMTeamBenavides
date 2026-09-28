@@ -1,3 +1,4 @@
+using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Domain.Entities;
 
@@ -19,6 +20,7 @@ public static class InventarioEndpoints
             var productos = await service.GetAllProductosAsync(categoriaId, busqueda, bajoStock);
             return Results.Ok(productos);
         })
+        .RequireAuthorization(PermisosDefinidos.InventarioVer)
         .WithName("GetProductos");
 
         groupProductos.MapGet("/{id:guid}", async (Guid id, IInventarioService service) =>
@@ -31,6 +33,7 @@ public static class InventarioEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.InventarioVer)
         .WithName("GetProductoById");
 
         groupProductos.MapPost("/", async (CreateProductoRequest request, IInventarioService service) =>
@@ -43,6 +46,7 @@ public static class InventarioEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.InventarioCrear)
         .WithName("CreateProducto");
 
         groupProductos.MapPut("/{id:guid}", async (Guid id, UpdateProductoRequest request, IInventarioService service) =>
@@ -56,6 +60,7 @@ public static class InventarioEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.InventarioEditar)
         .WithName("UpdateProducto");
 
         groupProductos.MapDelete("/{id:guid}", async (Guid id, IInventarioService service) =>
@@ -68,6 +73,7 @@ public static class InventarioEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.InventarioEliminar)
         .WithName("DeleteProducto");
 
         groupProductos.MapPost("/{id:guid}/entradas", async (Guid id, RegistrarEntradaRequest request, IInventarioService service) =>
@@ -81,6 +87,7 @@ public static class InventarioEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.InventarioAjustar)
         .WithName("RegistrarEntradaInventario");
 
         groupProductos.MapPost("/{id:guid}/salidas", async (Guid id, RegistrarSalidaRequest request, IInventarioService service) =>
@@ -94,6 +101,7 @@ public static class InventarioEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.InventarioAjustar)
         .WithName("RegistrarSalidaInventario");
 
         groupProductos.MapPost("/{id:guid}/ajustes", async (Guid id, RegistrarAjusteRequest request, IInventarioService service) =>
@@ -107,6 +115,7 @@ public static class InventarioEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.InventarioAjustar)
         .WithName("RegistrarAjusteInventario");
 
         groupProductos.MapGet("/{id:guid}/movimientos", async (Guid id, IInventarioService service) =>
@@ -119,6 +128,7 @@ public static class InventarioEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.InventarioVer)
         .WithName("GetMovimientosByProducto");
 
         // --- Endpoints globales de Inventario ---
@@ -134,6 +144,7 @@ public static class InventarioEndpoints
             var movimientos = await service.GetAllMovimientosAsync(productoId, tipo, fechaDesde, fechaHasta);
             return Results.Ok(movimientos);
         })
+        .RequireAuthorization(PermisosDefinidos.InventarioVer)
         .WithName("GetMovimientosInventario");
     }
 }

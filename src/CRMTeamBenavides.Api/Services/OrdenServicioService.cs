@@ -17,10 +17,48 @@ public class OrdenServicioService : IOrdenServicioService
         _userManager = userManager;
     }
 
-    public async Task<List<OrdenServicioResponse>> GetAllAsync(Guid? vehiculoId, EstadoOrdenServicio? estado, Guid? clienteId = null)
+    private async Task<string> GenerarNumeroOrdenAsync()
+    {
+        var seqVal = await _context.Database
+            .SqlQueryRaw<long>("SELECT nextval('\"OrdenServicioNumeroSeq\"') AS \"Value\"")
+            .SingleAsync();
+        return $"OS-{seqVal:D6}";
+    }
+
+    public async Task<List<OrdenServicioResponse>> GetAllAsync(
+        Guid? vehiculoId = null,
+        EstadoOrdenServicio? estado = null,
+        Guid? clienteId = null,
+        Guid? soloTecnicoId = null,
+        Guid? soloClienteId = null,
+        string? busqueda = null,
+        DateTime? fechaDesde = null,
+        DateTime? fechaHasta = null,
+        Guid? tecnicoId = null)
     {
         var query = _context.OrdenesServicio
+            .Include(o => o.Vehiculo)
+            .Include(o => o.Cliente)
+            .Include(o => o.TecnicoAsignado)
+            .Include(o => o.Ventas)
+                .ThenInclude(v => v.Comprobante)
             .Where(o => o.Activo);
+
+        // Aislamiento RBAC de Técnico
+        if (soloTecnicoId.HasValue)
+        {
+            query = query.Where(o => o.TecnicoAsignadoId == soloTecnicoId.Value);
+        }
+
+        // Aislamiento RBAC de Cliente
+        if (soloClienteId.HasValue)
+        {
+            query = query.Where(o => o.ClienteId == soloClienteId.Value || o.Vehiculo.ClienteId == soloClienteId.Value);
+        }
+        else if (clienteId.HasValue)
+        {
+            query = query.Where(o => o.ClienteId == clienteId.Value || o.Vehiculo.ClienteId == clienteId.Value);
+        }
 
         if (vehiculoId.HasValue)
         {
@@ -32,69 +70,87 @@ public class OrdenServicioService : IOrdenServicioService
             query = query.Where(o => o.Estado == estado.Value);
         }
 
-        if (clienteId.HasValue)
+        if (tecnicoId.HasValue && !soloTecnicoId.HasValue)
         {
-            query = query.Where(o => o.Vehiculo.ClienteId == clienteId.Value);
+            query = query.Where(o => o.TecnicoAsignadoId == tecnicoId.Value);
         }
 
-        // Proyección a tipo anónimo: EF Core genera un único JOIN en SQL y trae solo las columnas necesarias.
-        var filas = await query
-            .OrderByDescending(o => o.FechaApertura)
-            .Select(o => new
-            {
-                o.Id,
-                o.VehiculoId,
-                VehiculoPlaca       = o.Vehiculo.Placa,
-                VehiculoMarca       = o.Vehiculo.Marca,
-                VehiculoModelo      = o.Vehiculo.Modelo,
-                ClienteId           = o.Vehiculo.ClienteId,
-                ClienteNombre       = o.Vehiculo.Cliente.NombreCompleto,
-                o.TecnicoAsignadoId,
-                TecnicoNombre       = o.TecnicoAsignado != null ? o.TecnicoAsignado.NombreCompleto : null,
-                o.Estado,
-                o.FechaApertura,
-                o.FechaCierre,
-                o.Diagnostico,
-                o.Observaciones,
-                o.Activo
-            })
+        if (fechaDesde.HasValue)
+        {
+            query = query.Where(o => o.FechaIngreso >= fechaDesde.Value || o.FechaApertura >= fechaDesde.Value);
+        }
+
+        if (fechaHasta.HasValue)
+        {
+            query = query.Where(o => o.FechaIngreso <= fechaHasta.Value || o.FechaApertura <= fechaHasta.Value);
+        }
+
+        // Búsqueda amplia por: número OS, placa, VIN/serie, marca, modelo, color, cliente, documento, técnico, falla, diagnóstico
+        if (!string.IsNullOrWhiteSpace(busqueda))
+        {
+            var term = busqueda.Trim().ToLower();
+            query = query.Where(o =>
+                (o.NumeroOrden != null && o.NumeroOrden.ToLower().Contains(term)) ||
+                (o.Vehiculo.Placa != null && o.Vehiculo.Placa.ToLower().Contains(term)) ||
+                (o.Vehiculo.NumeroSerieVIN != null && o.Vehiculo.NumeroSerieVIN.ToLower().Contains(term)) ||
+                o.Vehiculo.Marca.ToLower().Contains(term) ||
+                o.Vehiculo.Modelo.ToLower().Contains(term) ||
+                (o.Vehiculo.Color != null && o.Vehiculo.Color.ToLower().Contains(term)) ||
+                o.Cliente.NombreCompleto.ToLower().Contains(term) ||
+                (o.Cliente.RazonSocial != null && o.Cliente.RazonSocial.ToLower().Contains(term)) ||
+                (o.Cliente.DocumentoIdentidad != null && o.Cliente.DocumentoIdentidad.ToLower().Contains(term)) ||
+                (o.TecnicoAsignado != null && o.TecnicoAsignado.NombreCompleto.ToLower().Contains(term)) ||
+                (o.MotivoFalla != null && o.MotivoFalla.ToLower().Contains(term)) ||
+                (o.Diagnostico != null && o.Diagnostico.ToLower().Contains(term)));
+        }
+
+        var lista = await query
+            .OrderByDescending(o => o.FechaIngreso)
             .ToListAsync();
 
-        return filas.Select(o => new OrdenServicioResponse(
-            o.Id,
-            o.VehiculoId,
-            o.VehiculoPlaca,
-            o.VehiculoMarca,
-            o.VehiculoModelo,
-            o.ClienteId,
-            o.ClienteNombre,
-            o.TecnicoAsignadoId,
-            o.TecnicoNombre,
-            o.Estado.ToString(),
-            (int)o.Estado,
-            o.FechaApertura,
-            o.FechaCierre,
-            o.Diagnostico,
-            o.Observaciones,
-            o.Activo)).ToList();
+        return lista.Select(MapToResponse).ToList();
     }
 
-    public async Task<ServiceResult<OrdenServicioDetalleResponse>> GetByIdAsync(Guid id)
+    public async Task<ServiceResult<OrdenServicioDetalleResponse>> GetByIdAsync(
+        Guid id,
+        Guid? soloTecnicoId = null,
+        Guid? soloClienteId = null)
     {
         var orden = await _context.OrdenesServicio
             .Include(o => o.Vehiculo)
                 .ThenInclude(v => v.Cliente)
+            .Include(o => o.Cliente)
             .Include(o => o.TecnicoAsignado)
             .Include(o => o.Detalles.Where(d => d.Activo))
                 .ThenInclude(d => d.Producto)
+            .Include(o => o.HistorialEstados.Where(h => h.Activo))
+                .ThenInclude(h => h.Usuario)
+            .Include(o => o.Ventas.Where(v => v.Activo))
+                .ThenInclude(v => v.Comprobante)
             .FirstOrDefaultAsync(o => o.Id == id && o.Activo);
 
-        return orden is null
-            ? ServiceResult<OrdenServicioDetalleResponse>.NotFound()
-            : ServiceResult<OrdenServicioDetalleResponse>.Success(MapToDetalleResponse(orden));
+        if (orden is null)
+        {
+            return ServiceResult<OrdenServicioDetalleResponse>.NotFound();
+        }
+
+        if (soloTecnicoId.HasValue && orden.TecnicoAsignadoId != soloTecnicoId.Value)
+        {
+            return ServiceResult<OrdenServicioDetalleResponse>.NotFound();
+        }
+
+        var clienteAsociadoId = orden.ClienteId != Guid.Empty ? orden.ClienteId : orden.Vehiculo.ClienteId;
+        if (soloClienteId.HasValue && clienteAsociadoId != soloClienteId.Value)
+        {
+            return ServiceResult<OrdenServicioDetalleResponse>.NotFound();
+        }
+
+        return ServiceResult<OrdenServicioDetalleResponse>.Success(MapToDetalleResponse(orden));
     }
 
-    public async Task<ServiceResult<OrdenServicioResponse>> CreateAperturaAsync(AperturaOrdenServicioRequest request)
+    public async Task<ServiceResult<OrdenServicioResponse>> CreateAperturaAsync(
+        AperturaOrdenServicioRequest request,
+        Guid? usuarioId = null)
     {
         var vehiculo = await _context.Vehiculos
             .Include(v => v.Cliente)
@@ -117,40 +173,59 @@ public class OrdenServicioService : IOrdenServicioService
             }
         }
 
+        var numeroOrden = await GenerarNumeroOrdenAsync();
+
         var orden = new OrdenServicio
         {
-            VehiculoId        = request.VehiculoId,
-            TecnicoAsignadoId = request.TecnicoAsignadoId,
-            Observaciones     = request.Observaciones,
-            Estado            = EstadoOrdenServicio.Abierta,
-            FechaApertura     = DateTime.UtcNow,
-            FechaCreacion     = DateTime.UtcNow,
-            Activo            = true
+            VehiculoId             = request.VehiculoId,
+            ClienteId              = vehiculo.ClienteId,
+            TecnicoAsignadoId      = request.TecnicoAsignadoId,
+            NumeroOrden            = numeroOrden,
+            Observaciones          = request.Observaciones?.Trim(),
+            MotivoFalla            = request.MotivoFalla?.Trim() ?? request.Observaciones?.Trim(),
+            FechaEstimadaEntrega   = request.FechaEstimadaEntrega,
+            TipoAtencion           = request.TipoAtencion,
+            ModalidadAtencion      = request.ModalidadAtencion,
+            TipoFalla              = request.TipoFalla,
+            KilometrajeIngreso     = request.KilometrajeIngreso ?? vehiculo.Kilometraje,
+            HorasUsoIngreso        = request.HorasUsoIngreso ?? vehiculo.HorasUso,
+            Estado                 = EstadoOrdenServicio.Abierta,
+            FechaApertura          = DateTime.UtcNow,
+            FechaIngreso           = DateTime.UtcNow,
+            FechaCreacion          = DateTime.UtcNow,
+            Activo                 = true
         };
 
         _context.OrdenesServicio.Add(orden);
+
+        // Registro de hito inicial en el historial de estados
+        var primerHistorial = new HistorialEstadoOrden
+        {
+            OrdenServicioId = orden.Id,
+            EstadoAnterior  = null,
+            EstadoNuevo     = EstadoOrdenServicio.Abierta,
+            UsuarioId       = usuarioId,
+            FechaCambio     = DateTime.UtcNow,
+            Observaciones   = "Apertura de orden de servicio",
+            FechaCreacion   = DateTime.UtcNow,
+            Activo          = true
+        };
+        _context.HistorialEstadosOrden.Add(primerHistorial);
+
         await _context.SaveChangesAsync();
 
-        return ServiceResult<OrdenServicioResponse>.Success(new OrdenServicioResponse(
-            orden.Id,
-            vehiculo.Id,
-            vehiculo.Placa,
-            vehiculo.Marca,
-            vehiculo.Modelo,
-            vehiculo.ClienteId,
-            vehiculo.Cliente.NombreCompleto,
-            tecnico?.Id,
-            tecnico?.NombreCompleto,
-            orden.Estado.ToString(),
-            (int)orden.Estado,
-            orden.FechaApertura,
-            orden.FechaCierre,
-            orden.Diagnostico,
-            orden.Observaciones,
-            orden.Activo));
+        orden.Vehiculo = vehiculo;
+        orden.Cliente  = vehiculo.Cliente;
+        orden.TecnicoAsignado = tecnico;
+
+        return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
     }
 
-    public async Task<ServiceResult<OrdenServicioResponse>> RegistrarDiagnosticoAsync(Guid id, RegistrarDiagnosticoRequest request)
+    public async Task<ServiceResult<OrdenServicioResponse>> RegistrarDiagnosticoAsync(
+        Guid id,
+        RegistrarDiagnosticoRequest request,
+        Guid? soloTecnicoId = null,
+        Guid? usuarioId = null)
     {
         if (string.IsNullOrWhiteSpace(request.Diagnostico))
         {
@@ -160,12 +235,18 @@ public class OrdenServicioService : IOrdenServicioService
         var orden = await _context.OrdenesServicio
             .Include(o => o.Vehiculo)
                 .ThenInclude(v => v.Cliente)
+            .Include(o => o.Cliente)
             .Include(o => o.TecnicoAsignado)
             .FirstOrDefaultAsync(o => o.Id == id && o.Activo);
 
         if (orden is null)
         {
             return ServiceResult<OrdenServicioResponse>.NotFound();
+        }
+
+        if (soloTecnicoId.HasValue && orden.TecnicoAsignadoId != soloTecnicoId.Value)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid("No tiene autorización para registrar diagnósticos en órdenes asignadas a otro técnico.");
         }
 
         if (orden.Estado == EstadoOrdenServicio.Cancelada || orden.Estado == EstadoOrdenServicio.Entregada)
@@ -188,16 +269,44 @@ public class OrdenServicioService : IOrdenServicioService
             orden.TecnicoAsignado   = tecnico;
         }
 
+        var estadoAnterior = orden.Estado;
         if (orden.Estado == EstadoOrdenServicio.Abierta)
         {
             orden.Estado = EstadoOrdenServicio.Diagnostico;
+
+            _context.HistorialEstadosOrden.Add(new HistorialEstadoOrden
+            {
+                OrdenServicioId = orden.Id,
+                EstadoAnterior  = estadoAnterior,
+                EstadoNuevo     = EstadoOrdenServicio.Diagnostico,
+                UsuarioId       = usuarioId,
+                FechaCambio     = DateTime.UtcNow,
+                Observaciones   = string.IsNullOrWhiteSpace(request.Observaciones) ? "Diagnóstico inicial registrado" : request.Observaciones.Trim(),
+                FechaCreacion   = DateTime.UtcNow,
+                Activo          = true
+            });
         }
 
         orden.Diagnostico = request.Diagnostico.Trim();
 
+        if (request.Solucion is not null)
+        {
+            orden.Solucion = request.Solucion.Trim();
+        }
+
+        if (request.FechaEstimadaEntrega.HasValue)
+        {
+            orden.FechaEstimadaEntrega = request.FechaEstimadaEntrega.Value;
+        }
+
+        if (request.TipoFalla.HasValue)
+        {
+            orden.TipoFalla = request.TipoFalla.Value;
+        }
+
         if (request.Observaciones is not null)
         {
-            orden.Observaciones = request.Observaciones;
+            orden.Observaciones = request.Observaciones.Trim();
         }
 
         orden.FechaModificacion = DateTime.UtcNow;
@@ -207,7 +316,117 @@ public class OrdenServicioService : IOrdenServicioService
         return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
     }
 
-    public async Task<ServiceResult<DetalleServicioResponse>> AgregarDetalleAsync(Guid ordenServicioId, AgregarDetalleServicioRequest request)
+    public async Task<ServiceResult<OrdenServicioResponse>> ActualizarAsync(
+        Guid id,
+        ActualizarOrdenServicioRequest request,
+        Guid? soloTecnicoId = null,
+        Guid? usuarioId = null)
+    {
+        var orden = await _context.OrdenesServicio
+            .Include(o => o.Vehiculo)
+                .ThenInclude(v => v.Cliente)
+            .Include(o => o.Cliente)
+            .Include(o => o.TecnicoAsignado)
+            .FirstOrDefaultAsync(o => o.Id == id && o.Activo);
+
+        if (orden is null)
+        {
+            return ServiceResult<OrdenServicioResponse>.NotFound();
+        }
+
+        if (soloTecnicoId.HasValue && orden.TecnicoAsignadoId != soloTecnicoId.Value)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid("No tiene autorización para modificar órdenes asignadas a otro técnico.");
+        }
+
+        if (orden.Estado == EstadoOrdenServicio.Cancelada || orden.Estado == EstadoOrdenServicio.Entregada)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid(
+                $"No se pueden modificar datos en una orden que se encuentra en estado '{orden.Estado}'.");
+        }
+
+        if (request.TecnicoAsignadoId.HasValue)
+        {
+            var tecnico = await _userManager.Users
+                .FirstOrDefaultAsync(u => u.Id == request.TecnicoAsignadoId.Value && u.Activo);
+
+            if (tecnico is null)
+            {
+                return ServiceResult<OrdenServicioResponse>.Invalid("El técnico asignado no existe o está inactivo.");
+            }
+
+            orden.TecnicoAsignadoId = request.TecnicoAsignadoId.Value;
+            orden.TecnicoAsignado   = tecnico;
+        }
+
+        if (request.MotivoFalla is not null) orden.MotivoFalla = request.MotivoFalla.Trim();
+        if (request.Diagnostico is not null) orden.Diagnostico = request.Diagnostico.Trim();
+        if (request.Solucion is not null) orden.Solucion = request.Solucion.Trim();
+        if (request.Observaciones is not null) orden.Observaciones = request.Observaciones.Trim();
+        if (request.FechaEstimadaEntrega.HasValue) orden.FechaEstimadaEntrega = request.FechaEstimadaEntrega.Value;
+        if (request.TipoAtencion.HasValue) orden.TipoAtencion = request.TipoAtencion.Value;
+        if (request.ModalidadAtencion.HasValue) orden.ModalidadAtencion = request.ModalidadAtencion.Value;
+        if (request.TipoFalla.HasValue) orden.TipoFalla = request.TipoFalla.Value;
+        if (request.KilometrajeIngreso.HasValue) orden.KilometrajeIngreso = request.KilometrajeIngreso.Value;
+        if (request.HorasUsoIngreso.HasValue) orden.HorasUsoIngreso = request.HorasUsoIngreso.Value;
+
+        orden.FechaModificacion = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
+    }
+
+    public async Task<ServiceResult<List<HistorialEstadoOrdenResponse>>> GetHistorialAsync(
+        Guid id,
+        Guid? soloTecnicoId = null,
+        Guid? soloClienteId = null)
+    {
+        var orden = await _context.OrdenesServicio
+            .Include(o => o.Vehiculo)
+            .FirstOrDefaultAsync(o => o.Id == id && o.Activo);
+
+        if (orden is null)
+        {
+            return ServiceResult<List<HistorialEstadoOrdenResponse>>.NotFound();
+        }
+
+        if (soloTecnicoId.HasValue && orden.TecnicoAsignadoId != soloTecnicoId.Value)
+        {
+            return ServiceResult<List<HistorialEstadoOrdenResponse>>.NotFound();
+        }
+
+        var clienteAsociadoId = orden.ClienteId != Guid.Empty ? orden.ClienteId : orden.Vehiculo.ClienteId;
+        if (soloClienteId.HasValue && clienteAsociadoId != soloClienteId.Value)
+        {
+            return ServiceResult<List<HistorialEstadoOrdenResponse>>.NotFound();
+        }
+
+        var historial = await _context.HistorialEstadosOrden
+            .Include(h => h.Usuario)
+            .Where(h => h.OrdenServicioId == id && h.Activo)
+            .OrderBy(h => h.FechaCambio)
+            .Select(h => new HistorialEstadoOrdenResponse(
+                h.Id,
+                h.OrdenServicioId,
+                h.EstadoAnterior != null ? h.EstadoAnterior.ToString() : null,
+                h.EstadoAnterior.HasValue ? (int)h.EstadoAnterior.Value : null,
+                h.EstadoNuevo.ToString(),
+                (int)h.EstadoNuevo,
+                h.UsuarioId,
+                h.Usuario != null ? h.Usuario.NombreCompleto : null,
+                h.FechaCambio,
+                h.Observaciones))
+            .ToListAsync();
+
+        return ServiceResult<List<HistorialEstadoOrdenResponse>>.Success(historial);
+    }
+
+    public async Task<ServiceResult<DetalleServicioResponse>> AgregarDetalleAsync(
+        Guid ordenServicioId,
+        AgregarDetalleServicioRequest request,
+        bool puedeModificarPrecios,
+        Guid? soloTecnicoId = null)
     {
         if (request.Cantidad <= 0)
         {
@@ -220,6 +439,11 @@ public class OrdenServicioService : IOrdenServicioService
         if (orden is null)
         {
             return ServiceResult<DetalleServicioResponse>.NotFound();
+        }
+
+        if (soloTecnicoId.HasValue && orden.TecnicoAsignadoId != soloTecnicoId.Value)
+        {
+            return ServiceResult<DetalleServicioResponse>.Invalid("No tiene autorización para modificar órdenes asignadas a otro técnico.");
         }
 
         if (orden.Estado == EstadoOrdenServicio.Entregada || orden.Estado == EstadoOrdenServicio.Cancelada)
@@ -277,6 +501,10 @@ public class OrdenServicioService : IOrdenServicioService
                     ? request.Descripcion.Trim()
                     : producto.Nombre;
 
+                var precioFinal = (puedeModificarPrecios && request.PrecioUnitario.HasValue && request.PrecioUnitario.Value >= 0)
+                    ? request.PrecioUnitario.Value
+                    : producto.PrecioVenta;
+
                 var detalle = new DetalleServicio
                 {
                     OrdenServicioId = orden.Id,
@@ -284,7 +512,7 @@ public class OrdenServicioService : IOrdenServicioService
                     Producto        = producto,
                     Descripcion     = descripcion,
                     Cantidad        = request.Cantidad,
-                    PrecioUnitario  = producto.PrecioVenta, // Autoridad de precio: catálogo oficial
+                    PrecioUnitario  = precioFinal,
                     FechaCreacion   = DateTime.UtcNow,
                     Activo          = true
                 };
@@ -311,6 +539,12 @@ public class OrdenServicioService : IOrdenServicioService
         }
 
         // --- Caso 2: Mano de Obra / Servicio ---
+        if (!puedeModificarPrecios)
+        {
+            return ServiceResult<DetalleServicioResponse>.Invalid(
+                "El rol Técnico no está autorizado a fijar o modificar precios de mano de obra.");
+        }
+
         if (string.IsNullOrWhiteSpace(request.Descripcion))
         {
             return ServiceResult<DetalleServicioResponse>.Invalid("La descripción del servicio o mano de obra es obligatoria.");
@@ -428,17 +662,32 @@ public class OrdenServicioService : IOrdenServicioService
         return ServiceResult<bool>.Success(true);
     }
 
-    public async Task<ServiceResult<OrdenServicioResponse>> CambiarEstadoAsync(Guid ordenServicioId, CambiarEstadoOrdenServicioRequest request)
+    public async Task<ServiceResult<OrdenServicioResponse>> CambiarEstadoAsync(
+        Guid ordenServicioId,
+        CambiarEstadoOrdenServicioRequest request,
+        bool esTecnico,
+        Guid? usuarioId = null)
     {
         var orden = await _context.OrdenesServicio
             .Include(o => o.Vehiculo)
                 .ThenInclude(v => v.Cliente)
+            .Include(o => o.Cliente)
             .Include(o => o.TecnicoAsignado)
+            .Include(o => o.Ventas)
+                .ThenInclude(v => v.Comprobante)
             .FirstOrDefaultAsync(o => o.Id == ordenServicioId && o.Activo);
 
         if (orden is null)
         {
             return ServiceResult<OrdenServicioResponse>.NotFound();
+        }
+
+        if (esTecnico && (request.NuevoEstado == EstadoOrdenServicio.Aprobada 
+                       || request.NuevoEstado == EstadoOrdenServicio.Entregada 
+                       || request.NuevoEstado == EstadoOrdenServicio.Cancelada))
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid(
+                "El rol Técnico no está autorizado a realizar la aprobación final, entrega ni cancelación de la orden.");
         }
 
         if (orden.Estado == EstadoOrdenServicio.Entregada || orden.Estado == EstadoOrdenServicio.Cancelada)
@@ -479,6 +728,21 @@ public class OrdenServicioService : IOrdenServicioService
             return ServiceResult<OrdenServicioResponse>.Invalid(
                 $"Transición de estado no permitida de '{orden.Estado}' a '{request.NuevoEstado}'.");
         }
+
+        var estadoAnterior = orden.Estado;
+
+        // Registrar hito en el historial de estados
+        _context.HistorialEstadosOrden.Add(new HistorialEstadoOrden
+        {
+            OrdenServicioId = orden.Id,
+            EstadoAnterior  = estadoAnterior,
+            EstadoNuevo     = request.NuevoEstado,
+            UsuarioId       = usuarioId,
+            FechaCambio     = DateTime.UtcNow,
+            Observaciones   = request.Observaciones?.Trim(),
+            FechaCreacion   = DateTime.UtcNow,
+            Activo          = true
+        });
 
         // --- Transición a Cancelada: revertir stock de todos los repuestos activos ---
         if (request.NuevoEstado == EstadoOrdenServicio.Cancelada)
@@ -537,7 +801,7 @@ public class OrdenServicioService : IOrdenServicioService
 
                 if (!string.IsNullOrWhiteSpace(request.Observaciones))
                 {
-                    orden.Observaciones = request.Observaciones;
+                    orden.Observaciones = request.Observaciones.Trim();
                 }
 
                 await _context.SaveChangesAsync();
@@ -552,16 +816,17 @@ public class OrdenServicioService : IOrdenServicioService
             }
         }
 
-        // --- Transición a Entregada: fijar fecha de cierre ---
+        // --- Transición a Entregada: fijar fecha de cierre y fecha de salida ---
         if (request.NuevoEstado == EstadoOrdenServicio.Entregada)
         {
             orden.Estado            = EstadoOrdenServicio.Entregada;
             orden.FechaCierre       = DateTime.UtcNow;
+            orden.FechaSalida       = DateTime.UtcNow;
             orden.FechaModificacion = DateTime.UtcNow;
 
             if (!string.IsNullOrWhiteSpace(request.Observaciones))
             {
-                orden.Observaciones = request.Observaciones;
+                orden.Observaciones = request.Observaciones.Trim();
             }
 
             await _context.SaveChangesAsync();
@@ -574,30 +839,62 @@ public class OrdenServicioService : IOrdenServicioService
 
         if (!string.IsNullOrWhiteSpace(request.Observaciones))
         {
-            orden.Observaciones = request.Observaciones;
+            orden.Observaciones = request.Observaciones.Trim();
         }
 
         await _context.SaveChangesAsync();
         return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
     }
 
-    private static OrdenServicioResponse MapToResponse(OrdenServicio orden) => new(
-        orden.Id,
-        orden.VehiculoId,
-        orden.Vehiculo.Placa,
-        orden.Vehiculo.Marca,
-        orden.Vehiculo.Modelo,
-        orden.Vehiculo.ClienteId,
-        orden.Vehiculo.Cliente.NombreCompleto,
-        orden.TecnicoAsignadoId,
-        orden.TecnicoAsignado?.NombreCompleto,
-        orden.Estado.ToString(),
-        (int)orden.Estado,
-        orden.FechaApertura,
-        orden.FechaCierre,
-        orden.Diagnostico,
-        orden.Observaciones,
-        orden.Activo);
+    private static OrdenServicioResponse MapToResponse(OrdenServicio orden)
+    {
+        var primeraVenta = orden.Ventas?.FirstOrDefault(v => v.Activo);
+        var comprobanteTexto = primeraVenta?.Comprobante != null
+            ? $"{primeraVenta.Comprobante.Serie}-{primeraVenta.Comprobante.Numero}"
+            : null;
+
+        var clienteNombre = orden.Cliente != null
+            ? orden.Cliente.NombreCompleto
+            : (orden.Vehiculo?.Cliente?.NombreCompleto ?? string.Empty);
+
+        var clienteId = orden.ClienteId != Guid.Empty
+            ? orden.ClienteId
+            : (orden.Vehiculo?.ClienteId ?? Guid.Empty);
+
+        return new OrdenServicioResponse(
+            orden.Id,
+            orden.VehiculoId,
+            orden.Vehiculo?.Placa,
+            orden.Vehiculo?.Marca ?? string.Empty,
+            orden.Vehiculo?.Modelo ?? string.Empty,
+            clienteId,
+            clienteNombre,
+            orden.TecnicoAsignadoId,
+            orden.TecnicoAsignado?.NombreCompleto,
+            orden.Estado.ToString(),
+            (int)orden.Estado,
+            orden.FechaApertura,
+            orden.FechaCierre,
+            orden.Diagnostico,
+            orden.Observaciones,
+            orden.Activo,
+            orden.NumeroOrden,
+            orden.FechaIngreso,
+            orden.FechaEstimadaEntrega,
+            orden.FechaSalida,
+            orden.MotivoFalla,
+            orden.Solucion,
+            orden.TipoAtencion.ToString(),
+            (int)orden.TipoAtencion,
+            orden.ModalidadAtencion.ToString(),
+            (int)orden.ModalidadAtencion,
+            orden.TipoFalla?.ToString(),
+            orden.TipoFalla.HasValue ? (int)orden.TipoFalla.Value : null,
+            orden.KilometrajeIngreso,
+            orden.HorasUsoIngreso,
+            primeraVenta?.Id,
+            comprobanteTexto);
+    }
 
     private static OrdenServicioDetalleResponse MapToDetalleResponse(OrdenServicio orden)
     {
@@ -615,21 +912,53 @@ public class OrdenServicioService : IOrdenServicioService
                 d.ProductoId.HasValue))
             .ToList();
 
+        var historial = orden.HistorialEstados?
+            .Where(h => h.Activo)
+            .OrderBy(h => h.FechaCambio)
+            .Select(h => new HistorialEstadoOrdenResponse(
+                h.Id,
+                h.OrdenServicioId,
+                h.EstadoAnterior != null ? h.EstadoAnterior.ToString() : null,
+                h.EstadoAnterior.HasValue ? (int)h.EstadoAnterior.Value : null,
+                h.EstadoNuevo.ToString(),
+                (int)h.EstadoNuevo,
+                h.UsuarioId,
+                h.Usuario != null ? h.Usuario.NombreCompleto : null,
+                h.FechaCambio,
+                h.Observaciones))
+            .ToList() ?? new List<HistorialEstadoOrdenResponse>();
+
         var total = detalles.Sum(d => d.Subtotal);
+
+        var primeraVenta = orden.Ventas?.FirstOrDefault(v => v.Activo);
+        var comprobanteTexto = primeraVenta?.Comprobante != null
+            ? $"{primeraVenta.Comprobante.Serie}-{primeraVenta.Comprobante.Numero}"
+            : null;
+
+        var clienteNombre = orden.Cliente != null
+            ? orden.Cliente.NombreCompleto
+            : (orden.Vehiculo?.Cliente?.NombreCompleto ?? string.Empty);
+
+        var clienteId = orden.ClienteId != Guid.Empty
+            ? orden.ClienteId
+            : (orden.Vehiculo?.ClienteId ?? Guid.Empty);
+
+        var clienteTelefono = orden.Cliente?.Telefono ?? orden.Vehiculo?.Cliente?.Telefono;
+        var clienteDocumento = orden.Cliente?.DocumentoIdentidad ?? orden.Vehiculo?.Cliente?.DocumentoIdentidad;
 
         return new OrdenServicioDetalleResponse(
             orden.Id,
             orden.VehiculoId,
-            orden.Vehiculo.Placa,
-            orden.Vehiculo.Marca,
-            orden.Vehiculo.Modelo,
-            orden.Vehiculo.Anio,
-            orden.Vehiculo.Kilometraje,
-            orden.Vehiculo.Color,
-            orden.Vehiculo.ClienteId,
-            orden.Vehiculo.Cliente.NombreCompleto,
-            orden.Vehiculo.Cliente.Telefono,
-            orden.Vehiculo.Cliente.DocumentoIdentidad,
+            orden.Vehiculo?.Placa,
+            orden.Vehiculo?.Marca ?? string.Empty,
+            orden.Vehiculo?.Modelo ?? string.Empty,
+            orden.Vehiculo?.Anio,
+            orden.Vehiculo?.Kilometraje,
+            orden.Vehiculo?.Color,
+            clienteId,
+            clienteNombre,
+            clienteTelefono,
+            clienteDocumento,
             orden.TecnicoAsignadoId,
             orden.TecnicoAsignado?.NombreCompleto,
             orden.Estado.ToString(),
@@ -640,6 +969,26 @@ public class OrdenServicioService : IOrdenServicioService
             orden.Observaciones,
             orden.Activo,
             detalles,
-            total);
+            total,
+            orden.NumeroOrden,
+            orden.FechaIngreso,
+            orden.FechaEstimadaEntrega,
+            orden.FechaSalida,
+            orden.MotivoFalla,
+            orden.Solucion,
+            orden.TipoAtencion.ToString(),
+            (int)orden.TipoAtencion,
+            orden.ModalidadAtencion.ToString(),
+            (int)orden.ModalidadAtencion,
+            orden.TipoFalla?.ToString(),
+            orden.TipoFalla.HasValue ? (int)orden.TipoFalla.Value : null,
+            orden.KilometrajeIngreso,
+            orden.HorasUsoIngreso,
+            orden.Vehiculo?.TipoUnidad.ToString(),
+            orden.Vehiculo?.NumeroSerieVIN,
+            orden.Vehiculo?.NumeroMotor,
+            historial,
+            primeraVenta?.Id,
+            comprobanteTexto);
     }
 }

@@ -1,3 +1,4 @@
+using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Domain.Entities;
 
@@ -20,6 +21,7 @@ public static class VentaEndpoints
             var ventas = await service.GetAllAsync(clienteId, estado, ordenServicioId, fechaDesde, fechaHasta);
             return Results.Ok(ventas);
         })
+        .RequireAuthorization(PermisosDefinidos.VentasVer)
         .WithName("GetVentas");
 
         group.MapGet("/{id:guid}", async (Guid id, IVentaService service) =>
@@ -32,6 +34,7 @@ public static class VentaEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.VentasVer)
         .WithName("GetVentaById");
 
         group.MapPost("/", async (CreateVentaRequest request, IVentaService service) =>
@@ -44,6 +47,7 @@ public static class VentaEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.VentasCrear)
         .WithName("CreateVenta");
 
         group.MapPut("/{id:guid}/confirmar", async (Guid id, IVentaService service) =>
@@ -57,6 +61,7 @@ public static class VentaEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.VentasCrear)
         .WithName("ConfirmarCotizacion");
 
         group.MapPut("/{id:guid}/anular", async (Guid id, IVentaService service) =>
@@ -70,6 +75,7 @@ public static class VentaEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.VentasAnular)
         .WithName("AnularVenta");
 
         group.MapGet("/{id:guid}/comprobante", async (Guid id, IVentaService service) =>
@@ -82,6 +88,7 @@ public static class VentaEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.VentasVer)
         .WithName("GetComprobanteVenta");
 
         group.MapPost("/{id:guid}/comprobante", async (Guid id, RegistrarComprobanteRequest request, IVentaService service) =>
@@ -95,6 +102,7 @@ public static class VentaEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.VentasCrear)
         .WithName("RegistrarComprobanteVenta");
 
         group.MapPut("/{id:guid}/comprobante/anular", async (Guid id, IVentaService service) =>
@@ -108,6 +116,7 @@ public static class VentaEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.VentasAnular)
         .WithName("AnularComprobanteVenta");
     }
 }

@@ -1,4 +1,5 @@
 using CRMTeamBenavides.Api.Configuration;
+using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Features.Auth;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
@@ -79,7 +80,12 @@ public class AuthService : IAuthService
         existingToken.FechaRevocacion = DateTime.UtcNow;
         existingToken.ReemplazadoPorToken = newRefreshTokenValue;
 
-        var (accessToken, accessTokenExpiration) = _tokenService.GenerateAccessToken(usuario);
+        var roles = await _context.UsuarioRoles
+            .Where(ur => ur.UsuarioId == usuario.Id && ur.Rol.Activo)
+            .Select(ur => ur.Rol.Nombre)
+            .ToListAsync();
+
+        var (accessToken, accessTokenExpiration) = _tokenService.GenerateAccessToken(usuario, roles);
 
         var newRefreshToken = new RefreshToken
         {
@@ -103,7 +109,12 @@ public class AuthService : IAuthService
 
     private async Task<LoginResponse> IssueTokensAsync(Usuario usuario, string? ipAddress)
     {
-        var (accessToken, accessTokenExpiration) = _tokenService.GenerateAccessToken(usuario);
+        var roles = await _context.UsuarioRoles
+            .Where(ur => ur.UsuarioId == usuario.Id && ur.Rol.Activo)
+            .Select(ur => ur.Rol.Nombre)
+            .ToListAsync();
+
+        var (accessToken, accessTokenExpiration) = _tokenService.GenerateAccessToken(usuario, roles);
         var refreshTokenValue = _tokenService.GenerateRefreshToken();
 
         var refreshToken = new RefreshToken
@@ -123,6 +134,7 @@ public class AuthService : IAuthService
             refreshToken.Token,
             refreshToken.FechaExpiracion);
     }
+
     public async Task<ServiceResult<MeResponse>> GetCurrentUserAsync(Guid usuarioId)
     {
         var usuario = await _userManager.FindByIdAsync(usuarioId.ToString());
@@ -136,12 +148,35 @@ public class AuthService : IAuthService
             .Select(ur => ur.Rol.Nombre)
             .ToListAsync();
 
+        List<string> permisos;
+        if (roles.Contains(RolesDefinidos.GerenciaAdmin))
+        {
+            permisos = PermisosDefinidos.Todos.ToList();
+        }
+        else
+        {
+            permisos = await _context.UsuarioRoles
+                .Where(ur => ur.UsuarioId == usuarioId && ur.Rol.Activo)
+                .SelectMany(ur => ur.Rol.RolPermisos)
+                .Where(rp => rp.Permiso.Activo)
+                .Select(rp => rp.Permiso.Codigo)
+                .Distinct()
+                .ToListAsync();
+        }
+
+        var clienteId = await _context.Clientes
+            .Where(c => c.UsuarioId == usuarioId && c.Activo)
+            .Select(c => (Guid?)c.Id)
+            .FirstOrDefaultAsync();
+
         var response = new MeResponse(
             usuario.Id,
             usuario.Email ?? string.Empty,
             usuario.NombreCompleto,
             usuario.Activo,
-            roles);
+            roles,
+            permisos,
+            clienteId);
 
         return ServiceResult<MeResponse>.Success(response);
     }
@@ -162,6 +197,53 @@ public class AuthService : IAuthService
         if (activeTokens.Count > 0)
         {
             await _context.SaveChangesAsync();
+        }
+
+        return ServiceResult<bool>.Success(true);
+    }
+
+    public async Task<ServiceResult<bool>> CambiarPasswordAsync(Guid usuarioId, CambiarPasswordRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.PasswordActual) || string.IsNullOrWhiteSpace(request.PasswordNueva))
+        {
+            return ServiceResult<bool>.Invalid("La contraseña actual y la nueva son obligatorias.");
+        }
+
+        var usuario = await _userManager.FindByIdAsync(usuarioId.ToString());
+        if (usuario is null || !usuario.Activo)
+        {
+            return ServiceResult<bool>.NotFound();
+        }
+
+        var result = await _userManager.ChangePasswordAsync(usuario, request.PasswordActual, request.PasswordNueva);
+        if (!result.Succeeded)
+        {
+            var errores = string.Join("; ", result.Errors.Select(e => e.Description));
+            return ServiceResult<bool>.Invalid(errores);
+        }
+
+        return ServiceResult<bool>.Success(true);
+    }
+
+    public async Task<ServiceResult<bool>> ResetPasswordAsync(Guid usuarioId, ResetPasswordRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.NuevaPassword))
+        {
+            return ServiceResult<bool>.Invalid("La nueva contraseña es obligatoria.");
+        }
+
+        var usuario = await _userManager.FindByIdAsync(usuarioId.ToString());
+        if (usuario is null || !usuario.Activo)
+        {
+            return ServiceResult<bool>.NotFound();
+        }
+
+        var token = await _userManager.GeneratePasswordResetTokenAsync(usuario);
+        var result = await _userManager.ResetPasswordAsync(usuario, token, request.NuevaPassword);
+        if (!result.Succeeded)
+        {
+            var errores = string.Join("; ", result.Errors.Select(e => e.Description));
+            return ServiceResult<bool>.Invalid(errores);
         }
 
         return ServiceResult<bool>.Success(true);

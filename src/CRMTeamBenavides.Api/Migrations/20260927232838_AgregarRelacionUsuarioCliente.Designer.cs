@@ -3,6 +3,7 @@ using System;
 using CRMTeamBenavides.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CRMTeamBenavides.Api.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260927232838_AgregarRelacionUsuarioCliente")]
+    partial class AgregarRelacionUsuarioCliente
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,8 +24,6 @@ namespace CRMTeamBenavides.Api.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.HasSequence("OrdenServicioNumeroSeq");
 
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.CategoriaProducto", b =>
                 {
@@ -392,56 +393,6 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.ToTable("FaqItems");
                 });
 
-            modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.HistorialEstadoOrden", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("Activo")
-                        .HasColumnType("boolean");
-
-                    b.Property<Guid?>("CreadoPorId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int?>("EstadoAnterior")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("EstadoNuevo")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("FechaCambio")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("FechaCreacion")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("FechaModificacion")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("ModificadoPorId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Observaciones")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("OrdenServicioId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("UsuarioId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FechaCambio");
-
-                    b.HasIndex("OrdenServicioId");
-
-                    b.HasIndex("UsuarioId");
-
-                    b.ToTable("HistorialEstadosOrden", (string)null);
-                });
-
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.MovimientoInventario", b =>
                 {
                     b.Property<Guid>("Id")
@@ -497,9 +448,6 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Property<bool>("Activo")
                         .HasColumnType("boolean");
 
-                    b.Property<Guid>("ClienteId")
-                        .HasColumnType("uuid");
-
                     b.Property<Guid?>("CreadoPorId")
                         .HasColumnType("uuid");
 
@@ -518,62 +466,22 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Property<DateTime>("FechaCreacion")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("FechaEstimadaEntrega")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("FechaIngreso")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<DateTime?>("FechaModificacion")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("FechaSalida")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal?>("HorasUsoIngreso")
-                        .HasColumnType("numeric");
-
-                    b.Property<int?>("KilometrajeIngreso")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ModalidadAtencion")
-                        .HasColumnType("integer");
 
                     b.Property<Guid?>("ModificadoPorId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("MotivoFalla")
-                        .HasColumnType("text");
-
-                    b.Property<string>("NumeroOrden")
-                        .HasColumnType("text");
-
                     b.Property<string>("Observaciones")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Solucion")
                         .HasColumnType("text");
 
                     b.Property<Guid?>("TecnicoAsignadoId")
                         .HasColumnType("uuid");
 
-                    b.Property<int>("TipoAtencion")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("TipoFalla")
-                        .HasColumnType("integer");
-
                     b.Property<Guid>("VehiculoId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ClienteId");
-
-                    b.HasIndex("FechaIngreso");
-
-                    b.HasIndex("NumeroOrden")
-                        .IsUnique();
 
                     b.HasIndex("TecnicoAsignadoId");
 
@@ -897,9 +805,6 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Property<DateTime?>("FechaModificacion")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<decimal?>("HorasUso")
-                        .HasColumnType("numeric");
-
                     b.Property<int?>("Kilometraje")
                         .HasColumnType("integer");
 
@@ -914,36 +819,19 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Property<Guid?>("ModificadoPorId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("NumeroMotor")
-                        .HasColumnType("text");
-
-                    b.Property<string>("NumeroSerieVIN")
-                        .HasColumnType("text");
-
                     b.Property<string>("Observaciones")
                         .HasColumnType("text");
 
                     b.Property<string>("Placa")
+                        .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<int>("TipoMedidor")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TipoUnidad")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal?>("ValorEstimado")
-                        .HasColumnType("numeric");
 
                     b.HasKey("Id");
 
                     b.HasIndex("ClienteId");
 
-                    b.HasIndex("NumeroSerieVIN");
-
                     b.HasIndex("Placa")
-                        .IsUnique()
-                        .HasFilter("\"Activo\" = true AND \"Placa\" IS NOT NULL AND \"Placa\" <> ''");
+                        .IsUnique();
 
                     b.ToTable("Vehiculos");
                 });
@@ -1139,24 +1027,6 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Navigation("Venta");
                 });
 
-            modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.HistorialEstadoOrden", b =>
-                {
-                    b.HasOne("CRMTeamBenavides.Domain.Entities.OrdenServicio", "OrdenServicio")
-                        .WithMany("HistorialEstados")
-                        .HasForeignKey("OrdenServicioId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("CRMTeamBenavides.Domain.Entities.Usuario", "Usuario")
-                        .WithMany()
-                        .HasForeignKey("UsuarioId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("OrdenServicio");
-
-                    b.Navigation("Usuario");
-                });
-
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.MovimientoInventario", b =>
                 {
                     b.HasOne("CRMTeamBenavides.Domain.Entities.Producto", "Producto")
@@ -1170,12 +1040,6 @@ namespace CRMTeamBenavides.Api.Migrations
 
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.OrdenServicio", b =>
                 {
-                    b.HasOne("CRMTeamBenavides.Domain.Entities.Cliente", "Cliente")
-                        .WithMany()
-                        .HasForeignKey("ClienteId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.HasOne("CRMTeamBenavides.Domain.Entities.Usuario", "TecnicoAsignado")
                         .WithMany()
                         .HasForeignKey("TecnicoAsignadoId");
@@ -1185,8 +1049,6 @@ namespace CRMTeamBenavides.Api.Migrations
                         .HasForeignKey("VehiculoId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("Cliente");
 
                     b.Navigation("TecnicoAsignado");
 
@@ -1273,9 +1135,8 @@ namespace CRMTeamBenavides.Api.Migrations
                         .IsRequired();
 
                     b.HasOne("CRMTeamBenavides.Domain.Entities.OrdenServicio", "OrdenServicio")
-                        .WithMany("Ventas")
-                        .HasForeignKey("OrdenServicioId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .WithMany()
+                        .HasForeignKey("OrdenServicioId");
 
                     b.Navigation("Cliente");
 
@@ -1322,10 +1183,6 @@ namespace CRMTeamBenavides.Api.Migrations
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.OrdenServicio", b =>
                 {
                     b.Navigation("Detalles");
-
-                    b.Navigation("HistorialEstados");
-
-                    b.Navigation("Ventas");
                 });
 
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.Permiso", b =>

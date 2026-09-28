@@ -1,5 +1,6 @@
 using System.Text;
 using CRMTeamBenavides.Api.Configuration;
+using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Features.Auth;
 using CRMTeamBenavides.Api.Features.CategoriasProducto;
 using CRMTeamBenavides.Api.Features.Clientes;
@@ -21,6 +22,7 @@ using CRMTeamBenavides.Api.Health;
 using CRMTeamBenavides.Api.Middleware;
 using CRMTeamBenavides.Domain.Entities;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -105,7 +107,21 @@ builder.Services
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("SoloGerencia", policy =>
+        policy.RequireRole(RolesDefinidos.GerenciaAdmin));
+
+    options.AddPolicy(OrdenServicioEndpoints.PoliticaVerOrdenes, policy =>
+        policy.Requirements.Add(new PermissionRequirement(PermisosDefinidos.OrdenesVerTodas, PermisosDefinidos.OrdenesVerAsignadas)));
+
+    foreach (var permiso in PermisosDefinidos.Todos)
+    {
+        options.AddPolicy(permiso, policy =>
+            policy.Requirements.Add(new PermissionRequirement(permiso)));
+    }
+});
 
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();

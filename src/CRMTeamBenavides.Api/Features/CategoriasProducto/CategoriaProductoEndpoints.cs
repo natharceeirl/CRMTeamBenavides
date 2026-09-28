@@ -1,3 +1,4 @@
+using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Services;
 
 namespace CRMTeamBenavides.Api.Features.CategoriasProducto;
@@ -13,6 +14,7 @@ public static class CategoriaProductoEndpoints
             var categorias = await service.GetAllAsync();
             return Results.Ok(categorias);
         })
+        .RequireAuthorization(PermisosDefinidos.InventarioVer)
         .WithName("GetCategoriasProducto");
 
         group.MapGet("/{id:guid}", async (Guid id, ICategoriaProductoService service) =>
@@ -25,6 +27,7 @@ public static class CategoriaProductoEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.InventarioVer)
         .WithName("GetCategoriaProductoById");
 
         group.MapPost("/", async (CreateCategoriaProductoRequest request, ICategoriaProductoService service) =>
@@ -37,6 +40,7 @@ public static class CategoriaProductoEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.InventarioCrear)
         .WithName("CreateCategoriaProducto");
 
         group.MapPut("/{id:guid}", async (Guid id, UpdateCategoriaProductoRequest request, ICategoriaProductoService service) =>
@@ -50,6 +54,7 @@ public static class CategoriaProductoEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.InventarioEditar)
         .WithName("UpdateCategoriaProducto");
 
         group.MapDelete("/{id:guid}", async (Guid id, ICategoriaProductoService service) =>
@@ -59,10 +64,10 @@ public static class CategoriaProductoEndpoints
             {
                 ServiceResultStatus.Success => Results.NoContent(),
                 ServiceResultStatus.NotFound => Results.NotFound(),
-                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.InventarioEliminar)
         .WithName("DeleteCategoriaProducto");
     }
 }

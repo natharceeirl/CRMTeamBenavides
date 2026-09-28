@@ -5,7 +5,7 @@ namespace CRMTeamBenavides.Api.Features.Reportes;
 public record OrdenServicioReporteResponse(
     Guid Id,
     Guid VehiculoId,
-    string VehiculoPlaca,
+    string? VehiculoPlaca,
     string VehiculoMarca,
     string VehiculoModelo,
     Guid ClienteId,

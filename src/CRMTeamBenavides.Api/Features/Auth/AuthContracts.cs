@@ -15,4 +15,10 @@ public record MeResponse(
     string Email,
     string NombreCompleto,
     bool Activo,
-    List<string> Roles);
+    List<string> Roles,
+    List<string> Permisos,
+    Guid? ClienteId);
+
+public record CambiarPasswordRequest(string PasswordActual, string PasswordNueva);
+
+public record ResetPasswordRequest(string NuevaPassword);

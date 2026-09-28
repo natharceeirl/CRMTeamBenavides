@@ -83,3 +83,23 @@ export function useQuitarRolAUsuario() {
     },
   })
 }
+
+export function useResetPasswordUsuario() {
+  return useMutation({
+    mutationFn: ({ usuarioId, nuevoPassword }: { usuarioId: string; nuevoPassword: string }) =>
+      solicitar<{ message: string }>(`/usuarios/${usuarioId}/reset-password`, {
+        metodo: 'POST',
+        cuerpo: { nuevoPassword },
+      }),
+  })
+}
+
+export function useCambiarMiPassword() {
+  return useMutation({
+    mutationFn: (datos: { passwordActual: string; nuevoPassword: string }) =>
+      solicitar<{ message: string }>('/auth/cambiar-password', {
+        metodo: 'POST',
+        cuerpo: datos,
+      }),
+  })
+}

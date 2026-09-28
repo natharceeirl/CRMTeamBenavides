@@ -6,15 +6,44 @@ import '../api/modelos.dart';
 import 'jwt.dart';
 
 class EstadoSesion {
-  const EstadoSesion({this.usuario, this.roles = const [], this.cargando = false});
+  const EstadoSesion({
+    this.usuario,
+    this.roles = const [],
+    this.permisos = const [],
+    this.clienteId,
+    this.cargando = false,
+  });
 
   final UsuarioSesion? usuario;
 
   /// Roles del usuario, desde GET /api/auth/me. Vacío mientras carga.
   final List<String> roles;
+
+  /// Permisos asignados al usuario.
+  final List<String> permisos;
+
+  /// ID del cliente asociado si el rol es Cliente.
+  final String? clienteId;
+
   final bool cargando;
 
   bool get autenticado => usuario != null;
+
+  bool get esGerencia => roles.contains('Gerencia/Admin') || roles.contains('Admin');
+  bool get esRecepcion => roles.contains('Recepcion') || roles.contains('Recepción');
+  bool get esTecnico => roles.contains('Tecnico') || roles.contains('Técnico');
+  bool get esVendedor => roles.contains('Vendedor');
+  bool get esCliente => roles.contains('Cliente');
+
+  bool tienePermiso(String permiso) {
+    if (esGerencia) return true;
+    return permisos.contains(permiso);
+  }
+
+  bool tieneAlgunPermiso(List<String> lista) {
+    if (esGerencia) return true;
+    return lista.any(permisos.contains);
+  }
 }
 
 final almacenSesionProvider = Provider<AlmacenSesion>((ref) => AlmacenSesion());
@@ -58,6 +87,8 @@ class SesionNotifier extends Notifier<EstadoSesion> {
       state = EstadoSesion(
         usuario: UsuarioSesion(id: yo.id, email: yo.email, nombre: yo.nombreCompleto),
         roles: yo.roles,
+        permisos: yo.permisos,
+        clienteId: yo.clienteId,
       );
     } on ErrorApi {
       // Si /me falla se sigue con lo que trae el token: no vale la pena

@@ -22,6 +22,7 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
     // Taller
     public DbSet<OrdenServicio> OrdenesServicio => Set<OrdenServicio>();
     public DbSet<DetalleServicio> DetallesServicio => Set<DetalleServicio>();
+    public DbSet<HistorialEstadoOrden> HistorialEstadosOrden => Set<HistorialEstadoOrden>();
 
     // Inventario
     public DbSet<CategoriaProducto> CategoriasProducto => Set<CategoriaProducto>();
@@ -77,25 +78,90 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
 
         // --- Índices únicos ---
         modelBuilder.Entity<Usuario>().HasIndex(u => u.Email).IsUnique();
-        modelBuilder.Entity<Vehiculo>().HasIndex(v => v.Placa).IsUnique();
         modelBuilder.Entity<Producto>().HasIndex(p => p.Codigo).IsUnique();
         modelBuilder.Entity<Rol>().HasIndex(r => r.Nombre).IsUnique();
         modelBuilder.Entity<Permiso>().HasIndex(p => p.Codigo).IsUnique();
+
+        // Vehiculo: placa opcional con índice único filtrado por unidades activas con placa
+        modelBuilder.Entity<Vehiculo>(entity =>
+        {
+            entity.HasIndex(v => v.Placa)
+                .IsUnique()
+                .HasFilter("\"Activo\" = true AND \"Placa\" IS NOT NULL AND \"Placa\" <> ''");
+
+            entity.HasIndex(v => v.NumeroSerieVIN);
+        });
+
+        // Relación Usuario-Cliente (ownership base para Portal Cliente)
+        modelBuilder.Entity<Cliente>(entity =>
+        {
+            entity.HasOne(c => c.Usuario)
+                .WithMany()
+                .HasForeignKey(c => c.UsuarioId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(c => c.UsuarioId)
+                .IsUnique()
+                .HasFilter("\"Activo\" = true AND \"UsuarioId\" IS NOT NULL");
+        });
 
         // --- Propiedades calculadas ---
         modelBuilder.Entity<DetalleServicio>().Ignore(d => d.Subtotal);
         modelBuilder.Entity<DetalleVenta>().Ignore(d => d.Subtotal);
 
-        // --- Evitar borrado en cascada accidental ---
-        modelBuilder.Entity<OrdenServicio>()
-            .HasOne(o => o.Vehiculo)
-            .WithMany(v => v.OrdenesServicio)
-            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.HasSequence<long>("OrdenServicioNumeroSeq")
+            .StartsAt(1)
+            .IncrementsBy(1);
 
-        modelBuilder.Entity<Venta>()
-            .HasOne(v => v.Cliente)
-            .WithMany()
-            .OnDelete(DeleteBehavior.Restrict);
+        // --- Evitar borrado en cascada accidental y configurar Taller ---
+        modelBuilder.Entity<OrdenServicio>(entity =>
+        {
+            entity.HasOne(o => o.Vehiculo)
+                .WithMany(v => v.OrdenesServicio)
+                .HasForeignKey(o => o.VehiculoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(o => o.Cliente)
+                .WithMany()
+                .HasForeignKey(o => o.ClienteId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(o => o.NumeroOrden)
+                .IsUnique();
+            entity.HasIndex(o => o.FechaIngreso);
+            entity.HasIndex(o => o.ClienteId);
+        });
+
+        modelBuilder.Entity<HistorialEstadoOrden>(entity =>
+        {
+            entity.ToTable("HistorialEstadosOrden");
+
+            entity.HasOne(h => h.OrdenServicio)
+                .WithMany(o => o.HistorialEstados)
+                .HasForeignKey(h => h.OrdenServicioId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(h => h.Usuario)
+                .WithMany()
+                .HasForeignKey(h => h.UsuarioId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(h => h.OrdenServicioId);
+            entity.HasIndex(h => h.FechaCambio);
+        });
+
+        modelBuilder.Entity<Venta>(entity =>
+        {
+            entity.HasOne(v => v.Cliente)
+                .WithMany()
+                .HasForeignKey(v => v.ClienteId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(v => v.OrdenServicio)
+                .WithMany(o => o.Ventas)
+                .HasForeignKey(v => v.OrdenServicioId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
 
         modelBuilder.Entity<DetalleServicio>()
             .HasOne(d => d.Producto)

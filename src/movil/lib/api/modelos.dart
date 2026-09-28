@@ -79,13 +79,18 @@ class VehiculoApi {
     this.kilometraje,
     this.color,
     this.observaciones,
+    this.tipoUnidad,
+    this.numeroSerieVIN,
+    this.numeroMotor,
+    this.tipoMedidor,
+    this.horasUso,
   });
 
   factory VehiculoApi.desdeJson(Map<String, dynamic> json) => VehiculoApi(
         id: json['id'] as String,
         clienteId: json['clienteId'] as String,
         clienteNombre: json['clienteNombre'] as String,
-        placa: json['placa'] as String,
+        placa: json['placa'] as String? ?? '',
         marca: json['marca'] as String,
         modelo: json['modelo'] as String,
         anio: json['anio'] as int?,
@@ -93,6 +98,11 @@ class VehiculoApi {
         color: json['color'] as String?,
         observaciones: json['observaciones'] as String?,
         activo: json['activo'] as bool,
+        tipoUnidad: json['tipoUnidad'] as String?,
+        numeroSerieVIN: json['numeroSerieVIN'] as String?,
+        numeroMotor: json['numeroMotor'] as String?,
+        tipoMedidor: json['tipoMedidor'] as String?,
+        horasUso: (json['horasUso'] as num?)?.toDouble(),
       );
 
   final String id;
@@ -106,6 +116,11 @@ class VehiculoApi {
   final String? color;
   final String? observaciones;
   final bool activo;
+  final String? tipoUnidad;
+  final String? numeroSerieVIN;
+  final String? numeroMotor;
+  final String? tipoMedidor;
+  final double? horasUso;
 
   String get descripcion {
     final anioTexto = anio == null ? '' : ' $anio';
@@ -135,6 +150,8 @@ class UsuarioActualApi {
     required this.nombreCompleto,
     required this.activo,
     required this.roles,
+    this.permisos = const [],
+    this.clienteId,
   });
 
   factory UsuarioActualApi.desdeJson(Map<String, dynamic> json) => UsuarioActualApi(
@@ -145,6 +162,10 @@ class UsuarioActualApi {
         roles: (json['roles'] as List<dynamic>? ?? const [])
             .map((rol) => rol as String)
             .toList(),
+        permisos: (json['permisos'] as List<dynamic>? ?? const [])
+            .map((permiso) => permiso as String)
+            .toList(),
+        clienteId: json['clienteId'] as String?,
       );
 
   final String id;
@@ -152,6 +173,8 @@ class UsuarioActualApi {
   final String nombreCompleto;
   final bool activo;
   final List<String> roles;
+  final List<String> permisos;
+  final String? clienteId;
 }
 
 class OrdenServicioApi {
@@ -168,6 +191,7 @@ class OrdenServicioApi {
     this.tecnicoNombre,
     this.diagnostico,
     this.observaciones,
+    this.numeroOrden,
   });
 
   factory OrdenServicioApi.desdeJson(Map<String, dynamic> json) => OrdenServicioApi(
@@ -183,6 +207,7 @@ class OrdenServicioApi {
         tecnicoNombre: json['tecnicoNombre'] as String?,
         diagnostico: json['diagnostico'] as String?,
         observaciones: json['observaciones'] as String?,
+        numeroOrden: json['numeroOrden'] as String?,
       );
 
   final String id;
@@ -197,11 +222,11 @@ class OrdenServicioApi {
   final String? tecnicoNombre;
   final String? diagnostico;
   final String? observaciones;
+  final String? numeroOrden;
 
   String get unidad => '$vehiculoMarca $vehiculoModelo';
 
-  /// La API no da correlativo todavía: se usa el inicio del id.
-  String get referencia => '#${id.substring(0, 8).toUpperCase()}';
+  String get referencia => numeroOrden ?? '#${id.substring(0, 8).toUpperCase()}';
 }
 
 class DetalleServicioApi {

@@ -31,6 +31,7 @@ public static class AuthEndpoints
                 : Results.Unauthorized();
         })
         .WithName("RefreshToken");
+
         group.MapGet("/me", async (ClaimsPrincipal user, IAuthService authService) =>
         {
             var subClaim = user.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
@@ -66,5 +67,27 @@ public static class AuthEndpoints
         })
         .RequireAuthorization()
         .WithName("Logout");
+
+        group.MapPost("/cambiar-password", async (CambiarPasswordRequest request, ClaimsPrincipal user, IAuthService authService) =>
+        {
+            var subClaim = user.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+                ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (!Guid.TryParse(subClaim, out var usuarioId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await authService.CambiarPasswordAsync(usuarioId, request);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(new { message = "Contraseña modificada correctamente." }),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        })
+        .RequireAuthorization()
+        .WithName("CambiarPassword");
     }
 }

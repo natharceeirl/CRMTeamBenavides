@@ -1,3 +1,4 @@
+using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Domain.Entities;
 
@@ -20,6 +21,7 @@ public static class ReporteEndpoints
             var datos = await service.GetOrdenesServicioAsync(fechaDesde, fechaHasta, estado, tecnicoId);
             return Results.Ok(datos);
         })
+        .RequireAuthorization(PermisosDefinidos.ReportesVerOperativos)
         .WithName("GetReporteOrdenesServicio");
 
         // --- Ventas ---
@@ -33,6 +35,7 @@ public static class ReporteEndpoints
             var datos = await service.GetVentasAsync(fechaDesde, fechaHasta, estado, clienteId);
             return Results.Ok(datos);
         })
+        .RequireAuthorization(PermisosDefinidos.ReportesVerOperativos)
         .WithName("GetReporteVentas");
 
         // --- Stock Bajo ---
@@ -41,6 +44,7 @@ public static class ReporteEndpoints
             var datos = await service.GetStockBajoAsync();
             return Results.Ok(datos);
         })
+        .RequireAuthorization(PermisosDefinidos.ReportesVerOperativos)
         .WithName("GetReporteStockBajo");
     }
 }

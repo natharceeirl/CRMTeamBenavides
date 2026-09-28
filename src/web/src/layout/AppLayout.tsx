@@ -3,26 +3,49 @@ import { Logo } from '../components/Logo'
 import { ChatbotWidget } from '../components/ChatbotWidget'
 import { useSesion } from '../auth/sesion'
 
-const enlaces = [
-  { ruta: '/', texto: 'Tablero', exacto: true },
-  { ruta: '/ordenes', texto: 'Órdenes' },
-  { ruta: '/clientes', texto: 'Clientes' },
-  { ruta: '/unidades', texto: 'Unidades' },
-  { ruta: '/repuestos', texto: 'Repuestos' },
-  { ruta: '/ventas', texto: 'Ventas' },
-  { ruta: '/reportes', texto: 'Reportes' },
-  { ruta: '/chatbot', texto: 'Chatbot' },
-  { ruta: '/usuarios', texto: 'Usuarios' },
+type EnlaceMenu = {
+  ruta: string
+  texto: string
+  exacto?: boolean
+  permiso?: string
+  permisos?: string[]
+  roles?: string[]
+}
+
+const enlaces: EnlaceMenu[] = [
+  { ruta: '/', texto: 'Tablero', exacto: true, permiso: 'reportes.ver_operativos' },
+  { ruta: '/ordenes', texto: 'Órdenes', permisos: ['ordenes.ver_todas', 'ordenes.ver_asignadas'] },
+  { ruta: '/clientes', texto: 'Clientes', permiso: 'clientes.ver' },
+  { ruta: '/unidades', texto: 'Unidades', permiso: 'unidades.ver' },
+  { ruta: '/repuestos', texto: 'Repuestos', permiso: 'inventario.ver' },
+  { ruta: '/ventas', texto: 'Ventas', permiso: 'ventas.ver' },
+  { ruta: '/reportes', texto: 'Reportes', permiso: 'reportes.ver_operativos' },
+  { ruta: '/chatbot', texto: 'Chatbot', roles: ['Gerencia/Admin', 'Admin', 'Recepcion', 'Recepción'] },
+  { ruta: '/usuarios', texto: 'Usuarios', permiso: 'usuarios.ver' },
 ]
 
 export function AppLayout() {
-  const { usuario, roles, salir } = useSesion()
+  const { usuario, roles, esGerencia, tienePermiso, tieneAlgunPermiso, salir } = useSesion()
   const navigate = useNavigate()
 
   const cerrar = () => {
     salir()
     navigate('/login', { replace: true })
   }
+
+  const enlacesVisibles = enlaces.filter((item) => {
+    if (esGerencia) return true
+    if (item.roles && !item.roles.some((r) => roles.includes(r))) {
+      return false
+    }
+    if (item.permiso && !tienePermiso(item.permiso)) {
+      return false
+    }
+    if (item.permisos && !tieneAlgunPermiso(item.permisos)) {
+      return false
+    }
+    return true
+  })
 
   return (
     <div className="app">
@@ -31,9 +54,7 @@ export function AppLayout() {
           <Logo variante="oscuro" alto={26} />
         </div>
         <nav className="sidebar-nav" aria-label="Menú principal">
-          {/* El menú todavía no se filtra por permiso: la matriz de roles y
-              permisos sigue pendiente de que el cliente la confirme. */}
-          {enlaces.map((enlace) => (
+          {enlacesVisibles.map((enlace) => (
             <NavLink key={enlace.ruta} to={enlace.ruta} end={enlace.exacto}>
               {enlace.texto}
             </NavLink>

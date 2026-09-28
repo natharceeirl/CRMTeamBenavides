@@ -20,6 +20,17 @@ export type UsuarioActualResponse = {
   nombreCompleto: string
   activo: boolean
   roles: string[]
+  permisos: string[]
+  clienteId: string | null
+}
+
+export type CambiarPasswordRequest = {
+  passwordActual: string
+  nuevoPassword: string
+}
+
+export type ResetPasswordRequest = {
+  nuevoPassword: string
 }
 
 export type ClienteResponse = {
@@ -49,7 +60,7 @@ export type VehiculoResponse = {
   id: string
   clienteId: string
   clienteNombre: string
-  placa: string
+  placa: string | null
   marca: string
   modelo: string
   anio: number | null
@@ -57,17 +68,31 @@ export type VehiculoResponse = {
   color: string | null
   observaciones: string | null
   activo: boolean
+  tipoUnidad?: string
+  tipoUnidadId?: number
+  numeroSerieVIN?: string | null
+  numeroMotor?: string | null
+  tipoMedidor?: string
+  tipoMedidorId?: number
+  horasUso?: number | null
+  valorEstimado?: number | null
 }
 
 export type VehiculoRequest = {
   clienteId: string
-  placa: string
+  placa?: string | null
   marca: string
   modelo: string
   anio: number | null
   kilometraje: number | null
   color: string | null
   observaciones: string | null
+  tipoUnidad?: number | string
+  numeroSerieVIN?: string | null
+  numeroMotor?: string | null
+  tipoMedidor?: number | string
+  horasUso?: number | null
+  valorEstimado?: number | null
 }
 
 export type UsuarioResponse = {
@@ -121,10 +146,23 @@ export type DetalleServicioResponse = {
   esRepuesto: boolean
 }
 
+export type HistorialEstadoOrdenResponse = {
+  id: string
+  ordenServicioId: string
+  estadoAnterior: string | null
+  estadoAnteriorId: number | null
+  estadoNuevo: string
+  estadoNuevoId: number
+  usuarioId: string | null
+  usuarioNombre: string | null
+  fechaCambio: string
+  observaciones: string | null
+}
+
 export type OrdenServicioResponse = {
   id: string
   vehiculoId: string
-  vehiculoPlaca: string
+  vehiculoPlaca: string | null
   vehiculoMarca: string
   vehiculoModelo: string
   clienteId: string
@@ -138,6 +176,22 @@ export type OrdenServicioResponse = {
   diagnostico: string | null
   observaciones: string | null
   activo: boolean
+  numeroOrden?: string | null
+  fechaIngreso?: string
+  fechaEstimadaEntrega?: string | null
+  fechaSalida?: string | null
+  motivoFalla?: string | null
+  solucion?: string | null
+  tipoAtencion?: string
+  tipoAtencionId?: number
+  modalidadAtencion?: string
+  modalidadAtencionId?: number
+  tipoFalla?: string | null
+  tipoFallaId?: number | null
+  kilometrajeIngreso?: number | null
+  horasUsoIngreso?: number | null
+  ventaId?: string | null
+  comprobanteSerieNumero?: string | null
 }
 
 export type OrdenServicioDetalleResponse = OrdenServicioResponse & {
@@ -148,22 +202,48 @@ export type OrdenServicioDetalleResponse = OrdenServicioResponse & {
   clienteDocumentoIdentidad: string | null
   detalles: DetalleServicioResponse[]
   total: number
+  tipoUnidad?: string | null
+  numeroSerieVIN?: string | null
+  numeroMotor?: string | null
+  historial?: HistorialEstadoOrdenResponse[]
 }
 
 export type AperturaOrdenRequest = {
   vehiculoId: string
   tecnicoAsignadoId: string | null
   observaciones: string | null
+  motivoFalla?: string | null
+  fechaEstimadaEntrega?: string | null
+  tipoAtencion?: number
+  modalidadAtencion?: number
+  tipoFalla?: number | null
+  kilometrajeIngreso?: number | null
+  horasUsoIngreso?: number | null
 }
 
 export type DiagnosticoRequest = {
   diagnostico: string
   tecnicoAsignadoId: string | null
   observaciones: string | null
+  solucion?: string | null
+  fechaEstimadaEntrega?: string | null
+  tipoFalla?: number | null
 }
 
-/** Repuesto: productoId y cantidad, el precio lo pone el catálogo.
- *  Mano de obra: descripcion, cantidad y precioUnitario. */
+export type ActualizarOrdenRequest = {
+  motivoFalla?: string | null
+  diagnostico?: string | null
+  solucion?: string | null
+  observaciones?: string | null
+  fechaEstimadaEntrega?: string | null
+  tipoAtencion?: number
+  modalidadAtencion?: number
+  tipoFalla?: number | null
+  kilometrajeIngreso?: number | null
+  horasUsoIngreso?: number | null
+  tecnicoAsignadoId?: string | null
+}
+
 export type AgregarDetalleRequest = {
   productoId: string | null
   descripcion: string | null

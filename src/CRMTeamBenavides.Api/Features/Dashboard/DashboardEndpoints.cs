@@ -1,3 +1,4 @@
+using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Services;
 
 namespace CRMTeamBenavides.Api.Features.Dashboard;
@@ -16,6 +17,7 @@ public static class DashboardEndpoints
             var resumen = await service.GetResumenAsync(fechaDesde, fechaHasta);
             return Results.Ok(resumen);
         })
+        .RequireAuthorization(PermisosDefinidos.ReportesVerOperativos)
         .WithName("GetDashboardResumen");
     }
 }

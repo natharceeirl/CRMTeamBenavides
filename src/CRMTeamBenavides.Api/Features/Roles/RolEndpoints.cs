@@ -1,3 +1,4 @@
+using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Services;
 
 namespace CRMTeamBenavides.Api.Features.Roles;
@@ -10,6 +11,7 @@ public static class RolEndpoints
 
         group.MapGet("/", async (IRolService service) =>
             Results.Ok(await service.GetAllAsync()))
+        .RequireAuthorization(PermisosDefinidos.RolesVer)
         .WithName("GetRoles");
 
         group.MapGet("/{id:guid}", async (Guid id, IRolService service) =>
@@ -17,6 +19,7 @@ public static class RolEndpoints
             var result = await service.GetByIdAsync(id);
             return result.IsSuccess ? Results.Ok(result.Data) : Results.NotFound();
         })
+        .RequireAuthorization(PermisosDefinidos.RolesVer)
         .WithName("GetRolById");
 
         group.MapPost("/", async (CreateRolRequest request, IRolService service) =>
@@ -29,6 +32,7 @@ public static class RolEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.RolesGestionar)
         .WithName("CreateRol");
 
         group.MapPut("/{id:guid}", async (Guid id, UpdateRolRequest request, IRolService service) =>
@@ -42,6 +46,7 @@ public static class RolEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.RolesGestionar)
         .WithName("UpdateRol");
 
         group.MapDelete("/{id:guid}", async (Guid id, IRolService service) =>
@@ -54,6 +59,7 @@ public static class RolEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.RolesGestionar)
         .WithName("DeleteRol");
 
         group.MapGet("/{id:guid}/permisos", async (Guid id, IRolService service) =>
@@ -61,6 +67,7 @@ public static class RolEndpoints
             var result = await service.GetPermisosAsync(id);
             return result.IsSuccess ? Results.Ok(result.Data) : Results.NotFound();
         })
+        .RequireAuthorization(PermisosDefinidos.RolesVer)
         .WithName("GetPermisosDeRol");
 
         group.MapPost("/{id:guid}/permisos", async (Guid id, AsignarPermisoRequest request, IRolService service) =>
@@ -73,6 +80,7 @@ public static class RolEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.RolesGestionar)
         .WithName("AsignarPermisoARol");
 
         group.MapDelete("/{id:guid}/permisos/{permisoId:guid}", async (Guid id, Guid permisoId, IRolService service) =>
@@ -85,6 +93,7 @@ public static class RolEndpoints
                 _ => Results.Problem()
             };
         })
+        .RequireAuthorization(PermisosDefinidos.RolesGestionar)
         .WithName("QuitarPermisoDeRol");
     }
 }

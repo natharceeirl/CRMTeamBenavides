@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { Button, Popconfirm, Space, Table, Tabs, Tag, type TableProps } from 'antd'
+import { Button, Input, Modal, Popconfirm, Space, Table, Tabs, Tag, message, type TableProps } from 'antd'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { ModalUsuario } from '../components/ModalUsuario'
 import { ModalRol } from '../components/ModalRol'
 import { ModalRolesUsuario } from '../components/ModalRolesUsuario'
 import { ModalPermisosRol } from '../components/ModalPermisosRol'
-import { useEliminarUsuario, useUsuarios } from '../api/usuarios'
+import { PermisoGuard } from '../components/PermisoGuard'
+import { useEliminarUsuario, useResetPasswordUsuario, useUsuarios } from '../api/usuarios'
 import { useEliminarRol, useRoles } from '../api/roles'
 import type { RolResponse, UsuarioResponse } from '../api/tipos'
 
@@ -15,11 +16,16 @@ export function UsuariosPage() {
   const roles = useRoles()
   const eliminarUsuario = useEliminarUsuario()
   const eliminarRol = useEliminarRol()
+  const resetPassword = useResetPasswordUsuario()
 
   const [usuarioEnEdicion, setUsuarioEnEdicion] = useState<UsuarioResponse | null>(null)
   const [modalUsuario, setModalUsuario] = useState(false)
   const [usuarioEnRoles, setUsuarioEnRoles] = useState<UsuarioResponse | null>(null)
   const [modalRolesUsuario, setModalRolesUsuario] = useState(false)
+
+  const [usuarioEnResetPassword, setUsuarioEnResetPassword] = useState<UsuarioResponse | null>(null)
+  const [modalResetPassword, setModalResetPassword] = useState(false)
+  const [nuevoPasswordReset, setNuevoPasswordReset] = useState('')
 
   const [rolEnEdicion, setRolEnEdicion] = useState<RolResponse | null>(null)
   const [modalRol, setModalRol] = useState(false)
@@ -46,33 +52,51 @@ export function UsuariosPage() {
       align: 'right',
       render: (_, usuario) => (
         <Space size="small">
-          <Button
-            type="link"
-            onClick={() => {
-              setUsuarioEnEdicion(usuario)
-              setModalUsuario(true)
-            }}
-          >
-            Editar
-          </Button>
-          <Button
-            type="link"
-            onClick={() => {
-              setUsuarioEnRoles(usuario)
-              setModalRolesUsuario(true)
-            }}
-          >
-            Roles
-          </Button>
-          <Popconfirm
-            title="Dar de baja al usuario"
-            description="Deja de poder iniciar sesión."
-            okText="Dar de baja"
-            cancelText="Cancelar"
-            onConfirm={() => eliminarUsuario.mutate(usuario.id)}
-          >
-            <Button type="link">Dar de baja</Button>
-          </Popconfirm>
+          <PermisoGuard permiso="usuarios.editar">
+            <Button
+              type="link"
+              onClick={() => {
+                setUsuarioEnEdicion(usuario)
+                setModalUsuario(true)
+              }}
+            >
+              Editar
+            </Button>
+          </PermisoGuard>
+          <PermisoGuard permiso="roles.gestionar">
+            <Button
+              type="link"
+              onClick={() => {
+                setUsuarioEnRoles(usuario)
+                setModalRolesUsuario(true)
+              }}
+            >
+              Roles
+            </Button>
+          </PermisoGuard>
+          <PermisoGuard permiso="usuarios.reset_password">
+            <Button
+              type="link"
+              onClick={() => {
+                setUsuarioEnResetPassword(usuario)
+                setNuevoPasswordReset('')
+                setModalResetPassword(true)
+              }}
+            >
+              Contraseña
+            </Button>
+          </PermisoGuard>
+          <PermisoGuard permiso="usuarios.eliminar">
+            <Popconfirm
+              title="Dar de baja al usuario"
+              description="Deja de poder iniciar sesión."
+              okText="Dar de baja"
+              cancelText="Cancelar"
+              onConfirm={() => eliminarUsuario.mutate(usuario.id)}
+            >
+              <Button type="link">Dar de baja</Button>
+            </Popconfirm>
+          </PermisoGuard>
         </Space>
       ),
     },
@@ -87,32 +111,38 @@ export function UsuariosPage() {
       align: 'right',
       render: (_, rol) => (
         <Space size="small">
-          <Button
-            type="link"
-            onClick={() => {
-              setRolEnEdicion(rol)
-              setModalRol(true)
-            }}
-          >
-            Editar
-          </Button>
-          <Button
-            type="link"
-            onClick={() => {
-              setRolEnPermisos(rol)
-              setModalPermisos(true)
-            }}
-          >
-            Permisos
-          </Button>
-          <Popconfirm
-            title="Eliminar el rol"
-            okText="Eliminar"
-            cancelText="Cancelar"
-            onConfirm={() => eliminarRol.mutate(rol.id)}
-          >
-            <Button type="link">Eliminar</Button>
-          </Popconfirm>
+          <PermisoGuard permiso="roles.gestionar">
+            <Button
+              type="link"
+              onClick={() => {
+                setRolEnEdicion(rol)
+                setModalRol(true)
+              }}
+            >
+              Editar
+            </Button>
+          </PermisoGuard>
+          <PermisoGuard permiso="roles.gestionar">
+            <Button
+              type="link"
+              onClick={() => {
+                setRolEnPermisos(rol)
+                setModalPermisos(true)
+              }}
+            >
+              Permisos
+            </Button>
+          </PermisoGuard>
+          <PermisoGuard permiso="roles.gestionar">
+            <Popconfirm
+              title="Eliminar el rol"
+              okText="Eliminar"
+              cancelText="Cancelar"
+              onConfirm={() => eliminarRol.mutate(rol.id)}
+            >
+              <Button type="link">Eliminar</Button>
+            </Popconfirm>
+          </PermisoGuard>
         </Space>
       ),
     },
@@ -131,15 +161,17 @@ export function UsuariosPage() {
               children: (
                 <>
                   <div className="filtros">
-                    <Button
-                      type="primary"
-                      onClick={() => {
-                        setUsuarioEnEdicion(null)
-                        setModalUsuario(true)
-                      }}
-                    >
-                      Crear usuario
-                    </Button>
+                    <PermisoGuard permiso="usuarios.crear">
+                      <Button
+                        type="primary"
+                        onClick={() => {
+                          setUsuarioEnEdicion(null)
+                          setModalUsuario(true)
+                        }}
+                      >
+                        Crear usuario
+                      </Button>
+                    </PermisoGuard>
                   </div>
                   <Table
                     rowKey="id"
@@ -158,18 +190,20 @@ export function UsuariosPage() {
               children: (
                 <>
                   <p className="texto-secundario" style={{ marginBottom: 16 }}>
-                    La matriz de roles y permisos se define con Team Benavides.
+                    Matriz de roles definitivos y permisos gobernados por el backend.
                   </p>
                   <div className="filtros">
-                    <Button
-                      type="primary"
-                      onClick={() => {
-                        setRolEnEdicion(null)
-                        setModalRol(true)
-                      }}
-                    >
-                      Crear rol
-                    </Button>
+                    <PermisoGuard permiso="roles.gestionar">
+                      <Button
+                        type="primary"
+                        onClick={() => {
+                          setRolEnEdicion(null)
+                          setModalRol(true)
+                        }}
+                      >
+                        Crear rol
+                      </Button>
+                    </PermisoGuard>
                   </div>
                   <Table
                     rowKey="id"
@@ -193,6 +227,37 @@ export function UsuariosPage() {
       />
       <ModalRol abierto={modalRol} rol={rolEnEdicion} onCerrar={() => setModalRol(false)} />
       <ModalPermisosRol abierto={modalPermisos} rol={rolEnPermisos} onCerrar={() => setModalPermisos(false)} />
+
+      <Modal
+        title={`Restablecer contraseña: ${usuarioEnResetPassword?.nombreCompleto ?? ''}`}
+        open={modalResetPassword}
+        onCancel={() => setModalResetPassword(false)}
+        onOk={async () => {
+          if (!usuarioEnResetPassword || !nuevoPasswordReset.trim()) return
+          try {
+            await resetPassword.mutateAsync({
+              usuarioId: usuarioEnResetPassword.id,
+              nuevoPassword: nuevoPasswordReset.trim(),
+            })
+            message.success('Contraseña actualizada con éxito')
+            setModalResetPassword(false)
+          } catch {
+            message.error('Error al restablecer la contraseña')
+          }
+        }}
+        confirmLoading={resetPassword.isPending}
+        okText="Restablecer"
+        cancelText="Cancelar"
+      >
+        <p style={{ marginBottom: 12 }}>
+          Ingrese la nueva contraseña para este usuario (mínimo 6 caracteres):
+        </p>
+        <Input.Password
+          placeholder="Nueva contraseña"
+          value={nuevoPasswordReset}
+          onChange={(e) => setNuevoPasswordReset(e.target.value)}
+        />
+      </Modal>
     </>
   )
 }
