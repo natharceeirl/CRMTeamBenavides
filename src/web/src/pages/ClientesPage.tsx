@@ -8,14 +8,22 @@ import { ModalCliente } from '../components/ModalCliente'
 import { useClientes, useEliminarCliente } from '../api/clientes'
 import { useVehiculos } from '../api/vehiculos'
 import type { ClienteResponse } from '../api/tipos'
+import { useSesion } from '../auth/sesion'
+import { PERMISOS } from '../auth/acceso'
 
 export function ClientesPage() {
   const [texto, setTexto] = useState('')
   const [editando, setEditando] = useState<ClienteResponse | null>(null)
   const [modalAbierto, setModalAbierto] = useState(false)
 
+  const { tienePermiso } = useSesion()
+  const puedeCrear = tienePermiso(PERMISOS.clientesCrear)
+  const puedeEditar = tienePermiso(PERMISOS.clientesEditar)
+  const puedeDarDeBaja = tienePermiso(PERMISOS.clientesEliminar)
+  const veUnidades = tienePermiso(PERMISOS.unidadesVer)
+
   const clientes = useClientes()
-  const vehiculos = useVehiculos()
+  const vehiculos = useVehiculos(undefined, veUnidades)
   const eliminar = useEliminarCliente()
 
   const abrirNuevo = () => {
@@ -59,31 +67,40 @@ export function ClientesPage() {
     },
     { title: 'Teléfono', dataIndex: 'telefono', className: 'num', render: (valor: string | null) => valor ?? '—' },
     { title: 'Correo', dataIndex: 'email', render: (valor: string | null) => valor ?? '—' },
-    {
-      title: 'Unidades',
-      key: 'unidades',
-      align: 'right',
-      className: 'num',
-      render: (_, cliente) => (vehiculos.data ?? []).filter((vehiculo) => vehiculo.clienteId === cliente.id).length,
-    },
+    ...(veUnidades
+      ? [
+          {
+            title: 'Unidades',
+            key: 'unidades',
+            align: 'right' as const,
+            className: 'num',
+            render: (_: unknown, cliente: ClienteResponse) =>
+              (vehiculos.data ?? []).filter((vehiculo) => vehiculo.clienteId === cliente.id).length,
+          },
+        ]
+      : []),
     {
       title: '',
       key: 'acciones',
       align: 'right',
       render: (_, cliente) => (
         <Space size="small">
-          <Button type="link" onClick={() => abrirEdicion(cliente)}>
-            Editar
-          </Button>
-          <Popconfirm
-            title="Dar de baja al cliente"
-            description="Deja de estar activo, no se borra su historial."
-            okText="Dar de baja"
-            cancelText="Cancelar"
-            onConfirm={() => eliminar.mutate(cliente.id)}
-          >
-            <Button type="link">Dar de baja</Button>
-          </Popconfirm>
+          {puedeEditar && (
+            <Button type="link" onClick={() => abrirEdicion(cliente)}>
+              Editar
+            </Button>
+          )}
+          {puedeDarDeBaja && (
+            <Popconfirm
+              title="Dar de baja al cliente"
+              description="Deja de estar activo, no se borra su historial."
+              okText="Dar de baja"
+              cancelText="Cancelar"
+              onConfirm={() => eliminar.mutate(cliente.id)}
+            >
+              <Button type="link">Dar de baja</Button>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -110,9 +127,11 @@ export function ClientesPage() {
       <BarraSuperior
         titulo="Clientes"
         acciones={
-          <Button type="primary" onClick={abrirNuevo}>
-            Registrar cliente
-          </Button>
+          puedeCrear && (
+            <Button type="primary" onClick={abrirNuevo}>
+              Registrar cliente
+            </Button>
+          )
         }
       />
       <div className="pagina">

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../api/estados.dart';
+import '../auth/permisos.dart';
 import '../auth/sesion.dart';
 import '../formato.dart';
 import '../tema.dart';
@@ -15,8 +16,12 @@ class PantallaClienteDetalle extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final sesion = ref.watch(sesionProvider);
+    // El vendedor ve clientes pero no unidades ni órdenes: esas secciones no se
+    // piden para no recibir 403.
+    final veUnidades = sesion.tienePermiso(Permisos.unidadesVer);
+    final veOrdenes = sesion.tieneAlgunPermiso(Permisos.verOrdenes);
     final cliente = ref.watch(clienteProvider(clienteId));
-    final vehiculos = ref.watch(vehiculosProvider(clienteId));
 
     return Scaffold(
       appBar: AppBar(
@@ -41,7 +46,7 @@ class PantallaClienteDetalle extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _Dato('Documento', datos.documentoIdentidad),
+                    _Dato('Documento', datos.documento),
                     _Dato('Teléfono', datos.telefono),
                     _Dato('Correo', datos.email),
                     _Dato('Dirección', datos.direccion),
@@ -51,114 +56,114 @@ class PantallaClienteDetalle extends ConsumerWidget {
                 ),
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 16, 20, 4),
-              child: Text(
-                'Unidades',
-                style: TextStyle(
-                  fontFamily: Marca.fuenteTitulos,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            vehiculos.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (error, _) => AvisoError(
-                error: error,
-                alReintentar: () => ref.invalidate(vehiculosProvider(clienteId)),
-              ),
-              data: (lista) {
-                if (lista.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: ListaVacia(
-                      mensaje: 'Este cliente todavía no tiene unidades.',
+            if (veUnidades) ...[
+              const _Titulo('Unidades'),
+              ref.watch(vehiculosProvider(clienteId)).when(
+                    loading: () => const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(child: CircularProgressIndicator()),
                     ),
-                  );
-                }
-
-                return Column(
-                  children: [
-                    for (final vehiculo in lista)
-                      Card(
-                        child: ListTile(
-                          title: Text(vehiculo.descripcion),
-                          subtitle: Text(
-                            'Placa ${vehiculo.placa}',
-                            style: const TextStyle(
-                              color: Marca.textoSecundario,
-                            ),
-                          ),
-                          trailing: Text(
-                            vehiculo.kilometraje == null
-                                ? '—'
-                                : '${vehiculo.kilometraje} km',
-                            style: const TextStyle(
-                              color: Marca.textoSecundario,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 16, 20, 4),
-              child: Text(
-                'Órdenes de servicio',
-                style: TextStyle(
-                  fontFamily: Marca.fuenteTitulos,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            ref.watch(ordenesClienteProvider(clienteId)).when(
-              loading: () => const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (error, _) => AvisoError(
-                error: error,
-                alReintentar: () => ref.invalidate(ordenesClienteProvider(clienteId)),
-              ),
-              data: (lista) {
-                if (lista.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: ListaVacia(
-                      mensaje: 'Este cliente no tiene órdenes de servicio.',
+                    error: (error, _) => AvisoError(
+                      error: error,
+                      alReintentar: () => ref.invalidate(vehiculosProvider(clienteId)),
                     ),
-                  );
-                }
+                    data: (lista) {
+                      if (lista.isEmpty) {
+                        return const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: ListaVacia(
+                            mensaje: 'Este cliente todavía no tiene unidades.',
+                          ),
+                        );
+                      }
 
-                return Column(
-                  children: [
-                    for (final orden in lista)
-                      Card(
-                        child: ListTile(
-                          title: Text(
-                            '${orden.unidad} · ${orden.vehiculoPlaca}',
-                            style: const TextStyle(fontWeight: FontWeight.w600),
+                      return Column(
+                        children: [
+                          for (final vehiculo in lista)
+                            Card(
+                              child: ListTile(
+                                title: Text(vehiculo.descripcion),
+                                subtitle: Text(
+                                  '${vehiculo.tipoNombre} · ${vehiculo.identificador}',
+                                  style: const TextStyle(color: Marca.textoSecundario),
+                                ),
+                                trailing: Text(
+                                  vehiculo.lectura,
+                                  style: const TextStyle(color: Marca.textoSecundario),
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+            ],
+            if (veOrdenes) ...[
+              const _Titulo('Órdenes de servicio'),
+              ref.watch(ordenesClienteProvider(clienteId)).when(
+                    loading: () => const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                    error: (error, _) => AvisoError(
+                      error: error,
+                      alReintentar: () => ref.invalidate(ordenesClienteProvider(clienteId)),
+                    ),
+                    data: (lista) {
+                      if (lista.isEmpty) {
+                        return const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: ListaVacia(
+                            mensaje: 'Este cliente no tiene órdenes de servicio.',
                           ),
-                          subtitle: Text(
-                            '${nombreEstadoOrden(orden.estadoId)} · ${fechaHora(orden.fechaApertura)}',
-                            style: const TextStyle(color: Marca.textoSecundario),
-                          ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => context.go('/ordenes/${orden.id}'),
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
+                        );
+                      }
+
+                      return Column(
+                        children: [
+                          for (final orden in lista)
+                            Card(
+                              child: ListTile(
+                                title: Text(
+                                  orden.unidadConPlaca,
+                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                                subtitle: Text(
+                                  '${orden.referencia} · ${nombreEstadoOrden(orden.estadoId)} · '
+                                  '${fechaHora(orden.fechaIngreso ?? orden.fechaApertura)}',
+                                  style: const TextStyle(color: Marca.textoSecundario),
+                                ),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () => context.go('/ordenes/${orden.id}'),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+            ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Titulo extends StatelessWidget {
+  const _Titulo(this.texto);
+
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+      child: Text(
+        texto,
+        style: const TextStyle(
+          fontFamily: Marca.fuenteTitulos,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );

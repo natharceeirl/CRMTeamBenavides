@@ -45,7 +45,7 @@ class _PantallaClientesState extends ConsumerState<PantallaClientes> {
                 final campos = [
                   cliente.nombreCompleto,
                   cliente.razonSocial ?? '',
-                  cliente.documentoIdentidad ?? '',
+                  cliente.documento ?? '',
                   cliente.telefono ?? '',
                 ].join(' ').toLowerCase();
                 return campos.contains(texto);
@@ -71,7 +71,7 @@ class _PantallaClientesState extends ConsumerState<PantallaClientes> {
                         ),
                         subtitle: Text(
                           [
-                            cliente.documentoIdentidad,
+                            cliente.documento,
                             cliente.telefono,
                           ].whereType<String>().join(' · '),
                           style: const TextStyle(color: Marca.textoSecundario),

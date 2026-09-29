@@ -32,5 +32,11 @@ export const fechaHora = (iso: string | null | undefined) => {
   return `${dosDigitos(fecha.getDate())}/${dosDigitos(fecha.getMonth() + 1)} ${dosDigitos(fecha.getHours())}:${dosDigitos(fecha.getMinutes())}`
 }
 
-/** La API todavía no da un número correlativo de orden; se usa el inicio del id. */
-export const referenciaOrden = (id: string) => `#${id.slice(0, 8).toUpperCase()}`
+/**
+ * El correlativo de la API (OT-000123). Si solo se tiene el id, o la orden es
+ * anterior al correlativo, se usa el inicio del id.
+ */
+export const referenciaOrden = (orden: string | { id: string; numeroOrden?: string | null }) => {
+  if (typeof orden === 'string') return `#${orden.slice(0, 8).toUpperCase()}`
+  return orden.numeroOrden ?? `#${orden.id.slice(0, 8).toUpperCase()}`
+}

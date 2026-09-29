@@ -7,10 +7,12 @@ export const clavesVehiculos = {
   lista: (clienteId?: string) => ['vehiculos', clienteId ?? 'todos'] as const,
 }
 
-export function useVehiculos(clienteId?: string) {
+/** `habilitado` en falso evita pedir unidades a quien no tiene `unidades.ver` y recibiría 403. */
+export function useVehiculos(clienteId?: string, habilitado = true) {
   return useQuery({
     queryKey: clavesVehiculos.lista(clienteId),
     queryFn: () => solicitar<VehiculoResponse[]>(clienteId ? `/vehiculos?clienteId=${clienteId}` : '/vehiculos'),
+    enabled: habilitado,
   })
 }
 

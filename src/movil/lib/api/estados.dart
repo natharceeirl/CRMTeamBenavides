@@ -25,6 +25,47 @@ const nombresEstadoOrden = <int, String>{
 
 String nombreEstadoOrden(int estadoId) => nombresEstadoOrden[estadoId] ?? 'Desconocido';
 
+/// Transiciones que acepta el backend (OrdenServicioService.CambiarEstadoAsync).
+const transicionesOrden = <int, List<int>>{
+  EstadoOrden.abierta: [EstadoOrden.diagnostico, EstadoOrden.cancelada],
+  EstadoOrden.diagnostico: [EstadoOrden.aprobada, EstadoOrden.cancelada],
+  EstadoOrden.aprobada: [EstadoOrden.enProceso, EstadoOrden.cancelada],
+  EstadoOrden.enProceso: [EstadoOrden.lista, EstadoOrden.cancelada],
+  EstadoOrden.lista: [EstadoOrden.entregada, EstadoOrden.enProceso, EstadoOrden.cancelada],
+  EstadoOrden.entregada: [],
+  EstadoOrden.cancelada: [],
+};
+
+/// El técnico no hace la aprobación final, la entrega ni la anulación.
+const estadosVedadosAlTecnico = {
+  EstadoOrden.aprobada,
+  EstadoOrden.entregada,
+  EstadoOrden.cancelada,
+};
+
+/// Enum TipoAtencion del backend.
+const nombresTipoAtencion = <int, String>{
+  0: 'Mantenimiento preventivo',
+  1: 'Mantenimiento correctivo',
+  2: 'Reclamo de garantía',
+  3: 'Gratuito',
+};
+
+/// Enum TipoFalla del backend.
+const nombresTipoFalla = <int, String>{0: 'Menor', 1: 'Mayor'};
+
+/// Enum TipoUnidad del backend.
+const nombresTipoUnidad = <int, String>{
+  0: 'Motocicleta',
+  1: 'Cuatrimoto',
+  2: 'Moto acuática',
+  3: 'Generador',
+  4: 'Otro',
+};
+
+/// Enum TipoMedidor del backend: 0 kilómetros, 1 horas.
+const medidorHoras = 1;
+
 /// Entregada y Cancelada no admiten más cambios.
 bool esEstadoTerminal(int estadoId) =>
     estadoId == EstadoOrden.entregada || estadoId == EstadoOrden.cancelada;

@@ -24,6 +24,10 @@ type ContextoSesion = {
   /** ID del cliente si el usuario pertenece al rol Cliente. */
   clienteId: string | null
   autenticado: boolean
+  /** Falso mientras /api/auth/me no responde: sin él no se sabe qué puede ver el usuario. */
+  permisosListos: boolean
+  /** Tiene algún rol del taller o la tienda; un usuario solo Cliente usa la app, no la web. */
+  esPersonal: boolean
   esGerencia: boolean
   esRecepcion: boolean
   esTecnico: boolean
@@ -66,6 +70,8 @@ export function ProveedorSesion({ children }: Readonly<{ children: ReactNode }>)
   const esTecnico = roles.includes('Tecnico') || roles.includes('Técnico')
   const esVendedor = roles.includes('Vendedor')
   const esCliente = roles.includes('Cliente')
+  const esPersonal = esGerencia || esRecepcion || esTecnico || esVendedor
+  const permisosListos = yo.data !== undefined
 
   const tienePermiso = useCallback(
     (permiso: string) => {
@@ -95,6 +101,8 @@ export function ProveedorSesion({ children }: Readonly<{ children: ReactNode }>)
       permisos,
       clienteId,
       autenticado: sesion !== null,
+      permisosListos,
+      esPersonal,
       esGerencia,
       esRecepcion,
       esTecnico,
@@ -111,6 +119,8 @@ export function ProveedorSesion({ children }: Readonly<{ children: ReactNode }>)
     roles,
     permisos,
     clienteId,
+    permisosListos,
+    esPersonal,
     esGerencia,
     esRecepcion,
     esTecnico,

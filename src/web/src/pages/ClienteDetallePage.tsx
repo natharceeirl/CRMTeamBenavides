@@ -11,13 +11,24 @@ import { useEliminarVehiculo, useVehiculos } from '../api/vehiculos'
 import { useOrdenes } from '../api/ordenes'
 import { EstadoOrdenApiTag } from '../components/EstadoOrdenApiTag'
 import type { OrdenServicioResponse, VehiculoResponse } from '../api/tipos'
-import { entero, fechaHora, referenciaOrden } from '../utils/formato'
+import { fechaHora, referenciaOrden } from '../utils/formato'
+import { identificadorUnidad, lecturaMedidor, nombreTipoUnidad } from '../utils/unidades'
+import { useSesion } from '../auth/sesion'
+import { ACCESO_ORDENES, PERMISOS, cumpleAcceso } from '../auth/acceso'
 
 export function ClienteDetallePage() {
   const { id } = useParams()
+  const sesion = useSesion()
+  const veUnidades = sesion.tienePermiso(PERMISOS.unidadesVer)
+  const veOrdenes = cumpleAcceso(ACCESO_ORDENES, sesion)
+  const puedeEditarCliente = sesion.tienePermiso(PERMISOS.clientesEditar)
+  const puedeAgregarUnidad = sesion.tienePermiso(PERMISOS.unidadesCrear)
+  const puedeEditarUnidad = sesion.tienePermiso(PERMISOS.unidadesEditar)
+  const puedeDarDeBajaUnidad = sesion.tienePermiso(PERMISOS.unidadesEliminar)
+
   const cliente = useCliente(id)
-  const vehiculos = useVehiculos(id)
-  const ordenes = useOrdenes({ clienteId: id })
+  const vehiculos = useVehiculos(id, veUnidades)
+  const ordenes = useOrdenes({ clienteId: id }, veOrdenes)
   const eliminarVehiculo = useEliminarVehiculo()
 
   const [editandoCliente, setEditandoCliente] = useState(false)
@@ -28,33 +39,25 @@ export function ClienteDetallePage() {
     {
       title: 'Unidad',
       key: 'unidad',
-      render: (_, vehiculo) => `${vehiculo.marca} ${vehiculo.modelo} ${vehiculo.anio ?? ''}`.trim(),
-    },
-    {
-      title: 'Placa / VIN',
-      key: 'identificador',
-      className: 'num',
       render: (_, vehiculo) => (
         <div>
-          {vehiculo.placa && <div><strong>{vehiculo.placa}</strong></div>}
-          {vehiculo.numeroSerieVIN && (
-            <div style={{ fontSize: '0.85em', opacity: 0.75 }}>VIN: {vehiculo.numeroSerieVIN}</div>
-          )}
-          {!vehiculo.placa && !vehiculo.numeroSerieVIN && '—'}
+          <strong>{`${vehiculo.marca} ${vehiculo.modelo} ${vehiculo.anio ?? ''}`.trim()}</strong>
+          <div className="texto-secundario">{nombreTipoUnidad(vehiculo)}</div>
         </div>
       ),
+    },
+    {
+      title: 'Placa o serie',
+      key: 'identificador',
+      className: 'num',
+      render: (_, vehiculo) => identificadorUnidad(vehiculo),
     },
     {
       title: 'Medidor',
       key: 'medidor',
       align: 'right',
       className: 'num',
-      render: (_, vehiculo) => {
-        const lectura = vehiculo.lecturaMedidorActual ?? vehiculo.kilometraje
-        if (lectura == null) return '—'
-        const unidad = vehiculo.tipoMedidor === 'HorasUso' || vehiculo.tipoMedidorId === 1 ? 'hrs' : 'km'
-        return `${entero(lectura)} ${unidad}`
-      },
+      render: (_, vehiculo) => lecturaMedidor(vehiculo),
     },
     {
       title: '',
@@ -62,23 +65,27 @@ export function ClienteDetallePage() {
       align: 'right',
       render: (_, vehiculo) => (
         <Space size="small">
-          <Button
-            type="link"
-            onClick={() => {
-              setVehiculoEnEdicion(vehiculo)
-              setModalVehiculo(true)
-            }}
-          >
-            Editar
-          </Button>
-          <Popconfirm
-            title="Dar de baja la unidad"
-            okText="Dar de baja"
-            cancelText="Cancelar"
-            onConfirm={() => eliminarVehiculo.mutate(vehiculo.id)}
-          >
-            <Button type="link">Dar de baja</Button>
-          </Popconfirm>
+          {puedeEditarUnidad && (
+            <Button
+              type="link"
+              onClick={() => {
+                setVehiculoEnEdicion(vehiculo)
+                setModalVehiculo(true)
+              }}
+            >
+              Editar
+            </Button>
+          )}
+          {puedeDarDeBajaUnidad && (
+            <Popconfirm
+              title="Dar de baja la unidad"
+              okText="Dar de baja"
+              cancelText="Cancelar"
+              onConfirm={() => eliminarVehiculo.mutate(vehiculo.id)}
+            >
+              <Button type="link">Dar de baja</Button>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -87,18 +94,18 @@ export function ClienteDetallePage() {
   const columnasOrdenes: TableProps<OrdenServicioResponse>['columns'] = [
     {
       title: 'Orden',
-      dataIndex: 'id',
+      key: 'orden',
       className: 'num',
-      render: (ordenId: string) => (
-        <Link to={`/ordenes/${ordenId}`}>
-          <strong>{referenciaOrden(ordenId)}</strong>
+      render: (_, orden) => (
+        <Link to={`/ordenes/${orden.id}`}>
+          <strong>{referenciaOrden(orden)}</strong>
         </Link>
       ),
     },
     {
       title: 'Unidad',
       key: 'unidad',
-      render: (_, o) => `${o.vehiculoMarca} ${o.vehiculoModelo} · ${o.vehiculoPlaca}`,
+      render: (_, o) => `${o.vehiculoMarca} ${o.vehiculoModelo} · ${o.vehiculoPlaca ?? 'sin placa'}`,
     },
     {
       title: 'Estado',
@@ -144,7 +151,9 @@ export function ClienteDetallePage() {
       <BarraSuperior
         antetitulo="Clientes"
         titulo={datos.nombreCompleto}
-        acciones={<Button onClick={() => setEditandoCliente(true)}>Editar datos</Button>}
+        acciones={
+          puedeEditarCliente && <Button onClick={() => setEditandoCliente(true)}>Editar datos</Button>
+        }
       />
       <div className="pagina">
         <AvisoError error={vehiculos.error ?? eliminarVehiculo.error} />
@@ -154,51 +163,57 @@ export function ClienteDetallePage() {
             {
               etiqueta: 'Documento',
               valor: datos.numeroDocumento
-                ? `${datos.tipoDocumento === 'DNI' || datos.tipoDocumentoId === 0 ? 'DNI' : datos.tipoDocumento === 'RUC' || datos.tipoDocumentoId === 1 ? 'RUC' : 'Doc'}: ${datos.numeroDocumento}`
+                ? `${datos.tipoDocumento ?? 'Doc.'}: ${datos.numeroDocumento}`
                 : (datos.documentoIdentidad ?? '—'),
             },
             { etiqueta: 'Teléfono', valor: datos.telefono ?? '—' },
-            { etiqueta: 'Unidades', valor: unidadesCliente.length },
+            ...(veUnidades ? [{ etiqueta: 'Unidades', valor: unidadesCliente.length }] : []),
           ]}
         />
         <div className="dos-columnas">
           <div className="columna">
-            <section>
-              <div className="seccion-titulo">
-                <h2>Unidades</h2>
-                <div className="acciones">
-                  <Button
-                    onClick={() => {
-                      setVehiculoEnEdicion(null)
-                      setModalVehiculo(true)
-                    }}
-                  >
-                    Agregar unidad
-                  </Button>
+            {veUnidades && (
+              <section>
+                <div className="seccion-titulo">
+                  <h2>Unidades</h2>
+                  {puedeAgregarUnidad && (
+                    <div className="acciones">
+                      <Button
+                        onClick={() => {
+                          setVehiculoEnEdicion(null)
+                          setModalVehiculo(true)
+                        }}
+                      >
+                        Agregar unidad
+                      </Button>
+                    </div>
+                  )}
                 </div>
-              </div>
-              <Table
-                rowKey="id"
-                columns={columnasUnidades}
-                dataSource={unidadesCliente}
-                pagination={false}
-                loading={vehiculos.isPending}
-                locale={{ emptyText: 'Este cliente todavía no tiene unidades' }}
-              />
-            </section>
-            <section>
-              <div className="seccion-titulo">
-                <h2>Historial de órdenes</h2>
-              </div>
-              <Table
-                rowKey="id"
-                columns={columnasOrdenes}
-                dataSource={ordenes.data ?? []}
-                pagination={false}
-                loading={ordenes.isPending}
-                locale={{ emptyText: 'Este cliente todavía no tiene órdenes de servicio' }}
-              />
-            </section>
+                <Table
+                  rowKey="id"
+                  columns={columnasUnidades}
+                  dataSource={unidadesCliente}
+                  pagination={false}
+                  loading={vehiculos.isPending}
+                  locale={{ emptyText: 'Este cliente todavía no tiene unidades' }}
+                />
+              </section>
+            )}
+            {veOrdenes && (
+              <section>
+                <div className="seccion-titulo">
+                  <h2>Historial de órdenes</h2>
+                </div>
+                <Table
+                  rowKey="id"
+                  columns={columnasOrdenes}
+                  dataSource={ordenes.data ?? []}
+                  pagination={false}
+                  loading={ordenes.isPending}
+                  locale={{ emptyText: 'Este cliente todavía no tiene órdenes de servicio' }}
+                />
+              </section>
+            )}
           </div>
           <aside>
             <div className="seccion-titulo">

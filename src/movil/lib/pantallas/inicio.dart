@@ -1,14 +1,84 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/permisos.dart';
 import '../auth/sesion.dart';
 import '../tema.dart';
+import 'cambiar_password.dart';
 import 'chatbot.dart';
 import 'clientes.dart';
+import 'comunes.dart';
 import 'tienda.dart';
 import 'ordenes.dart';
 import 'tablero.dart';
 import 'unidades.dart';
+
+/// Una pestaña de la barra inferior.
+class _Seccion {
+  const _Seccion({
+    required this.etiqueta,
+    required this.titulo,
+    required this.icono,
+    required this.iconoActivo,
+    required this.pantalla,
+  });
+
+  final String etiqueta;
+  final String titulo;
+  final IconData icono;
+  final IconData iconoActivo;
+  final Widget pantalla;
+}
+
+/// Solo las pestañas que el usuario puede ver. Así ninguna pide datos que la
+/// API le negaría con 403: el técnico, por ejemplo, no ve el tablero ni clientes.
+List<_Seccion> _seccionesPara(EstadoSesion sesion) {
+  final soloAsignadas = !sesion.tienePermiso(Permisos.ordenesVerTodas);
+
+  return [
+    if (sesion.tienePermiso(Permisos.reportesVerOperativos))
+      const _Seccion(
+        etiqueta: 'Tablero',
+        titulo: 'Tablero',
+        icono: Icons.dashboard_outlined,
+        iconoActivo: Icons.dashboard,
+        pantalla: PantallaTablero(),
+      ),
+    if (sesion.tieneAlgunPermiso(Permisos.verOrdenes))
+      _Seccion(
+        etiqueta: 'Órdenes',
+        titulo: soloAsignadas ? 'Mis órdenes' : 'Órdenes',
+        icono: Icons.build_outlined,
+        iconoActivo: Icons.build,
+        pantalla: const PantallaOrdenes(),
+      ),
+    if (!sesion.soloCliente &&
+        sesion.tieneAlgunPermiso([Permisos.inventarioVer, Permisos.ventasVer]))
+      const _Seccion(
+        etiqueta: 'Tienda',
+        titulo: 'Tienda',
+        icono: Icons.storefront_outlined,
+        iconoActivo: Icons.storefront,
+        pantalla: PantallaTienda(),
+      ),
+    if (!sesion.soloCliente && sesion.tienePermiso(Permisos.clientesVer))
+      const _Seccion(
+        etiqueta: 'Clientes',
+        titulo: 'Clientes',
+        icono: Icons.people_outline,
+        iconoActivo: Icons.people,
+        pantalla: PantallaClientes(),
+      ),
+    if (sesion.tienePermiso(Permisos.unidadesVer))
+      _Seccion(
+        etiqueta: 'Unidades',
+        titulo: sesion.soloCliente ? 'Mis unidades' : 'Unidades',
+        icono: Icons.two_wheeler_outlined,
+        iconoActivo: Icons.two_wheeler,
+        pantalla: const PantallaUnidades(),
+      ),
+  ];
+}
 
 class PantallaInicio extends ConsumerStatefulWidget {
   const PantallaInicio({super.key});
@@ -28,7 +98,9 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final titulos = ['Tablero', 'Órdenes', 'Tienda', 'Clientes', 'Unidades'];
+    final secciones = _seccionesPara(sesion);
+    // Los roles llegan después del token: el índice puede quedar fuera de rango.
+    final indice = secciones.isEmpty ? 0 : _seccion.clamp(0, secciones.length - 1);
     final subtitulo = sesion.roles.isEmpty
         ? (sesion.usuario?.nombre ?? '')
         : '${sesion.usuario?.nombre ?? ''} · ${sesion.roles.join(', ')}';
@@ -38,7 +110,7 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(titulos[_seccion]),
+            Text(secciones.isEmpty ? 'Team Benavides' : secciones[indice].titulo),
             Text(
               subtitulo,
               style: const TextStyle(fontSize: 12, color: Colors.white70),
@@ -47,22 +119,26 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Cambiar contraseña',
+            icon: const Icon(Icons.key_outlined),
+            onPressed: () => abrirCambioDePassword(context),
+          ),
+          IconButton(
             tooltip: 'Cerrar sesión',
             icon: const Icon(Icons.logout),
             onPressed: () => ref.read(sesionProvider.notifier).salir(),
           ),
         ],
       ),
-      body: IndexedStack(
-        index: _seccion,
-        children: const [
-          PantallaTablero(),
-          PantallaOrdenes(),
-          PantallaTienda(),
-          PantallaClientes(),
-          PantallaUnidades(),
-        ],
-      ),
+      body: secciones.isEmpty
+          ? const ListaVacia(
+              mensaje: 'Tu usuario todavía no tiene pantallas asignadas. '
+                  'Pide a Gerencia que revise tus permisos.',
+            )
+          : IndexedStack(
+              index: indice,
+              children: [for (final seccion in secciones) seccion.pantalla],
+            ),
       floatingActionButton: FloatingActionButton(
         tooltip: 'Asistente',
         backgroundColor: Marca.acentoBoton,
@@ -70,38 +146,22 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
         onPressed: () => abrirChatbot(context),
         child: const Icon(Icons.chat_bubble_outline),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _seccion,
-        onDestinationSelected: (indice) => setState(() => _seccion = indice),
-        indicatorColor: Marca.acento.withValues(alpha: 0.15),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: 'Tablero',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.build_outlined),
-            selectedIcon: Icon(Icons.build),
-            label: 'Órdenes',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.storefront_outlined),
-            selectedIcon: Icon(Icons.storefront),
-            label: 'Tienda',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
-            label: 'Clientes',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.two_wheeler_outlined),
-            selectedIcon: Icon(Icons.two_wheeler),
-            label: 'Unidades',
-          ),
-        ],
-      ),
+      // La barra inferior necesita al menos dos destinos.
+      bottomNavigationBar: secciones.length < 2
+          ? null
+          : NavigationBar(
+              selectedIndex: indice,
+              onDestinationSelected: (nuevo) => setState(() => _seccion = nuevo),
+              indicatorColor: Marca.acento.withValues(alpha: 0.15),
+              destinations: [
+                for (final seccion in secciones)
+                  NavigationDestination(
+                    icon: Icon(seccion.icono),
+                    selectedIcon: Icon(seccion.iconoActivo),
+                    label: seccion.etiqueta,
+                  ),
+              ],
+            ),
     );
   }
 }

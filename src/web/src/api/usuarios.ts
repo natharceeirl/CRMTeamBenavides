@@ -1,6 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { solicitar } from './http'
-import type { ActualizarUsuarioRequest, CrearUsuarioRequest, RolResponse, UsuarioResponse } from './tipos'
+import type {
+  ActualizarUsuarioRequest,
+  CambiarPasswordRequest,
+  CrearUsuarioRequest,
+  ResetPasswordRequest,
+  RolResponse,
+  UsuarioResponse,
+} from './tipos'
 
 export const clavesUsuarios = {
   todos: ['usuarios'] as const,
@@ -11,6 +18,22 @@ export function useUsuarios() {
   return useQuery({
     queryKey: clavesUsuarios.todos,
     queryFn: () => solicitar<UsuarioResponse[]>('/usuarios'),
+  })
+}
+
+const esTecnico = (usuario: UsuarioResponse) =>
+  usuario.activo && usuario.roles.some((rol) => rol === 'Tecnico' || rol === 'Técnico')
+
+/**
+ * Usuarios activos con rol Técnico, para asignar órdenes. Comparte la consulta
+ * de useUsuarios; `habilitado` en falso la evita a quien no tiene `usuarios.ver`.
+ */
+export function useTecnicos(habilitado = true) {
+  return useQuery({
+    queryKey: clavesUsuarios.todos,
+    queryFn: () => solicitar<UsuarioResponse[]>('/usuarios'),
+    enabled: habilitado,
+    select: (usuarios) => usuarios.filter(esTecnico),
   })
 }
 
@@ -89,14 +112,14 @@ export function useResetPasswordUsuario() {
     mutationFn: ({ usuarioId, nuevoPassword }: { usuarioId: string; nuevoPassword: string }) =>
       solicitar<{ message: string }>(`/usuarios/${usuarioId}/reset-password`, {
         metodo: 'POST',
-        cuerpo: { nuevoPassword },
+        cuerpo: { nuevaPassword: nuevoPassword } satisfies ResetPasswordRequest,
       }),
   })
 }
 
 export function useCambiarMiPassword() {
   return useMutation({
-    mutationFn: (datos: { passwordActual: string; nuevoPassword: string }) =>
+    mutationFn: (datos: CambiarPasswordRequest) =>
       solicitar<{ message: string }>('/auth/cambiar-password', {
         metodo: 'POST',
         cuerpo: datos,

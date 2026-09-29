@@ -16,6 +16,8 @@ import {
 import type { VentaResponse } from '../api/tipos'
 import { colores } from '../theme/tokens'
 import { fechaHora, referenciaOrden, soles } from '../utils/formato'
+import { useSesion } from '../auth/sesion'
+import { PERMISOS } from '../auth/acceso'
 
 const opcionesEstado = Object.entries(nombresEstadoVenta).map(([valor, etiqueta]) => ({
   value: Number(valor),
@@ -52,6 +54,10 @@ export function VentasPage() {
   const [estado, setEstado] = useState<number>()
   const [modalNueva, setModalNueva] = useState(false)
   const [ventaVista, setVentaVista] = useState<string | null>(null)
+
+  const { tienePermiso } = useSesion()
+  const puedeVender = tienePermiso(PERMISOS.ventasCrear)
+  const puedeAnularVentas = tienePermiso(PERMISOS.ventasAnular)
 
   const ventas = useVentas({ estado })
   const confirmar = useConfirmarVenta()
@@ -93,7 +99,7 @@ export function VentasPage() {
           <Button type="link" onClick={() => setVentaVista(venta.id)}>
             Ver
           </Button>
-          {puedeConfirmar(venta.estadoId) && (
+          {puedeVender && puedeConfirmar(venta.estadoId) && (
             <Popconfirm
               title="Confirmar la venta"
               description="Descuenta el stock de los productos."
@@ -104,7 +110,7 @@ export function VentasPage() {
               <Button type="link">Confirmar</Button>
             </Popconfirm>
           )}
-          {puedeAnular(venta.estadoId) && (
+          {puedeAnularVentas && puedeAnular(venta.estadoId) && (
             <Popconfirm
               title="Anular"
               description={
@@ -129,9 +135,11 @@ export function VentasPage() {
       <BarraSuperior
         titulo="Ventas y cotizaciones"
         acciones={
-          <Button type="primary" onClick={() => setModalNueva(true)}>
-            Nueva venta
-          </Button>
+          puedeVender && (
+            <Button type="primary" onClick={() => setModalNueva(true)}>
+              Nueva venta
+            </Button>
+          )
         }
       />
       <div className="pagina">

@@ -30,7 +30,7 @@ class _PantallaOrdenesState extends ConsumerState<PantallaOrdenes> {
           child: TextField(
             decoration: const InputDecoration(
               prefixIcon: Icon(Icons.search),
-              hintText: 'Buscar por placa, cliente o referencia',
+              hintText: 'Buscar por OT, placa, cliente o técnico',
             ),
             onChanged: (valor) => setState(() => _busqueda = valor),
           ),
@@ -83,14 +83,14 @@ class _PantallaOrdenesState extends ConsumerState<PantallaOrdenes> {
                     return Card(
                       child: ListTile(
                         title: Text(
-                          '${orden.unidad} · ${orden.vehiculoPlaca}',
+                          orden.unidadConPlaca,
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              orden.clienteNombre,
+                              '${orden.referencia} · ${orden.clienteNombre}',
                               style: const TextStyle(color: Marca.textoSecundario),
                             ),
                             const SizedBox(height: 4),
@@ -99,7 +99,7 @@ class _PantallaOrdenesState extends ConsumerState<PantallaOrdenes> {
                                 _EtiquetaEstado(estadoId: orden.estadoId),
                                 const SizedBox(width: 8),
                                 Text(
-                                  fechaHora(orden.fechaApertura),
+                                  fechaHora(orden.fechaIngreso ?? orden.fechaApertura),
                                   style: const TextStyle(
                                     color: Marca.textoSecundario,
                                     fontSize: 12,

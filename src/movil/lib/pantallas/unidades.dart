@@ -18,6 +18,8 @@ class _PantallaUnidadesState extends ConsumerState<PantallaUnidades> {
   @override
   Widget build(BuildContext context) {
     final vehiculos = ref.watch(vehiculosProvider(null));
+    // El cliente solo recibe sus unidades: no tiene sentido mostrarle el propietario.
+    final soloCliente = ref.watch(sesionProvider).soloCliente;
 
     return Column(
       children: [
@@ -26,7 +28,7 @@ class _PantallaUnidadesState extends ConsumerState<PantallaUnidades> {
           child: TextField(
             decoration: const InputDecoration(
               prefixIcon: Icon(Icons.search),
-              hintText: 'Buscar por modelo, placa o propietario',
+              hintText: 'Buscar por tipo, modelo, placa, serie o propietario',
             ),
             onChanged: (valor) => setState(() => _busqueda = valor),
           ),
@@ -42,8 +44,11 @@ class _PantallaUnidadesState extends ConsumerState<PantallaUnidades> {
               final texto = _busqueda.toLowerCase();
               final visibles = lista.where((vehiculo) {
                 final campos = [
+                  vehiculo.tipoNombre,
                   vehiculo.descripcion,
                   vehiculo.placa,
+                  vehiculo.numeroSerieVIN ?? '',
+                  vehiculo.numeroMotor ?? '',
                   vehiculo.clienteNombre,
                 ].join(' ').toLowerCase();
                 return campos.contains(texto);
@@ -68,13 +73,14 @@ class _PantallaUnidadesState extends ConsumerState<PantallaUnidades> {
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                         subtitle: Text(
-                          'Placa ${vehiculo.placa} · ${vehiculo.clienteNombre}',
+                          soloCliente
+                              ? '${vehiculo.tipoNombre} · ${vehiculo.identificador}'
+                              : '${vehiculo.tipoNombre} · ${vehiculo.identificador} · '
+                                  '${vehiculo.clienteNombre}',
                           style: const TextStyle(color: Marca.textoSecundario),
                         ),
                         trailing: Text(
-                          vehiculo.kilometraje == null
-                              ? '—'
-                              : '${vehiculo.kilometraje} km',
+                          vehiculo.lectura,
                           style: const TextStyle(color: Marca.textoSecundario),
                         ),
                       ),

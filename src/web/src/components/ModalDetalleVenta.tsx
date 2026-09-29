@@ -1,5 +1,7 @@
-import { Button, Form, Input, Modal, Popconfirm, Space, Table, Tag, type TableProps } from 'antd'
+import { Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, type TableProps } from 'antd'
 import { useState } from 'react'
+import { useSesion } from '../auth/sesion'
+import { PERMISOS } from '../auth/acceso'
 import {
   puedeAnularComprobante,
   puedeRegistrarComprobante,
@@ -41,7 +43,16 @@ const columnas: TableProps<DetalleVentaResponse>['columns'] = [
   },
 ]
 
+/** Catálogo cerrado: el tipo de comprobante no se escribe a mano. */
+const TIPOS_COMPROBANTE = [
+  { value: 'Boleta', label: 'Boleta' },
+  { value: 'Factura', label: 'Factura' },
+]
+
 export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props>) {
+  const { tienePermiso } = useSesion()
+  const puedeRegistrar = tienePermiso(PERMISOS.ventasCrear)
+  const puedeAnular = tienePermiso(PERMISOS.ventasAnular)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [formulario] = Form.useForm<RegistrarComprobanteRequest>()
   const venta = useVenta(abierto ? (ventaId ?? undefined) : undefined)
@@ -148,7 +159,7 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
                           {datos.comprobante.estado}
                         </Tag>
                       </div>
-                      {puedeAnularComprobante(datos.comprobante.estado) && (
+                      {puedeAnular && puedeAnularComprobante(datos.comprobante.estado) && (
                         <Popconfirm
                           title="¿Anular comprobante?"
                           description="El comprobante quedará registrado administrativamente como Anulado."
@@ -166,7 +177,7 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
                   ) : puedeRegistrarComprobante(datos.estadoId, false) ? (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                       <span className="texto-secundario">Sin comprobante registrado</span>
-                      {!mostrarForm && (
+                      {puedeRegistrar && !mostrarForm && (
                         <Button size="small" type="primary" onClick={() => setMostrarForm(true)}>
                           Registrar comprobante
                         </Button>
@@ -196,14 +207,14 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
                 form={formulario}
                 layout="vertical"
                 onFinish={handleRegistrar}
-                initialValues={{ tipo: '', serie: '', numero: '' }}
+                initialValues={{ tipo: undefined, serie: '', numero: '' }}
               >
                 <Form.Item
                   label="Tipo de comprobante"
                   name="tipo"
-                  rules={[{ required: true, message: 'Ingresa el tipo de comprobante' }]}
+                  rules={[{ required: true, message: 'Elige el tipo de comprobante' }]}
                 >
-                  <Input placeholder="Ej. Boleta, Factura, etc." />
+                  <Select placeholder="Boleta o factura" options={TIPOS_COMPROBANTE} />
                 </Form.Item>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                   <Form.Item label="Serie (opcional)" name="serie">

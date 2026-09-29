@@ -33,8 +33,8 @@ export function ModalUsuario({ abierto, usuario, onCerrar }: Readonly<Props>) {
   }
 
   const enviar = async (campos: Campos) => {
-    // El backend solo deja cambiar nombre y teléfono: el correo y la contraseña
-    // se definen al crear el usuario y todavía no tienen endpoint para editarse.
+    // El backend solo deja cambiar nombre y teléfono. El correo no se edita y la
+    // contraseña se restablece desde la lista de usuarios.
     if (usuario) {
       await actualizar.mutateAsync({
         id: usuario.id,

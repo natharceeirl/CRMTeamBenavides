@@ -1,5 +1,8 @@
 // Contratos del backend: src/CRMTeamBenavides.Api/Features/**/*Contracts.cs
 
+import '../formato.dart';
+import 'estados.dart';
+
 class Sesion {
   const Sesion({
     required this.accessToken,
@@ -41,6 +44,8 @@ class ClienteApi {
     this.email,
     this.direccion,
     this.observaciones,
+    this.tipoDocumento,
+    this.numeroDocumento,
   });
 
   factory ClienteApi.desdeJson(Map<String, dynamic> json) => ClienteApi(
@@ -53,6 +58,8 @@ class ClienteApi {
         direccion: json['direccion'] as String?,
         observaciones: json['observaciones'] as String?,
         activo: json['activo'] as bool,
+        tipoDocumento: json['tipoDocumento'] as String?,
+        numeroDocumento: json['numeroDocumento'] as String?,
       );
 
   final String id;
@@ -64,6 +71,17 @@ class ClienteApi {
   final String? direccion;
   final String? observaciones;
   final bool activo;
+  final String? tipoDocumento;
+  final String? numeroDocumento;
+
+  /// «DNI 45879231». Un cliente anterior al tipo de documento muestra solo el número.
+  String? get documento {
+    final numero = numeroDocumento ?? documentoIdentidad;
+    if (numero == null || numero.isEmpty) {
+      return null;
+    }
+    return tipoDocumento == null ? numero : '$tipoDocumento $numero';
+  }
 }
 
 class VehiculoApi {
@@ -84,6 +102,9 @@ class VehiculoApi {
     this.numeroMotor,
     this.tipoMedidor,
     this.horasUso,
+    this.tipoUnidadId,
+    this.tipoMedidorId,
+    this.lecturaMedidorActual,
   });
 
   factory VehiculoApi.desdeJson(Map<String, dynamic> json) => VehiculoApi(
@@ -103,11 +124,16 @@ class VehiculoApi {
         numeroMotor: json['numeroMotor'] as String?,
         tipoMedidor: json['tipoMedidor'] as String?,
         horasUso: (json['horasUso'] as num?)?.toDouble(),
+        tipoUnidadId: json['tipoUnidadId'] as int?,
+        tipoMedidorId: json['tipoMedidorId'] as int?,
+        lecturaMedidorActual: (json['lecturaMedidorActual'] as num?)?.toDouble(),
       );
 
   final String id;
   final String clienteId;
   final String clienteNombre;
+
+  /// Vacía si la unidad no tiene placa, como las motos acuáticas y los generadores.
   final String placa;
   final String marca;
   final String modelo;
@@ -121,15 +147,42 @@ class VehiculoApi {
   final String? numeroMotor;
   final String? tipoMedidor;
   final double? horasUso;
+  final int? tipoUnidadId;
+  final int? tipoMedidorId;
+  final double? lecturaMedidorActual;
 
   String get descripcion {
     final anioTexto = anio == null ? '' : ' $anio';
     return '$marca $modelo$anioTexto';
   }
+
+  String get tipoNombre => nombresTipoUnidad[tipoUnidadId] ?? 'Unidad';
+
+  bool get midePorHoras => tipoMedidorId == medidorHoras;
+
+  /// Placa si tiene; si no, VIN o serie.
+  String get identificador {
+    if (placa.isNotEmpty) {
+      return 'Placa $placa';
+    }
+    final serie = numeroSerieVIN;
+    return serie == null || serie.isEmpty ? 'Sin placa ni serie' : 'Serie $serie';
+  }
+
+  /// «12,450 km» o «86 h», según el medidor de la unidad.
+  String get lectura {
+    final valor = midePorHoras
+        ? (lecturaMedidorActual ?? horasUso)
+        : (lecturaMedidorActual ?? kilometraje?.toDouble());
+    if (valor == null) {
+      return '—';
+    }
+    return midePorHoras ? '${entero(valor)} h' : '${entero(valor)} km';
+  }
 }
 
-/// Datos del usuario que hoy salen de los claims del token, porque el backend
-/// todavía no expone GET /api/auth/me ni manda los roles.
+/// Datos del usuario que salen de los claims del token. Los roles y permisos
+/// llegan después, con GET /api/auth/me.
 class UsuarioSesion {
   const UsuarioSesion({
     required this.id,
@@ -192,6 +245,17 @@ class OrdenServicioApi {
     this.diagnostico,
     this.observaciones,
     this.numeroOrden,
+    this.tecnicoAsignadoId,
+    this.fechaIngreso,
+    this.fechaEstimadaEntrega,
+    this.fechaSalida,
+    this.fechaCierre,
+    this.motivoFalla,
+    this.solucion,
+    this.tipoAtencionId,
+    this.tipoFallaId,
+    this.kilometrajeIngreso,
+    this.horasUsoIngreso,
   });
 
   factory OrdenServicioApi.desdeJson(Map<String, dynamic> json) => OrdenServicioApi(
@@ -208,9 +272,22 @@ class OrdenServicioApi {
         diagnostico: json['diagnostico'] as String?,
         observaciones: json['observaciones'] as String?,
         numeroOrden: json['numeroOrden'] as String?,
+        tecnicoAsignadoId: json['tecnicoAsignadoId'] as String?,
+        fechaIngreso: _fecha(json['fechaIngreso']),
+        fechaEstimadaEntrega: _fecha(json['fechaEstimadaEntrega']),
+        fechaSalida: _fecha(json['fechaSalida']),
+        fechaCierre: _fecha(json['fechaCierre']),
+        motivoFalla: json['motivoFalla'] as String?,
+        solucion: json['solucion'] as String?,
+        tipoAtencionId: json['tipoAtencionId'] as int?,
+        tipoFallaId: json['tipoFallaId'] as int?,
+        kilometrajeIngreso: json['kilometrajeIngreso'] as int?,
+        horasUsoIngreso: (json['horasUsoIngreso'] as num?)?.toDouble(),
       );
 
   final String id;
+
+  /// Vacía si la unidad no tiene placa.
   final String vehiculoPlaca;
   final String vehiculoMarca;
   final String vehiculoModelo;
@@ -223,10 +300,63 @@ class OrdenServicioApi {
   final String? diagnostico;
   final String? observaciones;
   final String? numeroOrden;
+  final String? tecnicoAsignadoId;
+  final DateTime? fechaIngreso;
+  final DateTime? fechaEstimadaEntrega;
+  final DateTime? fechaSalida;
+  final DateTime? fechaCierre;
+  final String? motivoFalla;
+  final String? solucion;
+  final int? tipoAtencionId;
+  final int? tipoFallaId;
+  final int? kilometrajeIngreso;
+  final double? horasUsoIngreso;
 
   String get unidad => '$vehiculoMarca $vehiculoModelo';
 
+  /// «YZF-R3 · 4521-7B», o sin la placa si la unidad no tiene.
+  String get unidadConPlaca =>
+      vehiculoPlaca.isEmpty ? unidad : '$unidad · $vehiculoPlaca';
+
   String get referencia => numeroOrden ?? '#${id.substring(0, 8).toUpperCase()}';
+
+  /// Lectura del medidor al ingresar, en km o en horas según la que tenga.
+  String? get lecturaIngreso {
+    if (kilometrajeIngreso != null) {
+      return '${entero(kilometrajeIngreso!)} km';
+    }
+    if (horasUsoIngreso != null) {
+      return '${entero(horasUsoIngreso!)} h';
+    }
+    return null;
+  }
+}
+
+DateTime? _fecha(Object? valor) => valor is String ? DateTime.tryParse(valor) : null;
+
+/// Un cambio de estado de la orden, con quién y cuándo.
+class HistorialEstadoApi {
+  const HistorialEstadoApi({
+    required this.id,
+    required this.estadoNuevoId,
+    required this.fechaCambio,
+    this.usuarioNombre,
+    this.observaciones,
+  });
+
+  factory HistorialEstadoApi.desdeJson(Map<String, dynamic> json) => HistorialEstadoApi(
+        id: json['id'] as String,
+        estadoNuevoId: json['estadoNuevoId'] as int? ?? 0,
+        fechaCambio: DateTime.parse(json['fechaCambio'] as String),
+        usuarioNombre: json['usuarioNombre'] as String?,
+        observaciones: json['observaciones'] as String?,
+      );
+
+  final String id;
+  final int estadoNuevoId;
+  final DateTime fechaCambio;
+  final String? usuarioNombre;
+  final String? observaciones;
 }
 
 class DetalleServicioApi {
@@ -265,25 +395,48 @@ class OrdenServicioDetalleApi {
     required this.detalles,
     required this.total,
     this.clienteTelefono,
+    this.clienteDocumento,
     this.vehiculoKilometraje,
+    this.tipoUnidad,
+    this.numeroSerieVIN,
+    this.numeroMotor,
+    this.historial = const [],
   });
 
-  factory OrdenServicioDetalleApi.desdeJson(Map<String, dynamic> json) =>
-      OrdenServicioDetalleApi(
-        orden: OrdenServicioApi.desdeJson(json),
-        detalles: (json['detalles'] as List<dynamic>? ?? const [])
-            .map((detalle) => DetalleServicioApi.desdeJson(detalle as Map<String, dynamic>))
-            .toList(),
-        total: (json['total'] as num? ?? 0).toDouble(),
-        clienteTelefono: json['clienteTelefono'] as String?,
-        vehiculoKilometraje: json['vehiculoKilometraje'] as int?,
-      );
+  factory OrdenServicioDetalleApi.desdeJson(Map<String, dynamic> json) {
+    final historial = (json['historial'] as List<dynamic>? ?? const [])
+        .map((cambio) => HistorialEstadoApi.desdeJson(cambio as Map<String, dynamic>))
+        .toList()
+      ..sort((a, b) => a.fechaCambio.compareTo(b.fechaCambio));
+
+    return OrdenServicioDetalleApi(
+      orden: OrdenServicioApi.desdeJson(json),
+      detalles: (json['detalles'] as List<dynamic>? ?? const [])
+          .map((detalle) => DetalleServicioApi.desdeJson(detalle as Map<String, dynamic>))
+          .toList(),
+      total: (json['total'] as num? ?? 0).toDouble(),
+      clienteTelefono: json['clienteTelefono'] as String?,
+      clienteDocumento: json['clienteDocumentoIdentidad'] as String?,
+      vehiculoKilometraje: json['vehiculoKilometraje'] as int?,
+      tipoUnidad: json['tipoUnidad'] as String?,
+      numeroSerieVIN: json['numeroSerieVIN'] as String?,
+      numeroMotor: json['numeroMotor'] as String?,
+      historial: historial,
+    );
+  }
 
   final OrdenServicioApi orden;
   final List<DetalleServicioApi> detalles;
   final double total;
   final String? clienteTelefono;
+  final String? clienteDocumento;
   final int? vehiculoKilometraje;
+  final String? tipoUnidad;
+  final String? numeroSerieVIN;
+  final String? numeroMotor;
+
+  /// Del más antiguo al más reciente.
+  final List<HistorialEstadoApi> historial;
 }
 
 /// GET /api/dashboard/resumen
@@ -431,7 +584,8 @@ class ProductoApi {
         unidad: json['unidad'] as String? ?? '',
         precioVenta: (json['precioVenta'] as num? ?? 0).toDouble(),
         stockActual: json['stockActual'] as int? ?? 0,
-        stockMinimo: json['stockMinimo'] as int? ?? 0,
+        // El mínimo que aplica: el propio, el de la categoría o 4 por defecto.
+        stockMinimo: json['stockMinimoEfectivo'] as int? ?? json['stockMinimo'] as int? ?? 4,
         esBajoStock: json['esBajoStock'] as bool? ?? false,
         categoriaId: json['categoriaId'] as String? ?? '',
         categoriaNombre: json['categoriaNombre'] as String? ?? '',

@@ -1,27 +1,32 @@
-import { useState } from 'react'
-import { Button, Input, Select, Table, type TableProps } from 'antd'
+import { useEffect, useState, type ComponentProps } from 'react'
+import { Button, DatePicker, Input, Select, Table, type TableProps } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import { Link, useNavigate } from 'react-router'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { EstadoOrdenApiTag } from '../components/EstadoOrdenApiTag'
 import { nombresEstado, useOrdenes } from '../api/ordenes'
+import { useTecnicos } from '../api/usuarios'
 import type { OrdenServicioResponse } from '../api/tipos'
 import { fechaHora, referenciaOrden } from '../utils/formato'
+import { useSesion } from '../auth/sesion'
+import { PERMISOS } from '../auth/acceso'
 
 const opcionesEstado = Object.entries(nombresEstado).map(([valor, etiqueta]) => ({
   value: Number(valor),
   label: etiqueta,
 }))
 
+type RangoFechas = Parameters<NonNullable<ComponentProps<typeof DatePicker.RangePicker>['onChange']>>[0]
+
 const columnas: TableProps<OrdenServicioResponse>['columns'] = [
   {
     title: 'Orden',
-    dataIndex: 'id',
+    key: 'orden',
     className: 'num',
-    render: (id: string) => (
-      <Link to={`/ordenes/${id}`} style={{ fontWeight: 600 }}>
-        {referenciaOrden(id)}
+    render: (_, orden) => (
+      <Link to={`/ordenes/${orden.id}`} style={{ fontWeight: 600 }}>
+        {referenciaOrden(orden)}
       </Link>
     ),
   },
@@ -29,7 +34,8 @@ const columnas: TableProps<OrdenServicioResponse>['columns'] = [
   {
     title: 'Unidad',
     key: 'unidad',
-    render: (_, orden) => `${orden.vehiculoMarca} ${orden.vehiculoModelo} · ${orden.vehiculoPlaca}`,
+    render: (_, orden) =>
+      `${orden.vehiculoMarca} ${orden.vehiculoModelo} · ${orden.vehiculoPlaca ?? 'sin placa'}`,
   },
   {
     title: 'Técnico',
@@ -44,43 +50,56 @@ const columnas: TableProps<OrdenServicioResponse>['columns'] = [
   },
   {
     title: 'Ingreso',
-    dataIndex: 'fechaApertura',
+    key: 'ingreso',
     className: 'num',
-    render: (fecha: string) => fechaHora(fecha),
+    render: (_, orden) => fechaHora(orden.fechaIngreso ?? orden.fechaApertura),
+  },
+  {
+    title: 'Entrega estimada',
+    dataIndex: 'fechaEstimadaEntrega',
+    className: 'num',
+    render: (fecha: string | null | undefined) => fechaHora(fecha),
   },
 ]
 
 export function OrdenesPage() {
   const navigate = useNavigate()
+  const { tienePermiso } = useSesion()
+  // Quien solo ve sus órdenes asignadas no necesita filtrar por técnico.
+  const veTodas = tienePermiso(PERMISOS.ordenesVerTodas)
+  const puedeCrear = tienePermiso(PERMISOS.ordenesCrear)
+
   const [texto, setTexto] = useState('')
+  const [busqueda, setBusqueda] = useState('')
   const [estado, setEstado] = useState<number>()
+  const [tecnicoId, setTecnicoId] = useState<string>()
+  const [rango, setRango] = useState<RangoFechas>(null)
 
-  // El estado se filtra en la API; el texto, en la tabla ya cargada.
-  const ordenes = useOrdenes({ estado })
+  // La búsqueda la resuelve la API: se espera a que el usuario deje de escribir.
+  useEffect(() => {
+    const espera = setTimeout(() => setBusqueda(texto), 350)
+    return () => clearTimeout(espera)
+  }, [texto])
 
-  const busqueda = texto.toLowerCase()
-  const visibles = (ordenes.data ?? []).filter((orden) =>
-    [
-      referenciaOrden(orden.id),
-      orden.clienteNombre,
-      orden.vehiculoPlaca,
-      orden.vehiculoMarca,
-      orden.vehiculoModelo,
-      orden.tecnicoNombre ?? '',
-    ]
-      .join(' ')
-      .toLowerCase()
-      .includes(busqueda),
-  )
+  const tecnicos = useTecnicos(veTodas && tienePermiso(PERMISOS.usuariosVer))
+  const ordenes = useOrdenes({
+    estado,
+    tecnicoId,
+    busqueda,
+    fechaDesde: rango?.[0]?.format('YYYY-MM-DD'),
+    fechaHasta: rango?.[1]?.format('YYYY-MM-DD'),
+  })
 
   return (
     <>
       <BarraSuperior
-        titulo="Órdenes de servicio"
+        titulo={veTodas ? 'Órdenes de servicio' : 'Mis órdenes'}
         acciones={
-          <Button type="primary" onClick={() => navigate('/ordenes/nueva')}>
-            Crear orden
-          </Button>
+          puedeCrear && (
+            <Button type="primary" onClick={() => navigate('/ordenes/nueva')}>
+              Crear orden
+            </Button>
+          )
         }
       />
       <div className="pagina">
@@ -90,7 +109,7 @@ export function OrdenesPage() {
             <Input
               id="buscar-ordenes"
               prefix={<SearchOutlined />}
-              placeholder="Buscar por cliente, placa, técnico o referencia"
+              placeholder="Buscar por OT, cliente, placa, serie o modelo"
               allowClear
               value={texto}
               onChange={(evento) => setTexto(evento.target.value)}
@@ -103,15 +122,39 @@ export function OrdenesPage() {
               value={estado}
               onChange={setEstado}
               options={opcionesEstado}
-              style={{ width: 220 }}
+              style={{ width: 180 }}
+            />
+            {veTodas && (
+              <Select<string>
+                id="filtro-tecnico"
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                placeholder="Técnico"
+                value={tecnicoId}
+                onChange={setTecnicoId}
+                loading={tecnicos.isPending}
+                options={(tecnicos.data ?? []).map((tecnico) => ({
+                  value: tecnico.id,
+                  label: tecnico.nombreCompleto,
+                }))}
+                style={{ width: 220 }}
+              />
+            )}
+            <DatePicker.RangePicker
+              id="filtro-fechas"
+              format="DD/MM/YYYY"
+              placeholder={['Ingreso desde', 'hasta']}
+              value={rango}
+              onChange={setRango}
             />
           </div>
           <Table
             rowKey="id"
             columns={columnas}
-            dataSource={visibles}
+            dataSource={ordenes.data ?? []}
             pagination={false}
-            loading={ordenes.isPending}
+            loading={ordenes.isFetching}
             locale={{ emptyText: 'No hay órdenes que coincidan' }}
           />
         </section>

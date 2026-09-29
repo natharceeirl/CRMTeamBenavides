@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { solicitar } from './http'
 import type {
+  ActualizarOrdenRequest,
   AgregarDetalleRequest,
   AperturaOrdenRequest,
   CambiarEstadoRequest,
@@ -15,8 +16,7 @@ import type {
  * la API no tiene conversor de enums a texto; en las respuestas vienen los dos:
  * `estado` con el nombre y `estadoId` con el número.
  *
- * Son siete y no coinciden con los nueve del mapa funcional. El Ingeniero
- * todavía tiene que cerrar el flujo definitivo con el cliente.
+ * El cliente decidió mantener estos siete estados (resumen de cambios del 25/09).
  */
 export const ESTADO = {
   abierta: 0,
@@ -49,6 +49,12 @@ export const transicionesValidas: Record<number, number[]> = {
   6: [],
 }
 
+/**
+ * El técnico no hace la aprobación final, la entrega ni la anulación: el backend
+ * lo rechaza en OrdenServicioService.CambiarEstadoAsync.
+ */
+export const estadosVedadosAlTecnico: readonly number[] = [ESTADO.aprobada, ESTADO.entregada, ESTADO.cancelada]
+
 export const esEstadoTerminal = (estadoId: number) =>
   estadoId === ESTADO.entregada || estadoId === ESTADO.cancelada
 
@@ -56,28 +62,64 @@ export const esEstadoTerminal = (estadoId: number) =>
 export const permiteEditarDetalles = (estadoId: number) =>
   !esEstadoTerminal(estadoId) && estadoId !== ESTADO.lista
 
+/** Enums TipoAtencion, ModalidadAtencion y TipoFalla del backend, en el mismo orden. */
+export const TIPOS_ATENCION = [
+  { value: 0, label: 'Mantenimiento preventivo' },
+  { value: 1, label: 'Mantenimiento correctivo' },
+  { value: 2, label: 'Reclamo de garantía' },
+  { value: 3, label: 'Gratuito' },
+]
+
+export const MODALIDADES_ATENCION = [
+  { value: 0, label: 'En taller' },
+  { value: 1, label: 'En sitio' },
+]
+
+export const TIPOS_FALLA = [
+  { value: 0, label: 'Menor' },
+  { value: 1, label: 'Mayor' },
+]
+
+export const etiquetaDe = (opciones: { value: number; label: string }[], valor: number | null | undefined) =>
+  opciones.find((opcion) => opcion.value === valor)?.label ?? '—'
+
+/** Filtros que acepta GET /api/ordenes-servicio. La búsqueda y las fechas las resuelve la API. */
+export type FiltrosOrdenes = {
+  estado?: number
+  vehiculoId?: string
+  clienteId?: string
+  tecnicoId?: string
+  busqueda?: string
+  fechaDesde?: string
+  fechaHasta?: string
+}
+
 export const clavesOrdenes = {
   todas: ['ordenes'] as const,
-  lista: (estado?: number, vehiculoId?: string, clienteId?: string) =>
-    ['ordenes', 'lista', estado ?? 'todos', vehiculoId ?? 'todos', clienteId ?? 'todos'] as const,
+  lista: (filtros: FiltrosOrdenes) => ['ordenes', 'lista', filtros] as const,
   una: (id: string) => ['ordenes', id] as const,
 }
 
-export function useOrdenes(filtros: { estado?: number; vehiculoId?: string; clienteId?: string } = {}) {
-  const { estado, vehiculoId, clienteId } = filtros
-
+/** `habilitado` en falso evita pedir órdenes a quien no puede verlas y recibiría 403. */
+export function useOrdenes(filtros: FiltrosOrdenes = {}, habilitado = true) {
   return useQuery({
-    queryKey: clavesOrdenes.lista(estado, vehiculoId, clienteId),
+    queryKey: clavesOrdenes.lista(filtros),
     queryFn: () => {
       const parametros = new URLSearchParams()
-      if (estado !== undefined) parametros.set('estado', String(estado))
-      if (vehiculoId) parametros.set('vehiculoId', vehiculoId)
-      if (clienteId) parametros.set('clienteId', clienteId)
+      if (filtros.estado !== undefined) parametros.set('estado', String(filtros.estado))
+      if (filtros.vehiculoId) parametros.set('vehiculoId', filtros.vehiculoId)
+      if (filtros.clienteId) parametros.set('clienteId', filtros.clienteId)
+      if (filtros.tecnicoId) parametros.set('tecnicoId', filtros.tecnicoId)
+      if (filtros.busqueda?.trim()) parametros.set('busqueda', filtros.busqueda.trim())
+      if (filtros.fechaDesde) parametros.set('fechaDesde', filtros.fechaDesde)
+      if (filtros.fechaHasta) parametros.set('fechaHasta', filtros.fechaHasta)
       const consulta = parametros.toString()
       return solicitar<OrdenServicioResponse[]>(
         `/ordenes-servicio${consulta ? `?${consulta}` : ''}`,
       )
     },
+    enabled: habilitado,
+    placeholderData: (anterior) => anterior,
   })
 }
 
@@ -95,6 +137,22 @@ export function useAbrirOrden() {
   return useMutation({
     mutationFn: (datos: AperturaOrdenRequest) =>
       solicitar<OrdenServicioResponse>('/ordenes-servicio', { metodo: 'POST', cuerpo: datos }),
+    onSuccess: async () => {
+      await consultas.invalidateQueries({ queryKey: clavesOrdenes.todas })
+    },
+  })
+}
+
+/** PUT /api/ordenes-servicio/{id}: datos de recepción y seguimiento de la orden. */
+export function useActualizarOrden() {
+  const consultas = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, datos }: { id: string; datos: ActualizarOrdenRequest }) =>
+      solicitar<OrdenServicioResponse>(`/ordenes-servicio/${id}`, {
+        metodo: 'PUT',
+        cuerpo: datos,
+      }),
     onSuccess: async () => {
       await consultas.invalidateQueries({ queryKey: clavesOrdenes.todas })
     },

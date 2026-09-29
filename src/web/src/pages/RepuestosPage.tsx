@@ -18,6 +18,8 @@ import {
 import type { CategoriaProductoResponse, MovimientoInventarioResponse, ProductoResponse } from '../api/tipos'
 import { colores } from '../theme/tokens'
 import { entero, fechaHora, soles } from '../utils/formato'
+import { useSesion } from '../auth/sesion'
+import { PERMISOS } from '../auth/acceso'
 
 export function RepuestosPage() {
   const [texto, setTexto] = useState('')
@@ -31,6 +33,14 @@ export function RepuestosPage() {
   const [modalMovimiento, setModalMovimiento] = useState(false)
   const [categoriaEnEdicion, setCategoriaEnEdicion] = useState<CategoriaProductoResponse | null>(null)
   const [modalCategoria, setModalCategoria] = useState(false)
+
+  const { tienePermiso } = useSesion()
+  const puedeCrear = tienePermiso(PERMISOS.inventarioCrear)
+  const puedeEditar = tienePermiso(PERMISOS.inventarioEditar)
+  const puedeMover = tienePermiso(PERMISOS.inventarioAjustar)
+  const puedeDarDeBaja = tienePermiso(PERMISOS.inventarioEliminar)
+  // El costo es dato de gestión: lo ve quien administra el catálogo o los reportes financieros.
+  const veCosto = puedeEditar || tienePermiso(PERMISOS.reportesVerFinancieros)
 
   // La búsqueda, la categoría y el stock bajo los filtra la API.
   const productos = useProductos({ categoriaId, busqueda: texto, bajoStock: soloBajoStock })
@@ -47,7 +57,7 @@ export function RepuestosPage() {
 
   const columnasProductos: TableProps<ProductoResponse>['columns'] = [
     { title: 'Código', dataIndex: 'codigo', className: 'num' },
-    { title: 'Producto', dataIndex: 'nombre', render: (nombre: string) => <strong>{nombre}</strong> },
+    { title: 'Repuesto', dataIndex: 'nombre', render: (nombre: string) => <strong>{nombre}</strong> },
     { title: 'Categoría', dataIndex: 'categoriaNombre' },
     {
       title: 'Stock',
@@ -68,13 +78,17 @@ export function RepuestosPage() {
         </span>
       ),
     },
-    {
-      title: 'Costo',
-      dataIndex: 'costo',
-      align: 'right',
-      className: 'num',
-      render: (costo: number) => soles(costo),
-    },
+    ...(veCosto
+      ? [
+          {
+            title: 'Costo',
+            dataIndex: 'costo',
+            align: 'right' as const,
+            className: 'num',
+            render: (costo: number) => soles(costo),
+          },
+        ]
+      : []),
     {
       title: 'Precio',
       dataIndex: 'precioVenta',
@@ -89,32 +103,40 @@ export function RepuestosPage() {
       align: 'right',
       render: (_, producto) => (
         <Space size="small">
-          <Button type="link" onClick={() => abrirMovimiento(producto, 'entradas')}>
-            Entrada
-          </Button>
-          <Button type="link" onClick={() => abrirMovimiento(producto, 'salidas')}>
-            Salida
-          </Button>
-          <Button type="link" onClick={() => abrirMovimiento(producto, 'ajustes')}>
-            Ajustar
-          </Button>
-          <Button
-            type="link"
-            onClick={() => {
-              setProductoEnEdicion(producto)
-              setModalProducto(true)
-            }}
-          >
-            Editar
-          </Button>
-          <Popconfirm
-            title="Dar de baja el producto"
-            okText="Dar de baja"
-            cancelText="Cancelar"
-            onConfirm={() => eliminarProducto.mutate(producto.id)}
-          >
-            <Button type="link">Dar de baja</Button>
-          </Popconfirm>
+          {puedeMover && (
+            <>
+              <Button type="link" onClick={() => abrirMovimiento(producto, 'entradas')}>
+                Entrada
+              </Button>
+              <Button type="link" onClick={() => abrirMovimiento(producto, 'salidas')}>
+                Salida
+              </Button>
+              <Button type="link" onClick={() => abrirMovimiento(producto, 'ajustes')}>
+                Ajustar
+              </Button>
+            </>
+          )}
+          {puedeEditar && (
+            <Button
+              type="link"
+              onClick={() => {
+                setProductoEnEdicion(producto)
+                setModalProducto(true)
+              }}
+            >
+              Editar
+            </Button>
+          )}
+          {puedeDarDeBaja && (
+            <Popconfirm
+              title="Dar de baja el repuesto"
+              okText="Dar de baja"
+              cancelText="Cancelar"
+              onConfirm={() => eliminarProducto.mutate(producto.id)}
+            >
+              <Button type="link">Dar de baja</Button>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -128,7 +150,7 @@ export function RepuestosPage() {
       render: (fecha: string) => fechaHora(fecha),
     },
     {
-      title: 'Producto',
+      title: 'Repuesto',
       key: 'producto',
       render: (_, movimiento) => `${movimiento.productoCodigo} · ${movimiento.productoNombre}`,
     },
@@ -149,50 +171,58 @@ export function RepuestosPage() {
       ),
     },
     { title: 'Cantidad', dataIndex: 'cantidad', align: 'right', className: 'num' },
-    {
-      title: 'Costo Unit.',
-      dataIndex: 'costoUnitario',
-      align: 'right',
-      className: 'num',
-      render: (costo: number | null) => (costo != null ? soles(costo) : '—'),
-    },
+    ...(veCosto
+      ? [
+          {
+            title: 'Costo unit.',
+            dataIndex: 'costoUnitario',
+            align: 'right' as const,
+            className: 'num',
+            render: (costo: number | null) => (costo != null ? soles(costo) : '—'),
+          },
+        ]
+      : []),
     { title: 'Motivo', dataIndex: 'motivo', render: (motivo: string | null) => motivo ?? '—' },
   ]
 
   const columnasCategorias: TableProps<CategoriaProductoResponse>['columns'] = [
     { title: 'Categoría', dataIndex: 'nombre', render: (nombre: string) => <strong>{nombre}</strong> },
     {
-      title: 'Stock Mín. Def.',
+      title: 'Mínimo por defecto',
       dataIndex: 'stockMinimoDefault',
       align: 'right',
       className: 'num',
-      render: (minimo: number | null) => (minimo != null ? entero(minimo) : '— (4)'),
+      render: (minimo: number | null) => (minimo != null ? entero(minimo) : '4, el general'),
     },
-    { title: 'Productos', dataIndex: 'cantidadProductos', align: 'right', className: 'num' },
+    { title: 'Repuestos', dataIndex: 'cantidadProductos', align: 'right', className: 'num' },
     {
       title: '',
       key: 'acciones',
       align: 'right',
       render: (_, categoria) => (
         <Space size="small">
-          <Button
-            type="link"
-            onClick={() => {
-              setCategoriaEnEdicion(categoria)
-              setModalCategoria(true)
-            }}
-          >
-            Editar
-          </Button>
-          <Popconfirm
-            title="Eliminar la categoría"
-            description="Solo se puede si no tiene productos."
-            okText="Eliminar"
-            cancelText="Cancelar"
-            onConfirm={() => eliminarCategoria.mutate(categoria.id)}
-          >
-            <Button type="link">Eliminar</Button>
-          </Popconfirm>
+          {puedeEditar && (
+            <Button
+              type="link"
+              onClick={() => {
+                setCategoriaEnEdicion(categoria)
+                setModalCategoria(true)
+              }}
+            >
+              Editar
+            </Button>
+          )}
+          {puedeDarDeBaja && (
+            <Popconfirm
+              title="Eliminar la categoría"
+              description="Solo se puede si no tiene repuestos."
+              okText="Eliminar"
+              cancelText="Cancelar"
+              onConfirm={() => eliminarCategoria.mutate(categoria.id)}
+            >
+              <Button type="link">Eliminar</Button>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -203,15 +233,17 @@ export function RepuestosPage() {
       <BarraSuperior
         titulo="Repuestos e inventario"
         acciones={
-          <Button
-            type="primary"
-            onClick={() => {
-              setProductoEnEdicion(null)
-              setModalProducto(true)
-            }}
-          >
-            Registrar producto
-          </Button>
+          puedeCrear && (
+            <Button
+              type="primary"
+              onClick={() => {
+                setProductoEnEdicion(null)
+                setModalProducto(true)
+              }}
+            >
+              Registrar repuesto
+            </Button>
+          )
         }
       />
       <div className="pagina">
@@ -222,7 +254,7 @@ export function RepuestosPage() {
           items={[
             {
               key: 'productos',
-              label: 'Productos',
+              label: 'Repuestos',
               children: (
                 <>
                   <div className="filtros">
@@ -261,7 +293,7 @@ export function RepuestosPage() {
                     dataSource={productos.data ?? []}
                     pagination={false}
                     loading={productos.isPending}
-                    locale={{ emptyText: 'No hay productos que coincidan' }}
+                    locale={{ emptyText: 'No hay repuestos que coincidan' }}
                   />
                 </>
               ),
@@ -291,17 +323,19 @@ export function RepuestosPage() {
               label: 'Categorías',
               children: (
                 <>
-                  <div className="filtros">
-                    <Button
-                      type="primary"
-                      onClick={() => {
-                        setCategoriaEnEdicion(null)
-                        setModalCategoria(true)
-                      }}
-                    >
-                      Nueva categoría
-                    </Button>
-                  </div>
+                  {puedeCrear && (
+                    <div className="filtros">
+                      <Button
+                        type="primary"
+                        onClick={() => {
+                          setCategoriaEnEdicion(null)
+                          setModalCategoria(true)
+                        }}
+                      >
+                        Nueva categoría
+                      </Button>
+                    </div>
+                  )}
                   <Table
                     rowKey="id"
                     columns={columnasCategorias}

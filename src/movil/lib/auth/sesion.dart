@@ -35,6 +35,16 @@ class EstadoSesion {
   bool get esVendedor => roles.contains('Vendedor');
   bool get esCliente => roles.contains('Cliente');
 
+  /// Tiene algún rol del taller o la tienda.
+  bool get esPersonal => esGerencia || esRecepcion || esTecnico || esVendedor;
+
+  /// Solo cliente: ve sus unidades y órdenes, nada del personal.
+  bool get soloCliente => esCliente && !esPersonal;
+
+  /// El backend trata como técnico a quien lo es sin ser Gerencia ni Recepción:
+  /// no aprueba, no entrega ni anula órdenes.
+  bool get soloTecnico => esTecnico && !esGerencia && !esRecepcion;
+
   bool tienePermiso(String permiso) {
     if (esGerencia) return true;
     return permisos.contains(permiso);

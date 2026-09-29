@@ -7,20 +7,20 @@ import { AvisoError } from '../components/AvisoError'
 import { ModalVehiculo } from '../components/ModalVehiculo'
 import { useEliminarVehiculo, useVehiculos } from '../api/vehiculos'
 import type { VehiculoResponse } from '../api/tipos'
-import { entero } from '../utils/formato'
-
-const tiposUnidadNombres: Record<number, string> = {
-  0: 'Motocicleta',
-  1: 'Cuatrimoto',
-  2: 'Moto acuática',
-  3: 'Generador',
-  4: 'Otro',
-}
+import { lecturaMedidor, nombreTipoUnidad } from '../utils/unidades'
+import { useSesion } from '../auth/sesion'
+import { PERMISOS } from '../auth/acceso'
 
 export function UnidadesPage() {
   const [texto, setTexto] = useState('')
   const [editando, setEditando] = useState<VehiculoResponse | null>(null)
   const [modalAbierto, setModalAbierto] = useState(false)
+
+  const { tienePermiso } = useSesion()
+  const puedeCrear = tienePermiso(PERMISOS.unidadesCrear)
+  const puedeEditar = tienePermiso(PERMISOS.unidadesEditar)
+  const puedeDarDeBaja = tienePermiso(PERMISOS.unidadesEliminar)
+  const veClientes = tienePermiso(PERMISOS.clientesVer)
 
   const vehiculos = useVehiculos()
   const eliminar = useEliminarVehiculo()
@@ -34,11 +34,7 @@ export function UnidadesPage() {
     {
       title: 'Tipo',
       key: 'tipoUnidad',
-      render: (_, vehiculo) => (
-        <Tag style={{ marginInlineEnd: 0 }}>
-          {vehiculo.tipoUnidad || (vehiculo.tipoUnidadId != null ? tiposUnidadNombres[vehiculo.tipoUnidadId] : 'Unidad')}
-        </Tag>
-      ),
+      render: (_, vehiculo) => <Tag style={{ marginInlineEnd: 0 }}>{nombreTipoUnidad(vehiculo)}</Tag>,
     },
     {
       title: 'Unidad',
@@ -50,14 +46,18 @@ export function UnidadesPage() {
       ),
     },
     {
-      title: 'Placa / VIN',
+      title: 'Placa / serie',
       key: 'identificador',
       className: 'num',
       render: (_, vehiculo) => (
         <div>
-          {vehiculo.placa && <div><strong>{vehiculo.placa}</strong></div>}
+          {vehiculo.placa && (
+            <div>
+              <strong>{vehiculo.placa}</strong>
+            </div>
+          )}
           {vehiculo.numeroSerieVIN && (
-            <div style={{ fontSize: '0.85em', opacity: 0.75 }}>VIN: {vehiculo.numeroSerieVIN}</div>
+            <div className="texto-secundario">Serie: {vehiculo.numeroSerieVIN}</div>
           )}
           {!vehiculo.placa && !vehiculo.numeroSerieVIN && '—'}
         </div>
@@ -68,18 +68,14 @@ export function UnidadesPage() {
       key: 'medidor',
       align: 'right',
       className: 'num',
-      render: (_, vehiculo) => {
-        const lectura = vehiculo.lecturaMedidorActual ?? vehiculo.kilometraje
-        if (lectura == null) return '—'
-        const unidad = vehiculo.tipoMedidor === 'HorasUso' || vehiculo.tipoMedidorId === 1 ? 'hrs' : 'km'
-        return `${entero(lectura)} ${unidad}`
-      },
+      render: (_, vehiculo) => lecturaMedidor(vehiculo),
     },
     { title: 'Color', dataIndex: 'color', render: (valor: string | null) => valor ?? '—' },
     {
       title: 'Propietario',
       key: 'propietario',
-      render: (_, vehiculo) => <Link to={`/clientes/${vehiculo.clienteId}`}>{vehiculo.clienteNombre}</Link>,
+      render: (_, vehiculo) =>
+        veClientes ? <Link to={`/clientes/${vehiculo.clienteId}`}>{vehiculo.clienteNombre}</Link> : vehiculo.clienteNombre,
     },
     {
       title: '',
@@ -87,23 +83,27 @@ export function UnidadesPage() {
       align: 'right',
       render: (_, vehiculo) => (
         <Space size="small">
-          <Button
-            type="link"
-            onClick={() => {
-              setEditando(vehiculo)
-              setModalAbierto(true)
-            }}
-          >
-            Editar
-          </Button>
-          <Popconfirm
-            title="Dar de baja la unidad"
-            okText="Dar de baja"
-            cancelText="Cancelar"
-            onConfirm={() => eliminar.mutate(vehiculo.id)}
-          >
-            <Button type="link">Dar de baja</Button>
-          </Popconfirm>
+          {puedeEditar && (
+            <Button
+              type="link"
+              onClick={() => {
+                setEditando(vehiculo)
+                setModalAbierto(true)
+              }}
+            >
+              Editar
+            </Button>
+          )}
+          {puedeDarDeBaja && (
+            <Popconfirm
+              title="Dar de baja la unidad"
+              okText="Dar de baja"
+              cancelText="Cancelar"
+              onConfirm={() => eliminar.mutate(vehiculo.id)}
+            >
+              <Button type="link">Dar de baja</Button>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -118,6 +118,7 @@ export function UnidadesPage() {
       vehiculo.numeroSerieVIN,
       vehiculo.numeroMotor,
       vehiculo.clienteNombre,
+      nombreTipoUnidad(vehiculo),
     ]
       .filter(Boolean)
       .join(' ')
@@ -130,9 +131,11 @@ export function UnidadesPage() {
       <BarraSuperior
         titulo="Unidades"
         acciones={
-          <Button type="primary" onClick={abrirNueva}>
-            Registrar unidad
-          </Button>
+          puedeCrear && (
+            <Button type="primary" onClick={abrirNueva}>
+              Registrar unidad
+            </Button>
+          )
         }
       />
       <div className="pagina">
@@ -142,11 +145,11 @@ export function UnidadesPage() {
             <Input
               id="buscar-unidades"
               prefix={<SearchOutlined />}
-              placeholder="Buscar por modelo, placa, serie/VIN o propietario"
+              placeholder="Buscar por tipo, modelo, placa, serie, motor o propietario"
               allowClear
               value={texto}
               onChange={(evento) => setTexto(evento.target.value)}
-              style={{ width: 340 }}
+              style={{ width: 380 }}
             />
           </div>
           <Table

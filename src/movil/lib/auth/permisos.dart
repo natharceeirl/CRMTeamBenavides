@@ -1,0 +1,24 @@
+/// Códigos de permiso del backend (PermisosDefinidos en
+/// src/CRMTeamBenavides.Api/Configuration/Autorizacion/Permisos.cs).
+///
+/// La API es la que decide: la app solo los usa para no mostrar lo que igual
+/// respondería 403.
+class Permisos {
+  const Permisos._();
+
+  static const clientesVer = 'clientes.ver';
+  static const unidadesVer = 'unidades.ver';
+  static const ordenesVerTodas = 'ordenes.ver_todas';
+  static const ordenesVerAsignadas = 'ordenes.ver_asignadas';
+  static const ordenesDiagnostico = 'ordenes.diagnostico';
+  static const ordenesCambiarEstado = 'ordenes.cambiar_estado';
+  static const ordenesAgregarItems = 'ordenes.agregar_items';
+  static const preciosModificar = 'precios.modificar';
+  static const inventarioVer = 'inventario.ver';
+  static const inventarioEditar = 'inventario.editar';
+  static const ventasVer = 'ventas.ver';
+  static const reportesVerOperativos = 'reportes.ver_operativos';
+  static const reportesVerFinancieros = 'reportes.ver_financieros';
+
+  static const verOrdenes = [ordenesVerTodas, ordenesVerAsignadas];
+}

@@ -11,6 +11,7 @@ OrdenServicioApi orden({
   required String placa,
   required int estadoId,
   String cliente = 'Luis Quispe',
+  String? numeroOrden,
 }) =>
     OrdenServicioApi(
       id: id,
@@ -22,6 +23,7 @@ OrdenServicioApi orden({
       estado: nombreEstadoOrden(estadoId),
       estadoId: estadoId,
       fechaApertura: DateTime.utc(2026, 9, 18, 13, 45),
+      numeroOrden: numeroOrden,
     );
 
 Future<void> montar(WidgetTester tester, List<OrdenServicioApi> ordenes) async {
@@ -41,8 +43,23 @@ void main() {
     ]);
 
     expect(find.textContaining('TEST-001'), findsOneWidget);
-    expect(find.text('Luis Quispe'), findsOneWidget);
+    expect(find.textContaining('Luis Quispe'), findsOneWidget);
     expect(find.text('Diagnóstico'), findsOneWidget);
+  });
+
+  testWidgets('muestra el correlativo y no deja un «·» suelto si no hay placa',
+      (tester) async {
+    await montar(tester, [
+      orden(
+        id: '64404ca3-0000-0000-0000-000000000001',
+        placa: '',
+        estadoId: EstadoOrden.abierta,
+        numeroOrden: 'OT-000123',
+      ),
+    ]);
+
+    expect(find.text('Yamaha MT-03'), findsOneWidget);
+    expect(find.text('OT-000123 · Luis Quispe'), findsOneWidget);
   });
 
   testWidgets('el filtro «solo en taller» esconde las entregadas', (tester) async {

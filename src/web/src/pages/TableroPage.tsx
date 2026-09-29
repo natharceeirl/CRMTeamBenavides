@@ -16,6 +16,8 @@ import {
 } from '../api/reportes'
 import type { OrdenServicioResponse } from '../api/tipos'
 import { entero, fechaHora, referenciaOrden } from '../utils/formato'
+import { useSesion } from '../auth/sesion'
+import { ACCESO_ORDENES, PERMISOS, cumpleAcceso } from '../auth/acceso'
 
 const formatoDia = new Intl.DateTimeFormat('es-PE', {
   weekday: 'long',
@@ -31,18 +33,19 @@ const hoyEnPalabras = () => {
 const columnas: TableProps<OrdenServicioResponse>['columns'] = [
   {
     title: 'Orden',
-    dataIndex: 'id',
+    key: 'orden',
     className: 'num',
-    render: (id: string) => (
-      <Link to={`/ordenes/${id}`} style={{ fontWeight: 600 }}>
-        {referenciaOrden(id)}
+    render: (_, orden) => (
+      <Link to={`/ordenes/${orden.id}`} style={{ fontWeight: 600 }}>
+        {referenciaOrden(orden)}
       </Link>
     ),
   },
   {
     title: 'Unidad',
     key: 'unidad',
-    render: (_, orden) => `${orden.vehiculoMarca} ${orden.vehiculoModelo} · ${orden.vehiculoPlaca}`,
+    render: (_, orden) =>
+      `${orden.vehiculoMarca} ${orden.vehiculoModelo} · ${orden.vehiculoPlaca ?? 'sin placa'}`,
   },
   { title: 'Cliente', dataIndex: 'clienteNombre' },
   {
@@ -58,19 +61,23 @@ const columnas: TableProps<OrdenServicioResponse>['columns'] = [
   },
   {
     title: 'Ingreso',
-    dataIndex: 'fechaApertura',
+    key: 'ingreso',
     className: 'num',
-    render: (fecha: string) => fechaHora(fecha),
+    render: (_, orden) => fechaHora(orden.fechaIngreso ?? orden.fechaApertura),
   },
 ]
 
 export function TableroPage() {
   const navigate = useNavigate()
   const [periodo, setPeriodo] = useState<Periodo>('Semana')
+  const sesion = useSesion()
+  // El vendedor ve el tablero pero no las órdenes del taller.
+  const veOrdenes = cumpleAcceso(ACCESO_ORDENES, sesion)
+  const puedeCrearOrden = sesion.tienePermiso(PERMISOS.ordenesCrear)
 
   const rango = rangoDelPeriodo(periodo)
   const resumen = useResumenDashboard(rango)
-  const ordenes = useOrdenes()
+  const ordenes = useOrdenes({}, veOrdenes)
 
   // El tablero muestra lo que sigue en el taller: ni entregadas ni anuladas.
   const activas = (ordenes.data ?? []).filter((orden) => !esEstadoTerminal(orden.estadoId))
@@ -88,9 +95,11 @@ export function TableroPage() {
               value={periodo}
               onChange={setPeriodo}
             />
-            <Button type="primary" onClick={() => navigate('/ordenes/nueva')}>
-              Crear orden
-            </Button>
+            {puedeCrearOrden && (
+              <Button type="primary" onClick={() => navigate('/ordenes/nueva')}>
+                Crear orden
+              </Button>
+            )}
           </>
         }
       />
@@ -125,19 +134,21 @@ export function TableroPage() {
           />
         </section>
 
-        <section>
-          <div className="seccion-titulo">
-            <h2>Órdenes en taller</h2>
-          </div>
-          <Table
-            rowKey="id"
-            columns={columnas}
-            dataSource={activas}
-            pagination={false}
-            loading={ordenes.isPending}
-            locale={{ emptyText: 'No hay órdenes abiertas' }}
-          />
-        </section>
+        {veOrdenes && (
+          <section>
+            <div className="seccion-titulo">
+              <h2>Órdenes en taller</h2>
+            </div>
+            <Table
+              rowKey="id"
+              columns={columnas}
+              dataSource={activas}
+              pagination={false}
+              loading={ordenes.isPending}
+              locale={{ emptyText: 'No hay órdenes abiertas' }}
+            />
+          </section>
+        )}
       </div>
     </>
   )

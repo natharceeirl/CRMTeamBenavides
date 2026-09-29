@@ -1,8 +1,11 @@
 import { Navigate, Route, Routes } from 'react-router'
 import { RutaProtegida } from './auth/RutaProtegida'
+import { RutaConPermiso } from './auth/RutaConPermiso'
+import { ACCESO_CHATBOT, ACCESO_ORDENES, PERMISOS } from './auth/acceso'
 import { AppLayout } from './layout/AppLayout'
 import { LoginPage } from './pages/LoginPage'
-import { TableroPage } from './pages/TableroPage'
+import { InicioPage } from './pages/InicioPage'
+import { SinAccesoPage } from './pages/SinAccesoPage'
 import { OrdenesPage } from './pages/OrdenesPage'
 import { NuevaOrdenPage } from './pages/NuevaOrdenPage'
 import { OrdenDetallePage } from './pages/OrdenDetallePage'
@@ -21,18 +24,37 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<RutaProtegida />}>
         <Route element={<AppLayout />}>
-          <Route index element={<TableroPage />} />
-          <Route path="ordenes" element={<OrdenesPage />} />
-          <Route path="ordenes/nueva" element={<NuevaOrdenPage />} />
-          <Route path="ordenes/:id" element={<OrdenDetallePage />} />
-          <Route path="clientes" element={<ClientesPage />} />
-          <Route path="clientes/:id" element={<ClienteDetallePage />} />
-          <Route path="unidades" element={<UnidadesPage />} />
-          <Route path="repuestos" element={<RepuestosPage />} />
-          <Route path="ventas" element={<VentasPage />} />
-          <Route path="reportes" element={<ReportesPage />} />
-          <Route path="chatbot" element={<ChatbotPage />} />
-          <Route path="usuarios" element={<UsuariosPage />} />
+          <Route index element={<InicioPage />} />
+          <Route path="sin-acceso" element={<SinAccesoPage />} />
+          <Route element={<RutaConPermiso {...ACCESO_ORDENES} />}>
+            <Route path="ordenes" element={<OrdenesPage />} />
+            <Route path="ordenes/:id" element={<OrdenDetallePage />} />
+          </Route>
+          <Route element={<RutaConPermiso permiso={PERMISOS.ordenesCrear} />}>
+            <Route path="ordenes/nueva" element={<NuevaOrdenPage />} />
+          </Route>
+          <Route element={<RutaConPermiso permiso={PERMISOS.clientesVer} />}>
+            <Route path="clientes" element={<ClientesPage />} />
+            <Route path="clientes/:id" element={<ClienteDetallePage />} />
+          </Route>
+          <Route element={<RutaConPermiso permiso={PERMISOS.unidadesVer} />}>
+            <Route path="unidades" element={<UnidadesPage />} />
+          </Route>
+          <Route element={<RutaConPermiso permiso={PERMISOS.inventarioVer} />}>
+            <Route path="repuestos" element={<RepuestosPage />} />
+          </Route>
+          <Route element={<RutaConPermiso permiso={PERMISOS.ventasVer} />}>
+            <Route path="ventas" element={<VentasPage />} />
+          </Route>
+          <Route element={<RutaConPermiso permiso={PERMISOS.reportesVerOperativos} />}>
+            <Route path="reportes" element={<ReportesPage />} />
+          </Route>
+          <Route element={<RutaConPermiso {...ACCESO_CHATBOT} />}>
+            <Route path="chatbot" element={<ChatbotPage />} />
+          </Route>
+          <Route element={<RutaConPermiso permiso={PERMISOS.usuariosVer} />}>
+            <Route path="usuarios" element={<UsuariosPage />} />
+          </Route>
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

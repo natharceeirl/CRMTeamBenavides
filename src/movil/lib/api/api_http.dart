@@ -124,13 +124,52 @@ class ApiHttp {
   }
 
   /// El backend pasa la orden a Diagnóstico si estaba Abierta.
-  Future<OrdenServicioApi> registrarDiagnostico(String id, String diagnostico) async {
+  Future<OrdenServicioApi> registrarDiagnostico(
+    String id,
+    String diagnostico, {
+    String? solucion,
+  }) async {
     try {
       final respuesta = await _dio.put<Map<String, dynamic>>(
         '/api/ordenes-servicio/$id/diagnostico',
-        data: {'diagnostico': diagnostico},
+        data: {
+          'diagnostico': diagnostico,
+          if (solucion != null && solucion.isNotEmpty) 'solucion': solucion,
+        },
       );
       return OrdenServicioApi.desdeJson(respuesta.data!);
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
+  /// La observación queda en el historial de la orden con el usuario y la hora.
+  Future<OrdenServicioApi> cambiarEstado(
+    String id,
+    int nuevoEstado, {
+    String? observaciones,
+  }) async {
+    try {
+      final respuesta = await _dio.put<Map<String, dynamic>>(
+        '/api/ordenes-servicio/$id/estado',
+        data: {
+          'nuevoEstado': nuevoEstado,
+          'observaciones': observaciones == null || observaciones.isEmpty ? null : observaciones,
+        },
+      );
+      return OrdenServicioApi.desdeJson(respuesta.data!);
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
+  /// Nombres exactos de CambiarPasswordRequest en el backend.
+  Future<void> cambiarPassword(String actual, String nueva) async {
+    try {
+      await _dio.post<void>(
+        '/api/auth/cambiar-password',
+        data: {'passwordActual': actual, 'passwordNueva': nueva},
+      );
     } on DioException catch (fallo) {
       throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
     }

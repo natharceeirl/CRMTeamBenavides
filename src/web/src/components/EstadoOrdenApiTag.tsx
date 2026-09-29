@@ -3,13 +3,7 @@ import { Tag } from 'antd'
 import { colores } from '../theme/tokens'
 import { ESTADO, nombresEstado } from '../api/ordenes'
 
-/**
- * Estado de una orden que viene de la API.
- *
- * Convive con EstadoOrdenTag, que pinta los nueve estados propuestos en el mapa
- * funcional y todavía usan los wireframes del tablero. Cuando el Ingeniero
- * cierre el flujo con el cliente, los dos se unifican.
- */
+/** Estado de una orden que viene de la API: los siete estados que el cliente decidió mantener. */
 const estilos: Record<number, CSSProperties> = {
   [ESTADO.abierta]: {
     background: 'transparent',

@@ -24,13 +24,15 @@ export type UsuarioActualResponse = {
   clienteId: string | null
 }
 
+/** Nombres exactos de CambiarPasswordRequest en el backend. */
 export type CambiarPasswordRequest = {
   passwordActual: string
-  nuevoPassword: string
+  passwordNueva: string
 }
 
+/** Nombre exacto de ResetPasswordRequest en el backend. */
 export type ResetPasswordRequest = {
-  nuevoPassword: string
+  nuevaPassword: string
 }
 
 export type ClienteResponse = {
