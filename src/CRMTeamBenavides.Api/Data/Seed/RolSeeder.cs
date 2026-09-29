@@ -62,6 +62,8 @@ public static class RolSeeder
             [PermisosDefinidos.CajaConsultar] = "Consultar saldo y movimientos de caja chica",
             [PermisosDefinidos.CajaRegistrarIngreso] = "Registrar ingresos a la caja chica",
             [PermisosDefinidos.CajaRegistrarEgreso] = "Registrar egresos y gastos en caja chica",
+            [PermisosDefinidos.CajaAperturar] = "Aperturar turno de caja chica",
+            [PermisosDefinidos.CajaCerrar] = "Cerrar turno de caja chica",
             [PermisosDefinidos.ReportesVerOperativos] = "Visualizar reportes operativos y tablero general",
             [PermisosDefinidos.ReportesVerFinancieros] = "Visualizar reportes de rentabilidad, ganancias y finanzas",
             [PermisosDefinidos.ConfiguracionEditar] = "Modificar parámetros generales, empresa e IGV",
@@ -176,6 +178,7 @@ public static class RolSeeder
                 PermisosDefinidos.ServiciosVer, PermisosDefinidos.ServiciosCrear, PermisosDefinidos.ServiciosEditar,
                 PermisosDefinidos.VentasVer, PermisosDefinidos.VentasCrear,
                 PermisosDefinidos.CajaConsultar, PermisosDefinidos.CajaRegistrarIngreso, PermisosDefinidos.CajaRegistrarEgreso,
+                PermisosDefinidos.CajaAperturar, PermisosDefinidos.CajaCerrar,
                 PermisosDefinidos.ReportesVerOperativos
             },
 

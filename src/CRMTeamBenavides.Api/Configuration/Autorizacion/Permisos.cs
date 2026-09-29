@@ -58,6 +58,8 @@ public static class PermisosDefinidos
     public const string CajaConsultar = "caja.consultar";
     public const string CajaRegistrarIngreso = "caja.registrar_ingreso";
     public const string CajaRegistrarEgreso = "caja.registrar_egreso";
+    public const string CajaAperturar = "caja.aperturar";
+    public const string CajaCerrar = "caja.cerrar";
 
     // Reportes y Dashboard
     public const string ReportesVerOperativos = "reportes.ver_operativos";
@@ -82,7 +84,7 @@ public static class PermisosDefinidos
         InventarioVer, InventarioCrear, InventarioEditar, InventarioAjustar, InventarioEliminar,
         ServiciosVer, ServiciosCrear, ServiciosEditar, ServiciosEliminar,
         VentasVer, VentasCrear, VentasAnular, DescuentosAplicar,
-        CajaConsultar, CajaRegistrarIngreso, CajaRegistrarEgreso,
+        CajaConsultar, CajaRegistrarIngreso, CajaRegistrarEgreso, CajaAperturar, CajaCerrar,
         ReportesVerOperativos, ReportesVerFinancieros,
         ConfiguracionEditar, AuditoriaVer,
         PortalAcceso

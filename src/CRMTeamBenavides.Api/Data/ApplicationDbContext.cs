@@ -27,6 +27,11 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
 
     // Configuración
     public DbSet<ConfiguracionEmpresa> ConfiguracionesEmpresa => Set<ConfiguracionEmpresa>();
+    public DbSet<HistorialTipoCambio> HistorialTiposCambio => Set<HistorialTipoCambio>();
+
+    // Caja Chica
+    public DbSet<CajaChica> CajasChicas => Set<CajaChica>();
+    public DbSet<MovimientoCajaChica> MovimientosCajaChica => Set<MovimientoCajaChica>();
 
     // Inventario
     public DbSet<CategoriaProducto> CategoriasProducto => Set<CategoriaProducto>();
@@ -146,6 +151,63 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
         modelBuilder.Entity<ConfiguracionEmpresa>(entity =>
         {
             entity.Property(c => c.PorcentajeIgv).HasPrecision(5, 2);
+            entity.Property(c => c.TipoCambioVigente).HasPrecision(8, 4);
+        });
+
+        // Tipo de Cambio
+        modelBuilder.Entity<HistorialTipoCambio>(entity =>
+        {
+            entity.Property(h => h.ValorCompra).HasPrecision(8, 4);
+            entity.Property(h => h.ValorVenta).HasPrecision(8, 4);
+
+            entity.HasOne(h => h.Usuario)
+                .WithMany()
+                .HasForeignKey(h => h.UsuarioId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(h => h.FechaVigencia);
+        });
+
+        // Caja Chica
+        modelBuilder.Entity<CajaChica>(entity =>
+        {
+            entity.Property(c => c.MontoApertura).HasPrecision(12, 2);
+            entity.Property(c => c.MontoCierre).HasPrecision(12, 2);
+            entity.Property(c => c.SaldoCalculado).HasPrecision(12, 2);
+
+            entity.HasOne(c => c.UsuarioApertura)
+                .WithMany()
+                .HasForeignKey(c => c.UsuarioAperturaId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(c => c.UsuarioCierre)
+                .WithMany()
+                .HasForeignKey(c => c.UsuarioCierreId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasMany(c => c.Movimientos)
+                .WithOne(m => m.CajaChica)
+                .HasForeignKey(m => m.CajaChicaId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(c => c.Estado)
+                .IsUnique()
+                .HasFilter("\"Estado\" = 0");
+            entity.HasIndex(c => c.FechaApertura);
+        });
+
+        modelBuilder.Entity<MovimientoCajaChica>(entity =>
+        {
+            entity.Property(m => m.Monto).HasPrecision(12, 2);
+
+            entity.HasOne(m => m.Usuario)
+                .WithMany()
+                .HasForeignKey(m => m.UsuarioId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(m => m.CajaChicaId);
+            entity.HasIndex(m => m.Fecha);
+            entity.HasIndex(m => m.Tipo);
         });
 
         // Catálogo de Servicios

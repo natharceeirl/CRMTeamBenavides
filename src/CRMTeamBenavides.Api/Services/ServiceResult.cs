@@ -5,7 +5,8 @@ public enum ServiceResultStatus
     Success,
     NotFound,
     ValidationError,
-    Forbidden
+    Forbidden,
+    Conflict
 }
 
 public class ServiceResult<T>
@@ -19,12 +20,15 @@ public class ServiceResult<T>
     public static ServiceResult<T> Success(T data) =>
         new() { Status = ServiceResultStatus.Success, Data = data };
 
-    public static ServiceResult<T> NotFound() =>
-        new() { Status = ServiceResultStatus.NotFound };
+    public static ServiceResult<T> NotFound(string? error = null) =>
+        new() { Status = ServiceResultStatus.NotFound, Error = error };
 
     public static ServiceResult<T> Invalid(string error) =>
         new() { Status = ServiceResultStatus.ValidationError, Error = error };
 
     public static ServiceResult<T> Forbidden(string? error = null) =>
         new() { Status = ServiceResultStatus.Forbidden, Error = error ?? "No tiene autorización para realizar esta acción." };
+
+    public static ServiceResult<T> Conflict(string error) =>
+        new() { Status = ServiceResultStatus.Conflict, Error = error };
 }
