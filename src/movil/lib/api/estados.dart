@@ -43,6 +43,53 @@ const estadosVedadosAlTecnico = {
   EstadoOrden.cancelada,
 };
 
+/// Enum EstadoPresupuestoCliente del backend.
+class EstadoPresupuesto {
+  const EstadoPresupuesto._();
+
+  static const pendiente = 0;
+  static const aprobado = 1;
+  static const rechazado = 2;
+}
+
+const nombresEstadoPresupuesto = <int, String>{
+  EstadoPresupuesto.pendiente: 'Pendiente',
+  EstadoPresupuesto.aprobado: 'Aprobado',
+  EstadoPresupuesto.rechazado: 'Rechazado',
+};
+
+/// Enum EstadoAprobacionGerencia del backend.
+class EstadoGerencia {
+  const EstadoGerencia._();
+
+  static const noAplica = 0;
+  static const pendiente = 1;
+  static const aprobado = 2;
+  static const rechazado = 3;
+}
+
+const nombresEstadoGerencia = <int, String>{
+  EstadoGerencia.noAplica: 'No aplica',
+  EstadoGerencia.pendiente: 'Pendiente',
+  EstadoGerencia.aprobado: 'Aprobada',
+  EstadoGerencia.rechazado: 'Rechazada',
+};
+
+/// Por qué la orden no puede pasar a «Aprobada», o null si puede. Son las
+/// reglas de OrdenServicioService.CambiarEstadoAsync.
+String? motivoBloqueoAprobacion({int? presupuesto, int? gerencia}) {
+  if (presupuesto == EstadoPresupuesto.rechazado) {
+    return 'El cliente rechazó el presupuesto.';
+  }
+  if (gerencia == EstadoGerencia.pendiente) {
+    return 'Falta la aprobación de Gerencia.';
+  }
+  if (gerencia == EstadoGerencia.rechazado) {
+    return 'Gerencia rechazó la orden.';
+  }
+  return null;
+}
+
 /// Enum TipoAtencion del backend.
 const nombresTipoAtencion = <int, String>{
   0: 'Mantenimiento preventivo',

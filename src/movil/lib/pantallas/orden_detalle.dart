@@ -69,11 +69,18 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
     }
   }
 
-  Future<void> _cambiarEstado(int destino) async {
-    final anulando = destino == EstadoOrden.cancelada;
+  /// Pide la observación, ejecuta la acción y avisa. El motivo obligatorio queda
+  /// en el historial para quien retome la orden.
+  Future<void> _conObservacion({
+    required String titulo,
+    required bool obligatoria,
+    String? aviso,
+    required Future<void> Function(String observacion) accion,
+    required String exito,
+  }) async {
     final observacion = await showDialog<String>(
       context: context,
-      builder: (_) => _DialogoCambioDeEstado(destino: destino, obligatoria: anulando),
+      builder: (_) => _DialogoObservacion(titulo: titulo, obligatoria: obligatoria, aviso: aviso),
     );
     if (observacion == null) {
       return;
@@ -85,15 +92,11 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
     });
 
     try {
-      await ref
-          .read(apiProvider)
-          .cambiarEstado(widget.ordenId, destino, observaciones: observacion);
+      await accion(observacion);
       _refrescar();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('La orden pasó a «${nombreEstadoOrden(destino)}»')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(exito)));
       }
     } catch (fallo) {
       if (mounted) {
@@ -104,6 +107,37 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
         setState(() => _guardando = false);
       }
     }
+  }
+
+  Future<void> _cambiarEstado(int destino) {
+    final anulando = destino == EstadoOrden.cancelada;
+    return _conObservacion(
+      titulo: anulando ? 'Anular la orden' : 'Pasar a ${nombreEstadoOrden(destino)}',
+      obligatoria: anulando,
+      aviso: anulando ? 'Los repuestos asignados vuelven al stock.' : null,
+      accion: (observacion) => ref
+          .read(apiProvider)
+          .cambiarEstado(widget.ordenId, destino, observaciones: observacion),
+      exito: 'La orden pasó a «${nombreEstadoOrden(destino)}»',
+    );
+  }
+
+  Future<void> _responderPresupuesto(int estado, {required bool esCliente}) {
+    final aprueba = estado == EstadoPresupuesto.aprobado;
+    final String titulo;
+    if (esCliente) {
+      titulo = aprueba ? 'Aprobar el presupuesto' : 'Rechazar el presupuesto';
+    } else {
+      titulo = aprueba ? 'El cliente aprobó el presupuesto' : 'El cliente rechazó el presupuesto';
+    }
+    return _conObservacion(
+      titulo: titulo,
+      obligatoria: !aprueba,
+      accion: (observacion) => ref
+          .read(apiProvider)
+          .responderPresupuesto(widget.ordenId, estado, observaciones: observacion),
+      exito: aprueba ? 'Presupuesto aprobado' : 'Presupuesto rechazado',
+    );
   }
 
   @override
@@ -137,21 +171,49 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
 
           final puedeDiagnosticar = sesion.tienePermiso(Permisos.ordenesDiagnostico) &&
               permiteDiagnostico(datosOrden.estadoId);
-          final destinos = sesion.tienePermiso(Permisos.ordenesCambiarEstado)
+          final bloqueoAprobacion = motivoBloqueoAprobacion(
+            presupuesto: datosOrden.estadoPresupuestoId,
+            gerencia: datosOrden.estadoGerenciaId,
+          );
+          final posibles = sesion.tienePermiso(Permisos.ordenesCambiarEstado)
               ? (transicionesOrden[datosOrden.estadoId] ?? const <int>[])
                   .where((destino) =>
                       !sesion.soloTecnico || !estadosVedadosAlTecnico.contains(destino))
                   .toList()
               : const <int>[];
+          // «Aprobada» no se ofrece si el presupuesto o Gerencia lo impiden: se
+          // explica el motivo en su lugar.
+          final destinos = bloqueoAprobacion == null
+              ? posibles
+              : posibles.where((destino) => destino != EstadoOrden.aprobada).toList();
+          final aprobadaBloqueada = bloqueoAprobacion != null &&
+              posibles.contains(EstadoOrden.aprobada);
 
           return ListView(
             padding: const EdgeInsets.only(bottom: 32),
             children: [
               _FichaOrden(datos: datos),
+              _Aprobaciones(
+                orden: datosOrden,
+                ocupado: _guardando,
+                puedeResponder: !esEstadoTerminal(datosOrden.estadoId) &&
+                    sesion.tieneAlgunPermiso(Permisos.responderPresupuesto),
+                esCliente: sesion.soloCliente,
+                alResponder: (estado) =>
+                    _responderPresupuesto(estado, esCliente: sesion.soloCliente),
+              ),
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                   child: Text(_error!, style: const TextStyle(color: Marca.acento)),
+                ),
+              if (aprobadaBloqueada)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: Text(
+                    'No puede pasar a «Aprobada»: $bloqueoAprobacion',
+                    style: const TextStyle(color: Marca.textoSecundario),
+                  ),
                 ),
               if (destinos.isNotEmpty)
                 Padding(
@@ -371,24 +433,34 @@ class _CambioDeEstado extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(top: 5),
-            child: Icon(Icons.circle, size: 10, color: Marca.acento),
+          Padding(
+            padding: const EdgeInsets.only(top: 5),
+            child: Icon(
+              Icons.circle,
+              size: 10,
+              color: cambio.cambiaEstado ? Marca.acento : Marca.borde,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Las aprobaciones y la asignación de técnico se anotan sin
+                // cambiar el estado: se muestra la anotación como título.
                 Text(
-                  nombreEstadoOrden(cambio.estadoNuevoId),
+                  cambio.cambiaEstado
+                      ? nombreEstadoOrden(cambio.estadoNuevoId)
+                      : (cambio.observaciones ?? 'Actualización'),
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 Text(
                   '${fechaHora(cambio.fechaCambio)} · ${cambio.usuarioNombre ?? 'Sistema'}',
                   style: const TextStyle(color: Marca.textoSecundario, fontSize: 12),
                 ),
-                if (cambio.observaciones != null && cambio.observaciones!.isNotEmpty)
+                if (cambio.cambiaEstado &&
+                    cambio.observaciones != null &&
+                    cambio.observaciones!.isNotEmpty)
                   Text(cambio.observaciones!),
               ],
             ),
@@ -399,18 +471,95 @@ class _CambioDeEstado extends StatelessWidget {
   }
 }
 
-/// Pide la observación del cambio. Devuelve null si se cancela.
-class _DialogoCambioDeEstado extends StatefulWidget {
-  const _DialogoCambioDeEstado({required this.destino, required this.obligatoria});
+/// Respuesta del cliente al presupuesto y decisión de Gerencia. El cliente
+/// responde desde aquí; Gerencia decide desde la web.
+class _Aprobaciones extends StatelessWidget {
+  const _Aprobaciones({
+    required this.orden,
+    required this.ocupado,
+    required this.puedeResponder,
+    required this.esCliente,
+    required this.alResponder,
+  });
 
-  final int destino;
-  final bool obligatoria;
+  final OrdenServicioApi orden;
+  final bool ocupado;
+  final bool puedeResponder;
+  final bool esCliente;
+  final void Function(int estado) alResponder;
 
   @override
-  State<_DialogoCambioDeEstado> createState() => _DialogoCambioDeEstadoState();
+  Widget build(BuildContext context) {
+    final presupuesto = orden.estadoPresupuestoId;
+    final gerencia = orden.estadoGerenciaId;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Aprobaciones',
+              style: TextStyle(fontFamily: Marca.fuenteTitulos, fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            _Dato(
+              'Presupuesto',
+              [
+                nombresEstadoPresupuesto[presupuesto],
+                if (orden.fechaRespuestaCliente != null) fechaHora(orden.fechaRespuestaCliente),
+                orden.observacionesPresupuesto,
+              ].whereType<String>().where((texto) => texto.isNotEmpty).join(' · '),
+            ),
+            _Dato(
+              'Gerencia',
+              [
+                nombresEstadoGerencia[gerencia],
+                if (gerencia != EstadoGerencia.noAplica) orden.usuarioAprobacionGerencia,
+                orden.observacionesGerencia,
+              ].whereType<String>().where((texto) => texto.isNotEmpty).join(' · '),
+            ),
+            if (puedeResponder) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (presupuesto != EstadoPresupuesto.aprobado)
+                    FilledButton(
+                      style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
+                      onPressed: ocupado ? null : () => alResponder(EstadoPresupuesto.aprobado),
+                      child: Text(esCliente ? 'Aprobar presupuesto' : 'El cliente aprobó'),
+                    ),
+                  if (presupuesto != EstadoPresupuesto.rechazado)
+                    OutlinedButton(
+                      onPressed: ocupado ? null : () => alResponder(EstadoPresupuesto.rechazado),
+                      child: Text(esCliente ? 'Rechazar' : 'El cliente rechazó'),
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-class _DialogoCambioDeEstadoState extends State<_DialogoCambioDeEstado> {
+/// Pide una observación para la acción. Devuelve null si se cancela.
+class _DialogoObservacion extends StatefulWidget {
+  const _DialogoObservacion({required this.titulo, required this.obligatoria, this.aviso});
+
+  final String titulo;
+  final bool obligatoria;
+  final String? aviso;
+
+  @override
+  State<_DialogoObservacion> createState() => _DialogoObservacionState();
+}
+
+class _DialogoObservacionState extends State<_DialogoObservacion> {
   final _observacion = TextEditingController();
 
   @override
@@ -421,18 +570,16 @@ class _DialogoCambioDeEstadoState extends State<_DialogoCambioDeEstado> {
 
   @override
   Widget build(BuildContext context) {
-    final anulando = widget.destino == EstadoOrden.cancelada;
-
     return AlertDialog(
-      title: Text(anulando ? 'Anular la orden' : 'Pasar a ${nombreEstadoOrden(widget.destino)}'),
+      title: Text(widget.titulo),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (anulando)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 8),
-              child: Text('Los repuestos asignados vuelven al stock.'),
+          if (widget.aviso != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(widget.aviso!),
             ),
           TextField(
             controller: _observacion,

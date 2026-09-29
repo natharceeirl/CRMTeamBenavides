@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Input, Modal, Popconfirm, Select, Table, Tag, Timeline, type TableProps } from 'antd'
+import { Button, Input, Modal, Popconfirm, Table, Tag, Timeline, Tooltip, type TableProps } from 'antd'
 import { Link, useParams } from 'react-router'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
@@ -8,6 +8,8 @@ import { Indicadores } from '../components/Indicadores'
 import { ModalRepuestoOrden } from '../components/ModalRepuestoOrden'
 import { ModalItemOrden } from '../components/ModalItemOrden'
 import { ModalEditarOrden } from '../components/ModalEditarOrden'
+import { ModalAsignarTecnico } from '../components/ModalAsignarTecnico'
+import { PanelAprobaciones } from '../components/PanelAprobaciones'
 import {
   ESTADO,
   MODALIDADES_ATENCION,
@@ -16,6 +18,7 @@ import {
   esEstadoTerminal,
   estadosVedadosAlTecnico,
   etiquetaDe,
+  motivoBloqueoAprobacion,
   nombresEstado,
   permiteEditarDetalles,
   useCambiarEstado,
@@ -24,7 +27,6 @@ import {
   useRegistrarDiagnostico,
   transicionesValidas,
 } from '../api/ordenes'
-import { useTecnicos } from '../api/usuarios'
 import {
   nombresTipoAfectacion,
   nombresTipoItem,
@@ -54,7 +56,6 @@ export function OrdenDetallePage() {
   const soloTecnico = sesion.esTecnico && !sesion.esGerencia && !sesion.esRecepcion
 
   const orden = useOrden(id)
-  const tecnicos = useTecnicos(puedeAsignar && tienePermiso(PERMISOS.usuariosVer))
 
   const guardarDiagnostico = useRegistrarDiagnostico()
   const eliminarDetalle = useEliminarDetalle()
@@ -62,12 +63,12 @@ export function OrdenDetallePage() {
 
   const [textoDiagnostico, setTextoDiagnostico] = useState<string | null>(null)
   const [textoSolucion, setTextoSolucion] = useState<string | null>(null)
-  const [tecnico, setTecnico] = useState<string | null>(null)
   const [estadoDestino, setEstadoDestino] = useState<number | null>(null)
   const [observacionesCambio, setObservacionesCambio] = useState('')
   const [modalRepuesto, setModalRepuesto] = useState(false)
   const [modalItem, setModalItem] = useState(false)
   const [modalEditar, setModalEditar] = useState(false)
+  const [modalTecnico, setModalTecnico] = useState(false)
 
   if (orden.isPending) {
     return (
@@ -102,6 +103,7 @@ export function OrdenDetallePage() {
     : []
   const historial = [...(datos.historial ?? [])].sort(porFecha)
   const anulando = estadoDestino === ESTADO.cancelada
+  const bloqueoAprobacion = motivoBloqueoAprobacion(datos)
 
   const columnas: TableProps<DetalleServicioResponse>['columns'] = [
     { title: 'Concepto', dataIndex: 'descripcion' },
@@ -184,14 +186,13 @@ export function OrdenDetallePage() {
       id: datos.id,
       datos: {
         diagnostico: diagnosticoActual,
-        tecnicoAsignadoId: tecnico ?? datos.tecnicoAsignadoId,
+        tecnicoAsignadoId: datos.tecnicoAsignadoId,
         observaciones: null,
         solucion: solucion || null,
       },
     })
     setTextoDiagnostico(null)
     setTextoSolucion(null)
-    setTecnico(null)
   }
 
   const cerrarCambioDeEstado = () => {
@@ -231,19 +232,29 @@ export function OrdenDetallePage() {
           </div>
         </div>
         <div className="acciones">
+          {puedeAsignar && !esEstadoTerminal(datos.estadoId) && (
+            <Button onClick={() => setModalTecnico(true)}>
+              {datos.tecnicoAsignadoId ? 'Cambiar técnico' : 'Asignar técnico'}
+            </Button>
+          )}
           {puedeEditarOrden && !esEstadoTerminal(datos.estadoId) && (
             <Button onClick={() => setModalEditar(true)}>Editar datos</Button>
           )}
-          {destinos.map((destino) => (
-            <Button
-              key={destino}
-              danger={destino === ESTADO.cancelada}
-              type={destino === ESTADO.cancelada ? 'default' : 'primary'}
-              onClick={() => setEstadoDestino(destino)}
-            >
-              {destino === ESTADO.cancelada ? 'Anular' : `Pasar a ${nombresEstado[destino]}`}
-            </Button>
-          ))}
+          {destinos.map((destino) => {
+            const bloqueado = destino === ESTADO.aprobada ? bloqueoAprobacion : null
+            return (
+              <Tooltip key={destino} title={bloqueado}>
+                <Button
+                  danger={destino === ESTADO.cancelada}
+                  type={destino === ESTADO.cancelada ? 'default' : 'primary'}
+                  disabled={Boolean(bloqueado)}
+                  onClick={() => setEstadoDestino(destino)}
+                >
+                  {destino === ESTADO.cancelada ? 'Anular' : `Pasar a ${nombresEstado[destino]}`}
+                </Button>
+              </Tooltip>
+            )
+          })}
         </div>
       </header>
 
@@ -323,6 +334,8 @@ export function OrdenDetallePage() {
           </section>
 
           <aside className="columna">
+            <PanelAprobaciones orden={datos} />
+
             <section>
               <div className="seccion-titulo">
                 <h2>Diagnóstico</h2>
@@ -344,25 +357,6 @@ export function OrdenDetallePage() {
                 placeholder="Solución propuesta o aplicada"
                 disabled={!diagnosticoAbierto}
               />
-              {puedeAsignar && (
-                <div style={{ marginTop: 12 }}>
-                  <Select
-                    allowClear
-                    showSearch
-                    optionFilterProp="label"
-                    style={{ width: '100%' }}
-                    placeholder="Técnico asignado"
-                    value={tecnico ?? datos.tecnicoAsignadoId ?? undefined}
-                    onChange={(valor) => setTecnico(valor ?? null)}
-                    disabled={!diagnosticoAbierto}
-                    loading={tecnicos.isPending}
-                    options={(tecnicos.data ?? []).map((usuario) => ({
-                      value: usuario.id,
-                      label: usuario.nombreCompleto,
-                    }))}
-                  />
-                </div>
-              )}
               {diagnosticoAbierto && (
                 <Button
                   type="primary"
@@ -415,18 +409,27 @@ export function OrdenDetallePage() {
                 <p className="texto-secundario">Sin cambios de estado registrados.</p>
               ) : (
                 <Timeline
-                  items={historial.map((cambio) => ({
-                    key: cambio.id,
-                    children: (
-                      <div>
-                        <strong>{nombresEstado[cambio.estadoNuevoId] ?? cambio.estadoNuevo}</strong>
-                        <div className="texto-secundario">
-                          {fechaHora(cambio.fechaCambio)} · {cambio.usuarioNombre ?? 'Sistema'}
+                  items={historial.map((cambio) => {
+                    // Las aprobaciones y la asignación de técnico se anotan sin cambiar el estado.
+                    const cambiaEstado = cambio.estadoAnteriorId !== cambio.estadoNuevoId
+                    return {
+                      key: cambio.id,
+                      color: cambiaEstado ? undefined : 'gray',
+                      children: (
+                        <div>
+                          <strong>
+                            {cambiaEstado
+                              ? (nombresEstado[cambio.estadoNuevoId] ?? cambio.estadoNuevo)
+                              : (cambio.observaciones ?? 'Actualización')}
+                          </strong>
+                          <div className="texto-secundario">
+                            {fechaHora(cambio.fechaCambio)} · {cambio.usuarioNombre ?? 'Sistema'}
+                          </div>
+                          {cambiaEstado && cambio.observaciones && <div>{cambio.observaciones}</div>}
                         </div>
-                        {cambio.observaciones && <div>{cambio.observaciones}</div>}
-                      </div>
-                    ),
-                  }))}
+                      ),
+                    }
+                  })}
                 />
               )}
             </section>
@@ -500,6 +503,13 @@ export function OrdenDetallePage() {
       />
 
       <ModalEditarOrden abierto={modalEditar} orden={datos} onCerrar={() => setModalEditar(false)} />
+
+      <ModalAsignarTecnico
+        abierto={modalTecnico}
+        ordenId={datos.id}
+        tecnicoActualId={datos.tecnicoAsignadoId}
+        onCerrar={() => setModalTecnico(false)}
+      />
 
       <Modal
         title={anulando ? 'Anular la orden' : `Pasar a ${estadoDestino === null ? '' : nombresEstado[estadoDestino]}`}

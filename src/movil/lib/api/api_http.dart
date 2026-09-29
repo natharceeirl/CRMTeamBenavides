@@ -163,6 +163,27 @@ class ApiHttp {
     }
   }
 
+  /// Respuesta al presupuesto (EstadoPresupuestoCliente). El cliente solo puede
+  /// responder sus propias órdenes: el backend lo verifica.
+  Future<OrdenServicioApi> responderPresupuesto(
+    String id,
+    int estado, {
+    String? observaciones,
+  }) async {
+    try {
+      final respuesta = await _dio.put<Map<String, dynamic>>(
+        '/api/ordenes-servicio/$id/aprobacion-cliente',
+        data: {
+          'estado': estado,
+          'observaciones': observaciones == null || observaciones.isEmpty ? null : observaciones,
+        },
+      );
+      return OrdenServicioApi.desdeJson(respuesta.data!);
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
   /// Nombres exactos de CambiarPasswordRequest en el backend.
   Future<void> cambiarPassword(String actual, String nueva) async {
     try {

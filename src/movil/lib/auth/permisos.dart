@@ -13,6 +13,12 @@ class Permisos {
   static const ordenesDiagnostico = 'ordenes.diagnostico';
   static const ordenesCambiarEstado = 'ordenes.cambiar_estado';
   static const ordenesAgregarItems = 'ordenes.agregar_items';
+  static const ordenesEditar = 'ordenes.editar';
+  static const ventasCrear = 'ventas.crear';
+  static const portalAcceso = 'portal.acceso';
+
+  /// Quienes pueden registrar la respuesta al presupuesto (PoliticaAprobacionCliente).
+  static const responderPresupuesto = [ordenesEditar, ventasCrear, portalAcceso];
   static const preciosModificar = 'precios.modificar';
   static const inventarioVer = 'inventario.ver';
   static const inventarioEditar = 'inventario.editar';

@@ -110,6 +110,58 @@ void main() {
       expect(detalle.detalles, isEmpty);
       expect(detalle.total, 0);
       expect(detalle.orden.tecnicoNombre, isNull);
+      // Una orden anterior a las aprobaciones queda pendiente y sin Gerencia.
+      expect(detalle.orden.estadoPresupuestoId, EstadoPresupuesto.pendiente);
+      expect(detalle.orden.estadoGerenciaId, EstadoGerencia.noAplica);
+    });
+
+    test('lee las aprobaciones y la lectura decimal del medidor', () {
+      final crudo = ordenDePrueba()
+        ..['estadoPresupuestoClienteId'] = EstadoPresupuesto.rechazado
+        ..['observacionesPresupuestoCliente'] = 'Muy caro'
+        ..['estadoAprobacionGerenciaId'] = EstadoGerencia.pendiente
+        ..['lecturaMedidorIngreso'] = 86.5
+        ..['historial'] = [
+          {
+            'id': 'h2',
+            'estadoAnteriorId': 1,
+            'estadoNuevoId': 1,
+            'fechaCambio': '2026-09-18T15:00:00Z',
+            'observaciones': 'Aprobación de Gerencia: Pendiente.',
+          },
+          {
+            'id': 'h1',
+            'estadoAnteriorId': 0,
+            'estadoNuevoId': 1,
+            'fechaCambio': '2026-09-18T14:00:00Z',
+          },
+        ];
+
+      final detalle = OrdenServicioDetalleApi.desdeJson(crudo);
+
+      expect(detalle.orden.estadoPresupuestoId, EstadoPresupuesto.rechazado);
+      expect(detalle.orden.observacionesPresupuesto, 'Muy caro');
+      expect(detalle.orden.estadoGerenciaId, EstadoGerencia.pendiente);
+      expect(detalle.lecturaMedidorIngreso, 86.5);
+      // Ordenado del más antiguo al más reciente; la anotación no cambia el estado.
+      expect(detalle.historial.map((cambio) => cambio.id), ['h1', 'h2']);
+      expect(detalle.historial.first.cambiaEstado, isTrue);
+      expect(detalle.historial.last.cambiaEstado, isFalse);
+    });
+  });
+
+  group('aprobaciones', () {
+    test('sin rechazo ni Gerencia pendiente se puede aprobar', () {
+      expect(motivoBloqueoAprobacion(presupuesto: EstadoPresupuesto.pendiente, gerencia: EstadoGerencia.noAplica),
+          isNull);
+      expect(motivoBloqueoAprobacion(presupuesto: EstadoPresupuesto.aprobado, gerencia: EstadoGerencia.aprobado),
+          isNull);
+    });
+
+    test('las mismas reglas que el backend bloquean «Aprobada»', () {
+      expect(motivoBloqueoAprobacion(presupuesto: EstadoPresupuesto.rechazado), contains('rechazó el presupuesto'));
+      expect(motivoBloqueoAprobacion(gerencia: EstadoGerencia.pendiente), contains('Gerencia'));
+      expect(motivoBloqueoAprobacion(gerencia: EstadoGerencia.rechazado), contains('Gerencia rechazó'));
     });
   });
 

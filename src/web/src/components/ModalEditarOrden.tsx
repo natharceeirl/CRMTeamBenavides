@@ -1,10 +1,7 @@
 import dayjs, { type Dayjs } from 'dayjs'
 import { DatePicker, Form, Input, InputNumber, Modal, Select } from 'antd'
 import { MODALIDADES_ATENCION, TIPOS_ATENCION, TIPOS_FALLA, useActualizarOrden } from '../api/ordenes'
-import { useTecnicos } from '../api/usuarios'
 import type { OrdenServicioDetalleResponse } from '../api/tipos'
-import { useSesion } from '../auth/sesion'
-import { PERMISOS } from '../auth/acceso'
 import { ordenMidePorHoras } from '../utils/unidades'
 import { AvisoError } from './AvisoError'
 
@@ -15,7 +12,6 @@ type Props = {
 }
 
 type Campos = {
-  tecnicoAsignadoId?: string
   tipoAtencion?: number
   modalidadAtencion?: number
   tipoFalla?: number
@@ -27,13 +23,11 @@ type Campos = {
 
 /**
  * Datos de recepción y seguimiento de la orden. La API solo cambia lo que se
- * manda: un campo en null queda como estaba.
+ * manda: un campo en null queda como estaba. El técnico se asigna aparte, con
+ * su propio endpoint.
  */
 export function ModalEditarOrden({ abierto, orden, onCerrar }: Readonly<Props>) {
   const [formulario] = Form.useForm<Campos>()
-  const { tienePermiso } = useSesion()
-  const puedeAsignar = tienePermiso(PERMISOS.ordenesAsignarTecnico)
-  const tecnicos = useTecnicos(abierto && puedeAsignar && tienePermiso(PERMISOS.usuariosVer))
   const actualizar = useActualizarOrden()
 
   const enHoras = ordenMidePorHoras(orden)
@@ -47,7 +41,6 @@ export function ModalEditarOrden({ abierto, orden, onCerrar }: Readonly<Props>) 
     await actualizar.mutateAsync({
       id: orden.id,
       datos: {
-        tecnicoAsignadoId: puedeAsignar ? (campos.tecnicoAsignadoId ?? null) : null,
         tipoAtencion: campos.tipoAtencion,
         modalidadAtencion: campos.modalidadAtencion,
         tipoFalla: campos.tipoFalla ?? null,
@@ -80,7 +73,6 @@ export function ModalEditarOrden({ abierto, orden, onCerrar }: Readonly<Props>) 
         requiredMark={false}
         onFinish={enviar}
         initialValues={{
-          tecnicoAsignadoId: orden.tecnicoAsignadoId ?? undefined,
           tipoAtencion: orden.tipoAtencionId ?? 0,
           modalidadAtencion: orden.modalidadAtencionId ?? 0,
           tipoFalla: orden.tipoFallaId ?? undefined,
@@ -91,21 +83,6 @@ export function ModalEditarOrden({ abierto, orden, onCerrar }: Readonly<Props>) 
         }}
       >
         <div className="formulario-grid">
-          {puedeAsignar && (
-            <Form.Item label="Técnico" name="tecnicoAsignadoId" className="ancho-completo">
-              <Select
-                allowClear
-                showSearch
-                optionFilterProp="label"
-                loading={tecnicos.isPending}
-                placeholder="Sin técnico asignado"
-                options={(tecnicos.data ?? []).map((tecnico) => ({
-                  value: tecnico.id,
-                  label: tecnico.nombreCompleto,
-                }))}
-              />
-            </Form.Item>
-          )}
           <Form.Item label="Tipo de atención" name="tipoAtencion">
             <Select options={TIPOS_ATENCION} />
           </Form.Item>

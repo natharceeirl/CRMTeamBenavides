@@ -279,6 +279,30 @@ export type OrdenServicioResponse = {
   total?: number
   ventaId?: string | null
   comprobanteSerieNumero?: string | null
+  /** Enum EstadoPresupuestoCliente: 0 pendiente, 1 aprobado, 2 rechazado. */
+  estadoPresupuestoClienteId?: number
+  estadoPresupuestoCliente?: string
+  fechaRespuestaCliente?: string | null
+  observacionesPresupuestoCliente?: string | null
+  /** Enum EstadoAprobacionGerencia: 0 no aplica, 1 pendiente, 2 aprobado, 3 rechazado. */
+  estadoAprobacionGerenciaId?: number
+  estadoAprobacionGerencia?: string
+  fechaAprobacionGerencia?: string | null
+  usuarioAprobacionGerenciaId?: string | null
+  usuarioAprobacionGerenciaNombre?: string | null
+  observacionesAprobacionGerencia?: string | null
+}
+
+/** PUT /api/ordenes-servicio/{id}/aprobacion-cliente */
+export type RespuestaPresupuestoRequest = {
+  estado: number
+  observaciones: string | null
+}
+
+/** PUT /api/ordenes-servicio/{id}/aprobacion-gerencia */
+export type AprobacionGerenciaRequest = {
+  estado: number
+  observaciones: string | null
 }
 
 export type OrdenServicioDetalleResponse = OrdenServicioResponse & {

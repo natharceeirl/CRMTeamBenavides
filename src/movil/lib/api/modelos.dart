@@ -262,6 +262,13 @@ class OrdenServicioApi {
     this.subtotalInafecto,
     this.montoIgv,
     this.total,
+    this.estadoPresupuestoId = EstadoPresupuesto.pendiente,
+    this.fechaRespuestaCliente,
+    this.observacionesPresupuesto,
+    this.estadoGerenciaId = EstadoGerencia.noAplica,
+    this.fechaAprobacionGerencia,
+    this.usuarioAprobacionGerencia,
+    this.observacionesGerencia,
   });
 
   factory OrdenServicioApi.desdeJson(Map<String, dynamic> json) => OrdenServicioApi(
@@ -296,6 +303,14 @@ class OrdenServicioApi {
         subtotalInafecto: (json['subtotalInafecto'] as num?)?.toDouble(),
         montoIgv: (json['montoIgv'] as num?)?.toDouble(),
         total: (json['total'] as num?)?.toDouble(),
+        estadoPresupuestoId:
+            json['estadoPresupuestoClienteId'] as int? ?? EstadoPresupuesto.pendiente,
+        fechaRespuestaCliente: _fecha(json['fechaRespuestaCliente']),
+        observacionesPresupuesto: json['observacionesPresupuestoCliente'] as String?,
+        estadoGerenciaId: json['estadoAprobacionGerenciaId'] as int? ?? EstadoGerencia.noAplica,
+        fechaAprobacionGerencia: _fecha(json['fechaAprobacionGerencia']),
+        usuarioAprobacionGerencia: json['usuarioAprobacionGerenciaNombre'] as String?,
+        observacionesGerencia: json['observacionesAprobacionGerencia'] as String?,
       );
 
   final String id;
@@ -330,6 +345,13 @@ class OrdenServicioApi {
   final double? subtotalInafecto;
   final double? montoIgv;
   final double? total;
+  final int estadoPresupuestoId;
+  final DateTime? fechaRespuestaCliente;
+  final String? observacionesPresupuesto;
+  final int estadoGerenciaId;
+  final DateTime? fechaAprobacionGerencia;
+  final String? usuarioAprobacionGerencia;
+  final String? observacionesGerencia;
 
   String get unidad => '$vehiculoMarca $vehiculoModelo';
 
@@ -363,6 +385,7 @@ class HistorialEstadoApi {
     required this.id,
     required this.estadoNuevoId,
     required this.fechaCambio,
+    this.estadoAnteriorId,
     this.usuarioNombre,
     this.observaciones,
   });
@@ -370,6 +393,7 @@ class HistorialEstadoApi {
   factory HistorialEstadoApi.desdeJson(Map<String, dynamic> json) => HistorialEstadoApi(
         id: json['id'] as String,
         estadoNuevoId: json['estadoNuevoId'] as int? ?? 0,
+        estadoAnteriorId: json['estadoAnteriorId'] as int?,
         fechaCambio: DateTime.parse(json['fechaCambio'] as String),
         usuarioNombre: json['usuarioNombre'] as String?,
         observaciones: json['observaciones'] as String?,
@@ -377,6 +401,10 @@ class HistorialEstadoApi {
 
   final String id;
   final int estadoNuevoId;
+  final int? estadoAnteriorId;
+
+  /// Las aprobaciones y la asignación de técnico se anotan sin cambiar el estado.
+  bool get cambiaEstado => estadoAnteriorId != estadoNuevoId;
   final DateTime fechaCambio;
   final String? usuarioNombre;
   final String? observaciones;

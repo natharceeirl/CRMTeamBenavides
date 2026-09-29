@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   ESTADO,
+  GERENCIA,
+  PRESUPUESTO,
   esEstadoTerminal,
+  motivoBloqueoAprobacion,
   nombresEstado,
   permiteEditarDetalles,
   transicionesValidas,
@@ -65,5 +68,36 @@ describe('edición de detalles', () => {
     expect(permiteEditarDetalles(ESTADO.lista)).toBe(false)
     expect(permiteEditarDetalles(ESTADO.entregada)).toBe(false)
     expect(permiteEditarDetalles(ESTADO.cancelada)).toBe(false)
+  })
+})
+
+/** Mismas reglas que CambiarEstadoAsync aplica antes de pasar a «Aprobada». */
+describe('motivoBloqueoAprobacion', () => {
+  it('deja aprobar con el presupuesto pendiente o aprobado y sin Gerencia de por medio', () => {
+    expect(
+      motivoBloqueoAprobacion({ estadoPresupuestoClienteId: PRESUPUESTO.pendiente, estadoAprobacionGerenciaId: GERENCIA.noAplica }),
+    ).toBeNull()
+    expect(
+      motivoBloqueoAprobacion({ estadoPresupuestoClienteId: PRESUPUESTO.aprobado, estadoAprobacionGerenciaId: GERENCIA.aprobado }),
+    ).toBeNull()
+  })
+
+  it('bloquea si el cliente rechazó', () => {
+    expect(
+      motivoBloqueoAprobacion({ estadoPresupuestoClienteId: PRESUPUESTO.rechazado, estadoAprobacionGerenciaId: GERENCIA.noAplica }),
+    ).toMatch(/rechazó el presupuesto/)
+  })
+
+  it('bloquea si Gerencia está pendiente o rechazó', () => {
+    expect(
+      motivoBloqueoAprobacion({ estadoPresupuestoClienteId: PRESUPUESTO.aprobado, estadoAprobacionGerenciaId: GERENCIA.pendiente }),
+    ).toMatch(/Falta la aprobación de Gerencia/)
+    expect(
+      motivoBloqueoAprobacion({ estadoPresupuestoClienteId: PRESUPUESTO.aprobado, estadoAprobacionGerenciaId: GERENCIA.rechazado }),
+    ).toMatch(/Gerencia rechazó/)
+  })
+
+  it('una orden anterior a las aprobaciones no queda bloqueada', () => {
+    expect(motivoBloqueoAprobacion({})).toBeNull()
   })
 })
