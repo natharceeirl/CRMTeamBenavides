@@ -128,6 +128,8 @@ public class OrdenServicio : BaseEntity
     public ICollection<DetalleServicio> Detalles { get; set; } = new List<DetalleServicio>();
     public ICollection<HistorialEstadoOrden> HistorialEstados { get; set; } = new List<HistorialEstadoOrden>();
     public ICollection<Venta> Ventas { get; set; } = new List<Venta>();
+    public ICollection<Pago> Pagos { get; set; } = new List<Pago>();
+    public ICollection<Comprobante> Comprobantes { get; set; } = new List<Comprobante>();
 }
 
 /// <summary>Historial o timeline de transiciones de estado de una orden de servicio.</summary>

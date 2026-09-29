@@ -1,4 +1,5 @@
 using CRMTeamBenavides.Domain.Entities;
+using CRMTeamBenavides.Api.Features.Ventas;
 
 namespace CRMTeamBenavides.Api.Features.OrdenesServicio;
 
@@ -148,7 +149,10 @@ public record OrdenServicioResponse(
     string? ObservacionesAprobacionGerencia = null,
     Guid? VentaId = null,
     string? ComprobanteSerieNumero = null,
-    string? TipoMedidor = null);
+    string? TipoMedidor = null,
+    decimal TotalPagado = 0m,
+    decimal Saldo = 0m,
+    string EstadoPago = "Pendiente");
 
 public record OrdenServicioDetalleResponse(
     Guid Id,
@@ -209,4 +213,8 @@ public record OrdenServicioDetalleResponse(
     List<HistorialEstadoOrdenResponse>? Historial = null,
     Guid? VentaId = null,
     string? ComprobanteSerieNumero = null,
-    string? TipoMedidor = null);
+    string? TipoMedidor = null,
+    decimal TotalPagado = 0m,
+    decimal Saldo = 0m,
+    string EstadoPago = "Pendiente",
+    List<PagoResponse>? Pagos = null);

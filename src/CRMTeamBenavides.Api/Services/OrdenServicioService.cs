@@ -1,5 +1,6 @@
 using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Features.OrdenesServicio;
+using CRMTeamBenavides.Api.Features.Ventas;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
@@ -48,6 +49,7 @@ public class OrdenServicioService : IOrdenServicioService
             .Include(o => o.TecnicoAsignado)
             .Include(o => o.Ventas)
                 .ThenInclude(v => v.Comprobante)
+            .Include(o => o.Pagos.Where(p => p.Activo))
             .Where(o => o.Activo);
 
         // Aislamiento RBAC de Técnico
@@ -135,6 +137,10 @@ public class OrdenServicioService : IOrdenServicioService
                 .ThenInclude(h => h.Usuario)
             .Include(o => o.Ventas.Where(v => v.Activo))
                 .ThenInclude(v => v.Comprobante)
+            .Include(o => o.Pagos.Where(p => p.Activo))
+                .ThenInclude(p => p.MetodoPago)
+            .Include(o => o.Pagos.Where(p => p.Activo))
+                .ThenInclude(p => p.Usuario)
             .FirstOrDefaultAsync(o => o.Id == id && o.Activo);
 
         if (orden is null)
@@ -1411,6 +1417,10 @@ public class OrdenServicioService : IOrdenServicioService
             ? orden.ClienteId
             : (orden.Vehiculo?.ClienteId ?? Guid.Empty);
 
+        var totalPagado = orden.Pagos?.Where(p => p.Activo).Sum(p => p.Monto) ?? 0m;
+        var saldo = Math.Max(0m, orden.Total - totalPagado);
+        var estadoPago = saldo == 0m && orden.Total > 0m ? "Pagado" : (totalPagado > 0m ? "Parcial" : "Pendiente");
+
         return new OrdenServicioResponse(
             orden.Id,
             orden.VehiculoId,
@@ -1460,7 +1470,10 @@ public class OrdenServicioService : IOrdenServicioService
             orden.ObservacionesAprobacionGerencia,
             primeraVenta?.Id,
             comprobanteTexto,
-            DeterminarTipoMedidor(orden.Vehiculo));
+            DeterminarTipoMedidor(orden.Vehiculo),
+            totalPagado,
+            saldo,
+            estadoPago);
     }
 
     private static OrdenServicioDetalleResponse MapToDetalleResponse(OrdenServicio orden)
@@ -1504,6 +1517,30 @@ public class OrdenServicioService : IOrdenServicioService
 
         var clienteTelefono = orden.Cliente?.Telefono ?? orden.Vehiculo?.Cliente?.Telefono;
         var clienteDocumento = orden.Cliente?.DocumentoIdentidad ?? orden.Vehiculo?.Cliente?.DocumentoIdentidad;
+
+        var totalPagado = orden.Pagos?.Where(p => p.Activo).Sum(p => p.Monto) ?? 0m;
+        var saldo = Math.Max(0m, total - totalPagado);
+        var estadoPago = saldo == 0m && total > 0m ? "Pagado" : (totalPagado > 0m ? "Parcial" : "Pendiente");
+
+        var pagos = orden.Pagos?
+            .Where(p => p.Activo)
+            .OrderBy(p => p.Fecha)
+            .Select(p => new PagoResponse(
+                p.Id,
+                p.Monto,
+                p.MetodoPagoId,
+                p.MetodoPago?.Nombre ?? string.Empty,
+                p.MetodoPago?.Codigo ?? string.Empty,
+                p.Fecha,
+                p.Referencia,
+                p.EsAnticipo,
+                p.VentaId,
+                p.OrdenServicioId,
+                p.UsuarioId,
+                p.Usuario?.NombreCompleto,
+                p.Observaciones,
+                p.Activo))
+            .ToList();
 
         return new OrdenServicioDetalleResponse(
             orden.Id,
@@ -1564,6 +1601,10 @@ public class OrdenServicioService : IOrdenServicioService
             historial,
             primeraVenta?.Id,
             comprobanteTexto,
-            DeterminarTipoMedidor(orden.Vehiculo));
+            DeterminarTipoMedidor(orden.Vehiculo),
+            totalPagado,
+            saldo,
+            estadoPago,
+            pagos);
     }
 }

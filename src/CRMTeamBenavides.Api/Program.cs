@@ -125,6 +125,11 @@ builder.Services.AddAuthorization(options =>
             PermisosDefinidos.PortalAcceso,
             PermisosDefinidos.VentasCrear)));
 
+    options.AddPolicy(VentaEndpoints.PoliticaVerVentas, policy =>
+        policy.Requirements.Add(new PermissionRequirement(
+            PermisosDefinidos.VentasVer,
+            PermisosDefinidos.PortalAcceso)));
+
     foreach (var permiso in PermisosDefinidos.Todos)
     {
         options.AddPolicy(permiso, policy =>
@@ -143,6 +148,7 @@ builder.Services.AddScoped<IOrdenServicioService, OrdenServicioService>();
 builder.Services.AddScoped<ICategoriaProductoService, CategoriaProductoService>();
 builder.Services.AddScoped<IInventarioService, InventarioService>();
 builder.Services.AddScoped<IVentaService, VentaService>();
+builder.Services.AddScoped<IPagoService, PagoService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IReporteService, ReporteService>();
 builder.Services.AddScoped<IChatbotService, ChatbotService>();
@@ -195,6 +201,7 @@ using (var seedScope = app.Services.CreateScope())
 {
     var dbContext = seedScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     await RolSeeder.SeedAsync(dbContext);
+    await MetodosPagoSeeder.SeedAsync(dbContext);
 
     if (app.Environment.IsDevelopment())
     {

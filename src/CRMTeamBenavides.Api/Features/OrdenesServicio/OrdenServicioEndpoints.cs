@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using CRMTeamBenavides.Api.Configuration.Autorizacion;
+using CRMTeamBenavides.Api.Features.Ventas;
 using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
@@ -345,6 +346,36 @@ public static class OrdenServicioEndpoints
         group.MapPost("/{id:guid}/aprobacion-gerencia", handleAprobacionGerencia)
             .RequireAuthorization(PermisosDefinidos.OrdenesAprobarGerencia)
             .WithName("AprobacionGerenciaOrdenServicioPost");
+
+        // -------------------------------------------------------------------
+        // Pagos y Anticipos sobre Orden de Servicio
+        // -------------------------------------------------------------------
+        group.MapPost("/{id:guid}/pagos", async (
+            Guid id,
+            RegistrarPagoRequest request,
+            ClaimsPrincipal user,
+            IPagoService pagoService) =>
+        {
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await pagoService.RegistrarPagoOrdenServicioAsync(id, request, usuarioId);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Created($"/api/ordenes-servicio/{id}/pagos/{result.Data!.Id}", result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.VentasCrear)
+        .WithName("RegistrarPagoOrdenServicio");
+
+        group.MapGet("/{id:guid}/pagos", async (Guid id, IPagoService pagoService) =>
+        {
+            var pagos = await pagoService.GetPagosByOrdenServicioIdAsync(id);
+            return Results.Ok(pagos);
+        })
+        .RequireAuthorization(PoliticaVerOrdenes)
+        .WithName("GetPagosOrdenServicio");
     }
 
     private static Guid? ObtenerUsuarioId(ClaimsPrincipal user)

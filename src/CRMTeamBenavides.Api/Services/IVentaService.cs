@@ -10,11 +10,17 @@ public interface IVentaService
         EstadoVenta? estado,
         Guid? ordenServicioId,
         DateTime? fechaDesde,
-        DateTime? fechaHasta);
+        DateTime? fechaHasta,
+        Guid? soloClienteId = null);
 
-    Task<ServiceResult<VentaDetalleResponse>> GetByIdAsync(Guid id);
-    Task<ServiceResult<VentaDetalleResponse>> CreateAsync(CreateVentaRequest request);
-    Task<ServiceResult<VentaDetalleResponse>> ConfirmarCotizacionAsync(Guid id);
+    Task<ServiceResult<VentaDetalleResponse>> GetByIdAsync(Guid id, Guid? soloClienteId = null);
+    Task<ServiceResult<VentaDetalleResponse>> CreateAsync(
+        CreateVentaRequest request,
+        bool puedeModificarPrecios = false,
+        bool puedeAplicarDescuentos = false,
+        Guid? soloClienteId = null);
+
+    Task<ServiceResult<VentaDetalleResponse>> ConfirmarCotizacionAsync(Guid id, Guid? soloClienteId = null);
     Task<ServiceResult<VentaDetalleResponse>> AnularAsync(Guid id);
     Task<ServiceResult<ComprobanteResponse>> GetComprobanteAsync(Guid ventaId);
     Task<ServiceResult<ComprobanteResponse>> RegistrarComprobanteAsync(Guid ventaId, RegistrarComprobanteRequest request);

@@ -33,10 +33,12 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
     public DbSet<Producto> Productos => Set<Producto>();
     public DbSet<MovimientoInventario> MovimientosInventario => Set<MovimientoInventario>();
 
-    // Ventas
+    // Ventas y Pagos
     public DbSet<Venta> Ventas => Set<Venta>();
     public DbSet<DetalleVenta> DetallesVenta => Set<DetalleVenta>();
     public DbSet<Comprobante> Comprobantes => Set<Comprobante>();
+    public DbSet<MetodoPago> MetodosPago => Set<MetodoPago>();
+    public DbSet<Pago> Pagos => Set<Pago>();
 
     // Chatbot
     public DbSet<FaqItem> FaqItems => Set<FaqItem>();
@@ -228,8 +230,48 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<MetodoPago>(entity =>
+        {
+            entity.HasIndex(m => m.Codigo).IsUnique();
+        });
+
+        modelBuilder.Entity<Pago>(entity =>
+        {
+            entity.Property(p => p.Monto).HasPrecision(12, 2);
+
+            entity.HasOne(p => p.MetodoPago)
+                .WithMany()
+                .HasForeignKey(p => p.MetodoPagoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(p => p.Venta)
+                .WithMany(v => v.Pagos)
+                .HasForeignKey(p => p.VentaId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(p => p.OrdenServicio)
+                .WithMany(o => o.Pagos)
+                .HasForeignKey(p => p.OrdenServicioId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(p => p.Usuario)
+                .WithMany()
+                .HasForeignKey(p => p.UsuarioId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(p => p.VentaId);
+            entity.HasIndex(p => p.OrdenServicioId);
+            entity.HasIndex(p => p.Fecha);
+        });
+
         modelBuilder.Entity<Venta>(entity =>
         {
+            entity.Property(v => v.SubtotalGravado).HasPrecision(12, 2);
+            entity.Property(v => v.SubtotalExonerado).HasPrecision(12, 2);
+            entity.Property(v => v.SubtotalInafecto).HasPrecision(12, 2);
+            entity.Property(v => v.MontoIgv).HasPrecision(12, 2);
+            entity.Property(v => v.Total).HasPrecision(12, 2);
+
             entity.HasOne(v => v.Cliente)
                 .WithMany()
                 .HasForeignKey(v => v.ClienteId)
@@ -241,10 +283,40 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
-        modelBuilder.Entity<DetalleVenta>()
-            .HasOne(d => d.Producto)
-            .WithMany()
-            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<DetalleVenta>(entity =>
+        {
+            entity.Property(d => d.PrecioUnitario).HasPrecision(12, 2);
+            entity.Property(d => d.CostoUnitarioHistorico).HasPrecision(12, 2);
+            entity.Property(d => d.SubtotalGravado).HasPrecision(12, 2);
+            entity.Property(d => d.PorcentajeIgvAplicado).HasPrecision(5, 2);
+            entity.Property(d => d.MontoIgv).HasPrecision(12, 2);
+            entity.Property(d => d.Total).HasPrecision(12, 2);
+
+            entity.HasOne(d => d.Producto)
+                .WithMany()
+                .HasForeignKey(d => d.ProductoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.Servicio)
+                .WithMany()
+                .HasForeignKey(d => d.ServicioId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Comprobante>(entity =>
+        {
+            entity.Property(c => c.SubtotalGravado).HasPrecision(12, 2);
+            entity.Property(c => c.SubtotalExonerado).HasPrecision(12, 2);
+            entity.Property(c => c.SubtotalInafecto).HasPrecision(12, 2);
+            entity.Property(c => c.PorcentajeIgv).HasPrecision(5, 2);
+            entity.Property(c => c.MontoIgv).HasPrecision(12, 2);
+            entity.Property(c => c.Total).HasPrecision(12, 2);
+
+            entity.HasOne(c => c.OrdenServicio)
+                .WithMany(o => o.Comprobantes)
+                .HasForeignKey(c => c.OrdenServicioId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
 
         modelBuilder.Entity<ConsultaChatbot>()
             .HasOne(c => c.Cliente)
