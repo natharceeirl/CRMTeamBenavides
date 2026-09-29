@@ -116,6 +116,8 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                             ? null
                             : '${datos.vehiculoKilometraje} km',
                       ),
+                      if (datos.lecturaMedidorIngreso != null)
+                        _Dato('Lectura medidor', '${datos.lecturaMedidorIngreso}'),
                       _Dato('Observaciones', datos.orden.observaciones),
                     ],
                   ),
@@ -193,12 +195,13 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                     child: ListTile(
                       title: Text(detalle.descripcion),
                       subtitle: Text(
-                        '${detalle.esRepuesto ? 'Repuesto' : 'Mano de obra'} · '
-                        '${detalle.cantidad} x ${soles(detalle.precioUnitario)}',
+                        '${detalle.tipoItemNombre ?? (detalle.esRepuesto ? 'Repuesto' : 'Mano de obra')} · '
+                        '${detalle.cantidad} x ${soles(detalle.precioUnitario)}'
+                        '${detalle.tipoAfectacionIgvNombre != null ? ' (${detalle.tipoAfectacionIgvNombre})' : ''}',
                         style: const TextStyle(color: Marca.textoSecundario),
                       ),
                       trailing: Text(
-                        soles(detalle.subtotal),
+                        soles(detalle.total ?? detalle.subtotal),
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ),
@@ -206,17 +209,42 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                 ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
                   children: [
-                    const Text('Total', style: TextStyle(fontWeight: FontWeight.w600)),
-                    Text(
-                      soles(datos.total),
-                      style: const TextStyle(
-                          fontFamily: Marca.fuenteTitulos,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
+                    if ((datos.subtotalGravado ?? 0) > 0 || (datos.montoIgv ?? 0) > 0) ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Subtotal Gravado', style: TextStyle(color: Marca.textoSecundario)),
+                          Text(soles(datos.subtotalGravado ?? 0)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'IGV (${((datos.porcentajeIgv ?? 18)).toStringAsFixed(0)}%)',
+                            style: const TextStyle(color: Marca.textoSecundario),
+                          ),
+                          Text(soles(datos.montoIgv ?? 0)),
+                        ],
+                      ),
+                      const Divider(height: 16),
+                    ],
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Total', style: TextStyle(fontWeight: FontWeight.w600)),
+                        Text(
+                          soles(datos.total),
+                          style: const TextStyle(
+                            fontFamily: Marca.fuenteTitulos,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
+                      ],
                     ),
                   ],
                 ),

@@ -12,7 +12,8 @@ public record AperturaOrdenServicioRequest(
     ModalidadAtencion ModalidadAtencion = ModalidadAtencion.EnTaller,
     TipoFalla? TipoFalla = null,
     int? KilometrajeIngreso = null,
-    decimal? HorasUsoIngreso = null);
+    decimal? HorasUsoIngreso = null,
+    decimal? LecturaMedidorIngreso = null);
 
 public record RegistrarDiagnosticoRequest(
     string Diagnostico,
@@ -33,17 +34,37 @@ public record ActualizarOrdenServicioRequest(
     TipoFalla? TipoFalla = null,
     int? KilometrajeIngreso = null,
     decimal? HorasUsoIngreso = null,
+    decimal? LecturaMedidorIngreso = null,
     Guid? TecnicoAsignadoId = null);
 
 public record AgregarDetalleServicioRequest(
-    Guid? ProductoId,
-    string? Descripcion,
-    int Cantidad,
-    decimal? PrecioUnitario);
+    Guid? ProductoId = null,
+    string? Descripcion = null,
+    int Cantidad = 1,
+    decimal? PrecioUnitario = null,
+    Guid? ServicioId = null,
+    TipoItemServicio? TipoItem = null,
+    TipoAfectacionIgv? TipoAfectacionIgv = null);
+
+public record AsignarTecnicoRequest(
+    Guid? TecnicoId = null,
+    Guid? TecnicoAsignadoId = null,
+    string? Observaciones = null)
+{
+    public Guid TecnicoEfectivoId => TecnicoId ?? TecnicoAsignadoId ?? Guid.Empty;
+}
 
 public record CambiarEstadoOrdenServicioRequest(
     EstadoOrdenServicio NuevoEstado,
     string? Observaciones);
+
+public record ResponderPresupuestoClienteRequest(
+    EstadoPresupuestoCliente Estado,
+    string? Observaciones = null);
+
+public record AprobacionGerenciaRequest(
+    EstadoAprobacionGerencia Estado,
+    string? Observaciones = null);
 
 public record DetalleServicioResponse(
     Guid Id,
@@ -53,7 +74,18 @@ public record DetalleServicioResponse(
     int Cantidad,
     decimal PrecioUnitario,
     decimal Subtotal,
-    bool EsRepuesto);
+    bool EsRepuesto,
+    Guid? ServicioId = null,
+    string? ServicioNombre = null,
+    TipoItemServicio TipoItem = TipoItemServicio.Repuesto,
+    string? TipoItemNombre = null,
+    decimal CostoUnitarioHistorico = 0m,
+    TipoAfectacionIgv TipoAfectacionIgv = TipoAfectacionIgv.Gravado,
+    string? TipoAfectacionIgvNombre = null,
+    decimal SubtotalGravado = 0m,
+    decimal PorcentajeIgvAplicado = 18.00m,
+    decimal MontoIgv = 0m,
+    decimal Total = 0m);
 
 public record HistorialEstadoOrdenResponse(
     Guid Id,
@@ -98,6 +130,22 @@ public record OrdenServicioResponse(
     int? TipoFallaId = null,
     int? KilometrajeIngreso = null,
     decimal? HorasUsoIngreso = null,
+    decimal? LecturaMedidorIngreso = null,
+    decimal SubtotalGravado = 0m,
+    decimal SubtotalExonerado = 0m,
+    decimal SubtotalInafecto = 0m,
+    decimal MontoIgv = 0m,
+    decimal Total = 0m,
+    int EstadoPresupuestoClienteId = 0,
+    string EstadoPresupuestoCliente = "Pendiente",
+    DateTime? FechaRespuestaCliente = null,
+    string? ObservacionesPresupuestoCliente = null,
+    int EstadoAprobacionGerenciaId = 0,
+    string EstadoAprobacionGerencia = "NoAplica",
+    DateTime? FechaAprobacionGerencia = null,
+    Guid? UsuarioAprobacionGerenciaId = null,
+    string? UsuarioAprobacionGerenciaNombre = null,
+    string? ObservacionesAprobacionGerencia = null,
     Guid? VentaId = null,
     string? ComprobanteSerieNumero = null);
 
@@ -139,6 +187,21 @@ public record OrdenServicioDetalleResponse(
     int? TipoFallaId = null,
     int? KilometrajeIngreso = null,
     decimal? HorasUsoIngreso = null,
+    decimal? LecturaMedidorIngreso = null,
+    decimal SubtotalGravado = 0m,
+    decimal SubtotalExonerado = 0m,
+    decimal SubtotalInafecto = 0m,
+    decimal MontoIgv = 0m,
+    int EstadoPresupuestoClienteId = 0,
+    string EstadoPresupuestoCliente = "Pendiente",
+    DateTime? FechaRespuestaCliente = null,
+    string? ObservacionesPresupuestoCliente = null,
+    int EstadoAprobacionGerenciaId = 0,
+    string EstadoAprobacionGerencia = "NoAplica",
+    DateTime? FechaAprobacionGerencia = null,
+    Guid? UsuarioAprobacionGerenciaId = null,
+    string? UsuarioAprobacionGerenciaNombre = null,
+    string? ObservacionesAprobacionGerencia = null,
     string? TipoUnidad = null,
     string? NumeroSerieVIN = null,
     string? NumeroMotor = null,

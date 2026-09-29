@@ -11,6 +11,7 @@ namespace CRMTeamBenavides.Api.Features.OrdenesServicio;
 public static class OrdenServicioEndpoints
 {
     public const string PoliticaVerOrdenes = "PoliticaVerOrdenes";
+    public const string PoliticaAprobacionCliente = "PoliticaAprobacionCliente";
 
     public static void MapOrdenServicioEndpoints(this IEndpointRouteBuilder app)
     {
@@ -97,6 +98,23 @@ public static class OrdenServicioEndpoints
         .RequireAuthorization(PermisosDefinidos.OrdenesCrear)
         .WithName("CreateAperturaOrdenServicio");
 
+        group.MapPost("/apertura", async (
+            AperturaOrdenServicioRequest request,
+            ClaimsPrincipal user,
+            IOrdenServicioService service) =>
+        {
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.CreateAperturaAsync(request, usuarioId);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Created($"/api/ordenes-servicio/{result.Data!.Id}", result.Data),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.OrdenesCrear)
+        .WithName("CreateAperturaOrdenServicioAlias");
+
         group.MapPut("/{id:guid}", async (
             Guid id,
             ActualizarOrdenServicioRequest request,
@@ -111,6 +129,7 @@ public static class OrdenServicioEndpoints
             {
                 ServiceResultStatus.Success => Results.Ok(result.Data),
                 ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.Forbidden => Results.Json(new { error = result.Error }, statusCode: StatusCodes.Status403Forbidden),
                 ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
                 _ => Results.Problem()
             };
@@ -132,12 +151,35 @@ public static class OrdenServicioEndpoints
             {
                 ServiceResultStatus.Success => Results.Ok(result.Data),
                 ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.Forbidden => Results.Json(new { error = result.Error }, statusCode: StatusCodes.Status403Forbidden),
                 ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
                 _ => Results.Problem()
             };
         })
         .RequireAuthorization(PermisosDefinidos.OrdenesDiagnostico)
         .WithName("RegistrarDiagnosticoOrdenServicio");
+
+        group.MapPost("/{id:guid}/diagnostico", async (
+            Guid id,
+            RegistrarDiagnosticoRequest request,
+            ClaimsPrincipal user,
+            IOrdenServicioService service,
+            ApplicationDbContext dbContext) =>
+        {
+            var (soloTecnicoId, _) = await ResolverAislamientoAsync(user, dbContext);
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.RegistrarDiagnosticoAsync(id, request, soloTecnicoId, usuarioId);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.Forbidden => Results.Json(new { error = result.Error }, statusCode: StatusCodes.Status403Forbidden),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.OrdenesDiagnostico)
+        .WithName("RegistrarDiagnosticoOrdenServicioPost");
 
         group.MapPost("/{id:guid}/detalles", async (
             Guid id,
@@ -153,6 +195,7 @@ public static class OrdenServicioEndpoints
             {
                 ServiceResultStatus.Success => Results.Created($"/api/ordenes-servicio/{id}/detalles/{result.Data!.Id}", result.Data),
                 ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.Forbidden => Results.Json(new { error = result.Error }, statusCode: StatusCodes.Status403Forbidden),
                 ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
                 _ => Results.Problem()
             };
@@ -167,6 +210,7 @@ public static class OrdenServicioEndpoints
             {
                 ServiceResultStatus.Success => Results.Ok(new { message = "Detalle eliminado correctamente." }),
                 ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.Forbidden => Results.Json(new { error = result.Error }, statusCode: StatusCodes.Status403Forbidden),
                 ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
                 _ => Results.Problem()
             };
@@ -190,12 +234,117 @@ public static class OrdenServicioEndpoints
             {
                 ServiceResultStatus.Success => Results.Ok(result.Data),
                 ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.Forbidden => Results.Json(new { error = result.Error }, statusCode: StatusCodes.Status403Forbidden),
                 ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
                 _ => Results.Problem()
             };
         })
         .RequireAuthorization(PermisosDefinidos.OrdenesCambiarEstado)
         .WithName("CambiarEstadoOrdenServicio");
+
+        group.MapPost("/{id:guid}/estado", async (
+            Guid id,
+            CambiarEstadoOrdenServicioRequest request,
+            ClaimsPrincipal user,
+            IOrdenServicioService service) =>
+        {
+            var esTecnico = user.IsInRole(RolesDefinidos.Tecnico)
+                && !user.IsInRole(RolesDefinidos.GerenciaAdmin)
+                && !user.IsInRole(RolesDefinidos.Recepcion);
+
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.CambiarEstadoAsync(id, request, esTecnico, usuarioId);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.Forbidden => Results.Json(new { error = result.Error }, statusCode: StatusCodes.Status403Forbidden),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.OrdenesCambiarEstado)
+        .WithName("CambiarEstadoOrdenServicioPost");
+
+        var handleAsignarTecnico = async (
+            Guid id,
+            AsignarTecnicoRequest request,
+            ClaimsPrincipal user,
+            IOrdenServicioService service) =>
+        {
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.AsignarTecnicoAsync(id, request.TecnicoEfectivoId, usuarioId);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.Forbidden => Results.Json(new { error = result.Error }, statusCode: StatusCodes.Status403Forbidden),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        };
+
+        group.MapPut("/{id:guid}/asignar-tecnico", handleAsignarTecnico)
+            .RequireAuthorization(PermisosDefinidos.OrdenesAsignarTecnico)
+            .WithName("AsignarTecnicoOrdenServicio");
+
+        group.MapPost("/{id:guid}/asignar-tecnico", handleAsignarTecnico)
+            .RequireAuthorization(PermisosDefinidos.OrdenesAsignarTecnico)
+            .WithName("AsignarTecnicoOrdenServicioPost");
+
+        var handleAprobacionCliente = async (
+            Guid id,
+            ResponderPresupuestoClienteRequest request,
+            ClaimsPrincipal user,
+            IOrdenServicioService service,
+            ApplicationDbContext dbContext) =>
+        {
+            var (_, soloClienteId) = await ResolverAislamientoAsync(user, dbContext);
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.ResponderPresupuestoClienteAsync(id, request, soloClienteId, usuarioId);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.Forbidden => Results.Json(new { error = result.Error }, statusCode: StatusCodes.Status403Forbidden),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        };
+
+        group.MapPut("/{id:guid}/aprobacion-cliente", handleAprobacionCliente)
+            .RequireAuthorization(PoliticaAprobacionCliente)
+            .WithName("AprobacionClienteOrdenServicio");
+
+        group.MapPost("/{id:guid}/aprobacion-cliente", handleAprobacionCliente)
+            .RequireAuthorization(PoliticaAprobacionCliente)
+            .WithName("AprobacionClienteOrdenServicioPost");
+
+        var handleAprobacionGerencia = async (
+            Guid id,
+            AprobacionGerenciaRequest request,
+            ClaimsPrincipal user,
+            IOrdenServicioService service) =>
+        {
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.AprobacionGerenciaAsync(id, request, usuarioId);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.Forbidden => Results.Json(new { error = result.Error }, statusCode: StatusCodes.Status403Forbidden),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        };
+
+        group.MapPut("/{id:guid}/aprobacion-gerencia", handleAprobacionGerencia)
+            .RequireAuthorization(PermisosDefinidos.OrdenesAprobarGerencia)
+            .WithName("AprobacionGerenciaOrdenServicio");
+
+        group.MapPost("/{id:guid}/aprobacion-gerencia", handleAprobacionGerencia)
+            .RequireAuthorization(PermisosDefinidos.OrdenesAprobarGerencia)
+            .WithName("AprobacionGerenciaOrdenServicioPost");
     }
 
     private static Guid? ObtenerUsuarioId(ClaimsPrincipal user)

@@ -4,7 +4,8 @@ public enum ServiceResultStatus
 {
     Success,
     NotFound,
-    ValidationError
+    ValidationError,
+    Forbidden
 }
 
 public class ServiceResult<T>
@@ -23,4 +24,7 @@ public class ServiceResult<T>
 
     public static ServiceResult<T> Invalid(string error) =>
         new() { Status = ServiceResultStatus.ValidationError, Error = error };
+
+    public static ServiceResult<T> Forbidden(string? error = null) =>
+        new() { Status = ServiceResultStatus.Forbidden, Error = error ?? "No tiene autorización para realizar esta acción." };
 }

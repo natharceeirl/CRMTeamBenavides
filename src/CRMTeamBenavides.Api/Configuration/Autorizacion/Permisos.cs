@@ -42,6 +42,12 @@ public static class PermisosDefinidos
     public const string InventarioAjustar = "inventario.ajustar";
     public const string InventarioEliminar = "inventario.eliminar";
 
+    // Catálogo de Servicios
+    public const string ServiciosVer = "servicios.ver";
+    public const string ServiciosCrear = "servicios.crear";
+    public const string ServiciosEditar = "servicios.editar";
+    public const string ServiciosEliminar = "servicios.eliminar";
+
     // Ventas y Comprobantes
     public const string VentasVer = "ventas.ver";
     public const string VentasCrear = "ventas.crear";
@@ -74,6 +80,7 @@ public static class PermisosDefinidos
         OrdenesCambiarEstado, OrdenesAsignarTecnico, OrdenesAprobarGerencia, OrdenesAgregarItems,
         PreciosModificar,
         InventarioVer, InventarioCrear, InventarioEditar, InventarioAjustar, InventarioEliminar,
+        ServiciosVer, ServiciosCrear, ServiciosEditar, ServiciosEliminar,
         VentasVer, VentasCrear, VentasAnular, DescuentosAplicar,
         CajaConsultar, CajaRegistrarIngreso, CajaRegistrarEgreso,
         ReportesVerOperativos, ReportesVerFinancieros,

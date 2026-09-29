@@ -55,4 +55,20 @@ public interface IOrdenServicioService
         CambiarEstadoOrdenServicioRequest request,
         bool esTecnico,
         Guid? usuarioId = null);
+
+    Task<ServiceResult<OrdenServicioResponse>> AsignarTecnicoAsync(
+        Guid id,
+        Guid tecnicoId,
+        Guid? usuarioId = null);
+
+    Task<ServiceResult<OrdenServicioResponse>> ResponderPresupuestoClienteAsync(
+        Guid id,
+        ResponderPresupuestoClienteRequest request,
+        Guid? soloClienteId = null,
+        Guid? usuarioId = null);
+
+    Task<ServiceResult<OrdenServicioResponse>> AprobacionGerenciaAsync(
+        Guid id,
+        AprobacionGerenciaRequest request,
+        Guid? usuarioId = null);
 }

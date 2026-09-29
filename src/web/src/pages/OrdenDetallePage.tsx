@@ -1,9 +1,7 @@
 import { useState } from 'react'
 import {
   Button,
-  Form,
   Input,
-  InputNumber,
   Modal,
   Popconfirm,
   Select,
@@ -17,6 +15,7 @@ import { AvisoError } from '../components/AvisoError'
 import { EstadoOrdenApiTag } from '../components/EstadoOrdenApiTag'
 import { Indicadores } from '../components/Indicadores'
 import { ModalRepuestoOrden } from '../components/ModalRepuestoOrden'
+import { ModalItemOrden } from '../components/ModalItemOrden'
 import {
   ESTADO,
   esEstadoTerminal,
@@ -30,14 +29,12 @@ import {
   transicionesValidas,
 } from '../api/ordenes'
 import { useUsuarios } from '../api/usuarios'
-import type { DetalleServicioResponse } from '../api/tipos'
+import {
+  nombresTipoAfectacion,
+  nombresTipoItem,
+  type DetalleServicioResponse,
+} from '../api/tipos'
 import { entero, fechaHora, importe, referenciaOrden, soles } from '../utils/formato'
-
-type CamposManoObra = {
-  descripcion: string
-  cantidad: number
-  precioUnitario: number
-}
 
 export function OrdenDetallePage() {
   const { id } = useParams()
@@ -49,12 +46,12 @@ export function OrdenDetallePage() {
   const eliminarDetalle = useEliminarDetalle()
   const cambiarEstado = useCambiarEstado()
 
-  const [formularioMano] = Form.useForm<CamposManoObra>()
   const [textoDiagnostico, setTextoDiagnostico] = useState<string | null>(null)
   const [tecnico, setTecnico] = useState<string | null>(null)
   const [estadoDestino, setEstadoDestino] = useState<number | null>(null)
   const [observacionesCambio, setObservacionesCambio] = useState('')
   const [modalRepuesto, setModalRepuesto] = useState(false)
+  const [modalItem, setModalItem] = useState(false)
 
   if (orden.isPending) {
     return (
@@ -84,17 +81,34 @@ export function OrdenDetallePage() {
   const puedeDiagnosticar = !esEstadoTerminal(datos.estadoId)
   const destinos = transicionesValidas[datos.estadoId] ?? []
 
-  const repuestos = datos.detalles
-    .filter((detalle) => detalle.esRepuesto)
-    .reduce((suma, detalle) => suma + detalle.subtotal, 0)
-  const manoDeObra = datos.total - repuestos
 
   const columnas: TableProps<DetalleServicioResponse>['columns'] = [
     { title: 'Concepto', dataIndex: 'descripcion' },
     {
       title: 'Tipo',
       key: 'tipo',
-      render: (_, detalle) => (detalle.esRepuesto ? 'Repuesto' : 'Mano de obra'),
+      render: (_, detalle) => {
+        const nombre =
+          detalle.tipoItemNombre ??
+          nombresTipoItem[detalle.tipoItem ?? (detalle.esRepuesto ? 0 : 2)] ??
+          'Repuesto'
+        return <Tag>{nombre}</Tag>
+      },
+    },
+    {
+      title: 'Afectación',
+      key: 'afectacion',
+      render: (_, detalle) => {
+        const afectacion =
+          detalle.tipoAfectacionIgvNombre ??
+          nombresTipoAfectacion[detalle.tipoAfectacionIgv ?? 0] ??
+          'Gravado'
+        return (
+          <Tag color={detalle.tipoAfectacionIgv === 0 ? 'blue' : 'default'}>
+            {afectacion}
+          </Tag>
+        )
+      },
     },
     { title: 'Código', dataIndex: 'productoCodigo', className: 'num', render: (codigo: string | null) => codigo ?? '—' },
     { title: 'Cant.', dataIndex: 'cantidad', align: 'right', className: 'num' },
@@ -106,11 +120,25 @@ export function OrdenDetallePage() {
       render: (precio: number) => importe(precio),
     },
     {
-      title: 'Importe',
-      dataIndex: 'subtotal',
+      title: 'Subtotal',
+      dataIndex: 'subtotalGravado',
       align: 'right',
       className: 'num',
-      render: (subtotal: number) => importe(subtotal),
+      render: (_, detalle) => importe(detalle.subtotalGravado ?? detalle.subtotal),
+    },
+    {
+      title: 'IGV',
+      dataIndex: 'montoIgv',
+      align: 'right',
+      className: 'num',
+      render: (igv: number) => importe(igv ?? 0),
+    },
+    {
+      title: 'Total',
+      dataIndex: 'total',
+      align: 'right',
+      className: 'num',
+      render: (_, detalle) => importe(detalle.total ?? detalle.subtotal),
     },
     {
       title: '',
@@ -131,18 +159,6 @@ export function OrdenDetallePage() {
     },
   ]
 
-  const registrarManoDeObra = async (campos: CamposManoObra) => {
-    await agregarDetalle.mutateAsync({
-      id: datos.id,
-      datos: {
-        productoId: null,
-        descripcion: campos.descripcion.trim(),
-        cantidad: campos.cantidad,
-        precioUnitario: campos.precioUnitario,
-      },
-    })
-    formularioMano.resetFields()
-  }
 
   const guardarDiagnosticoActual = async () => {
     await guardarDiagnostico.mutateAsync({
@@ -238,12 +254,24 @@ export function OrdenDetallePage() {
             />
             <div className="totales">
               <div>
-                <div className="etiqueta">Mano de obra</div>
-                <div className="valor">{importe(manoDeObra)}</div>
+                <div className="etiqueta">Subtotal Gravado</div>
+                <div className="valor">{soles(datos.subtotalGravado ?? 0)}</div>
               </div>
+              {(datos.subtotalExonerado ?? 0) > 0 && (
+                <div>
+                  <div className="etiqueta">Exonerado</div>
+                  <div className="valor">{soles(datos.subtotalExonerado ?? 0)}</div>
+                </div>
+              )}
+              {(datos.subtotalInafecto ?? 0) > 0 && (
+                <div>
+                  <div className="etiqueta">Inafecto</div>
+                  <div className="valor">{soles(datos.subtotalInafecto ?? 0)}</div>
+                </div>
+              )}
               <div>
-                <div className="etiqueta">Repuestos</div>
-                <div className="valor">{importe(repuestos)}</div>
+                <div className="etiqueta">IGV (18%)</div>
+                <div className="valor">{soles(datos.montoIgv ?? 0)}</div>
               </div>
               <div>
                 <div className="etiqueta">Total</div>
@@ -252,49 +280,14 @@ export function OrdenDetallePage() {
             </div>
 
             {puedeEditar && (
-              <>
-                <div className="seccion-titulo" style={{ marginTop: 24 }}>
-                  <h2>Agregar mano de obra</h2>
-                </div>
-                <Form<CamposManoObra>
-                  form={formularioMano}
-                  layout="vertical"
-                  requiredMark={false}
-                  onFinish={registrarManoDeObra}
-                  initialValues={{ cantidad: 1 }}
-                >
-                  <div className="formulario-grid">
-                    <Form.Item
-                      label="Concepto"
-                      name="descripcion"
-                      className="ancho-completo"
-                      rules={[{ required: true, message: 'Describe el trabajo' }]}
-                    >
-                      <Input placeholder="Mantenimiento de 12 000 km, revisión de frenos…" />
-                    </Form.Item>
-                    <Form.Item
-                      label="Cantidad"
-                      name="cantidad"
-                      rules={[{ required: true, message: 'Indica la cantidad' }]}
-                    >
-                      <InputNumber min={1} style={{ width: '100%' }} />
-                    </Form.Item>
-                    <Form.Item
-                      label="Precio unitario"
-                      name="precioUnitario"
-                      rules={[{ required: true, message: 'Indica el precio' }]}
-                    >
-                      <InputNumber min={0} precision={2} style={{ width: '100%' }} />
-                    </Form.Item>
-                  </div>
-                  <Button type="primary" htmlType="submit" loading={agregarDetalle.isPending}>
-                    Agregar
-                  </Button>
-                </Form>
-                <Button style={{ marginTop: 16 }} onClick={() => setModalRepuesto(true)}>
-                  Agregar repuesto del inventario
+              <div style={{ marginTop: 16, display: 'flex', gap: 12 }}>
+                <Button type="primary" onClick={() => setModalItem(true)}>
+                  Agregar ítem (Repuesto / Servicio)
                 </Button>
-              </>
+                <Button onClick={() => setModalRepuesto(true)}>
+                  Agregar repuesto rápido
+                </Button>
+              </div>
             )}
             {!puedeEditar && (
               <p className="texto-secundario" style={{ marginTop: 16 }}>
@@ -382,6 +375,12 @@ export function OrdenDetallePage() {
                     <td>Teléfono</td>
                     <td>{datos.clienteTelefono ?? '—'}</td>
                   </tr>
+                  {datos.lecturaMedidorIngreso !== null && datos.lecturaMedidorIngreso !== undefined && (
+                    <tr>
+                      <td>Lectura Medidor</td>
+                      <td>{datos.lecturaMedidorIngreso}</td>
+                    </tr>
+                  )}
                   <tr>
                     <td>Cierre</td>
                     <td>{fechaHora(datos.fechaCierre)}</td>
@@ -398,9 +397,36 @@ export function OrdenDetallePage() {
                 {datos.observaciones ?? 'Sin observaciones.'}
               </p>
             </section>
+
+            {datos.historial && datos.historial.length > 0 && (
+              <section>
+                <div className="seccion-titulo">
+                  <h2>Historial de estados</h2>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
+                  {datos.historial.map((h) => (
+                    <div key={h.id} style={{ borderLeft: '2px solid #1677ff', paddingLeft: 8 }}>
+                      <div>
+                        <strong>{h.estadoNuevo}</strong> ·{' '}
+                        <span className="texto-secundario">{fechaHora(h.fechaCambio)}</span>
+                        {h.usuarioNombre && <span> ({h.usuarioNombre})</span>}
+                      </div>
+                      {h.observaciones && <div className="texto-secundario">{h.observaciones}</div>}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
           </aside>
         </div>
       </div>
+
+      <ModalItemOrden
+        abierto={modalItem}
+        ordenId={datos.id}
+        puedeModificarPrecios={true}
+        onCerrar={() => setModalItem(false)}
+      />
 
       <ModalRepuestoOrden
         abierto={modalRepuesto}
