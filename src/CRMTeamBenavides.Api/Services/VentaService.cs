@@ -480,9 +480,11 @@ public class VentaService : IVentaService
 
     public async Task<ServiceResult<ComprobanteResponse>> RegistrarComprobanteAsync(Guid ventaId, RegistrarComprobanteRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Tipo))
+        if (string.IsNullOrWhiteSpace(request.Tipo) ||
+            !Enum.TryParse<TipoComprobante>(request.Tipo.Trim(), ignoreCase: true, out var tipoEnum) ||
+            !Enum.IsDefined(typeof(TipoComprobante), tipoEnum))
         {
-            return ServiceResult<ComprobanteResponse>.Invalid("El tipo de comprobante es requerido.");
+            return ServiceResult<ComprobanteResponse>.Invalid("El tipo de comprobante no es válido. Solo se permite Boleta o Factura.");
         }
 
         var venta = await _context.Ventas
@@ -507,7 +509,7 @@ public class VentaService : IVentaService
         var comprobante = new Comprobante
         {
             VentaId = ventaId,
-            Tipo = request.Tipo.Trim(),
+            Tipo = tipoEnum.ToString(),
             Serie = string.IsNullOrWhiteSpace(request.Serie) ? null : request.Serie.Trim().ToUpperInvariant(),
             Numero = string.IsNullOrWhiteSpace(request.Numero) ? null : request.Numero.Trim(),
             Estado = "Emitido",

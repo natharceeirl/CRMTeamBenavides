@@ -19,6 +19,35 @@ namespace CRMTeamBenavides.Api.Migrations
                 SET ""FechaIngreso"" = ""FechaApertura""
                 WHERE ""FechaIngreso"" < TIMESTAMPTZ '1900-01-01 00:00:00+00';
             ");
+
+            migrationBuilder.Sql(@"
+                INSERT INTO ""HistorialEstadosOrden"" (
+                    ""Id"",
+                    ""OrdenServicioId"",
+                    ""EstadoAnterior"",
+                    ""EstadoNuevo"",
+                    ""UsuarioId"",
+                    ""FechaCambio"",
+                    ""Observaciones"",
+                    ""FechaCreacion"",
+                    ""Activo""
+                )
+                SELECT
+                    gen_random_uuid(),
+                    o.""Id"",
+                    NULL,
+                    0,
+                    CASE WHEN EXISTS (SELECT 1 FROM ""Usuarios"" u WHERE u.""Id"" = o.""CreadoPorId"") THEN o.""CreadoPorId"" ELSE NULL END,
+                    o.""FechaApertura"",
+                    'Apertura de orden de servicio',
+                    o.""FechaApertura"",
+                    TRUE
+                FROM ""OrdenesServicio"" o
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM ""HistorialEstadosOrden"" h
+                    WHERE h.""OrdenServicioId"" = o.""Id""
+                );
+            ");
         }
 
         /// <inheritdoc />

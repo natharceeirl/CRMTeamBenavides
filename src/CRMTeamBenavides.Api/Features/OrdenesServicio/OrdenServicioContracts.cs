@@ -147,7 +147,8 @@ public record OrdenServicioResponse(
     string? UsuarioAprobacionGerenciaNombre = null,
     string? ObservacionesAprobacionGerencia = null,
     Guid? VentaId = null,
-    string? ComprobanteSerieNumero = null);
+    string? ComprobanteSerieNumero = null,
+    string? TipoMedidor = null);
 
 public record OrdenServicioDetalleResponse(
     Guid Id,
@@ -207,4 +208,5 @@ public record OrdenServicioDetalleResponse(
     string? NumeroMotor = null,
     List<HistorialEstadoOrdenResponse>? Historial = null,
     Guid? VentaId = null,
-    string? ComprobanteSerieNumero = null);
+    string? ComprobanteSerieNumero = null,
+    string? TipoMedidor = null);

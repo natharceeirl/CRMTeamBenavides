@@ -62,7 +62,10 @@ public class ReporteService : IReporteService
                 TecnicoNombre  = o.TecnicoAsignado != null ? o.TecnicoAsignado.NombreCompleto : null,
                 o.Estado,
                 o.FechaApertura,
-                o.FechaCierre
+                o.FechaCierre,
+                o.NumeroOrden,
+                VehiculoTipoMedidor = o.Vehiculo.TipoMedidor,
+                VehiculoTipoUnidad  = o.Vehiculo.TipoUnidad
             })
             .ToListAsync();
 
@@ -83,7 +86,9 @@ public class ReporteService : IReporteService
             // Horas de atención: solo cuando FechaCierre existe (OS cerrada)
             o.FechaCierre.HasValue
                 ? Math.Round((o.FechaCierre.Value - o.FechaApertura).TotalHours, 1)
-                : null))
+                : null,
+            o.NumeroOrden,
+            (o.VehiculoTipoMedidor == TipoMedidor.Horas || o.VehiculoTipoUnidad == TipoUnidad.MotoAcuatica || o.VehiculoTipoUnidad == TipoUnidad.Generador) ? "Horas" : "Km"))
         .ToList();
     }
 

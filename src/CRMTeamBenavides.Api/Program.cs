@@ -70,7 +70,8 @@ builder.Services
     .AddIdentityCore<Usuario>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddSignInManager()
-    .AddDefaultTokenProviders();
+    .AddDefaultTokenProviders()
+    .AddErrorDescriber<SpanishIdentityErrorDescriber>();
 
 builder.Services
     .AddOptions<JwtSettings>()

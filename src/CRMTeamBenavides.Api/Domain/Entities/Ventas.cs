@@ -1,4 +1,13 @@
+using System.Text.Json.Serialization;
+
 namespace CRMTeamBenavides.Domain.Entities;
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum TipoComprobante
+{
+    Boleta,
+    Factura
+}
 
 public enum EstadoVenta
 {

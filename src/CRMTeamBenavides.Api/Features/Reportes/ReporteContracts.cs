@@ -19,7 +19,9 @@ public record OrdenServicioReporteResponse(
     /// <summary>
     /// Tiempo de atención en horas completas. Null si la OS todavía no tiene FechaCierre.
     /// </summary>
-    double? TiempoAtencionHoras);
+    double? TiempoAtencionHoras,
+    string? NumeroOrden = null,
+    string? TipoMedidor = null);
 
 // --- Ventas ---
 

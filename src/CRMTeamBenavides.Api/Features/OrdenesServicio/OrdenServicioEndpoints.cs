@@ -273,7 +273,7 @@ public static class OrdenServicioEndpoints
             IOrdenServicioService service) =>
         {
             var usuarioId = ObtenerUsuarioId(user);
-            var result = await service.AsignarTecnicoAsync(id, request.TecnicoEfectivoId, usuarioId);
+            var result = await service.AsignarTecnicoAsync(id, request.TecnicoEfectivoId, request.Observaciones, usuarioId);
             return result.Status switch
             {
                 ServiceResultStatus.Success => Results.Ok(result.Data),

@@ -59,6 +59,7 @@ public interface IOrdenServicioService
     Task<ServiceResult<OrdenServicioResponse>> AsignarTecnicoAsync(
         Guid id,
         Guid tecnicoId,
+        string? observaciones = null,
         Guid? usuarioId = null);
 
     Task<ServiceResult<OrdenServicioResponse>> ResponderPresupuestoClienteAsync(

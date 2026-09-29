@@ -345,11 +345,6 @@ public class OrdenServicioService : IOrdenServicioService
             orden.TipoFalla = request.TipoFalla.Value;
         }
 
-        if (request.Observaciones is not null)
-        {
-            orden.Observaciones = request.Observaciones.Trim();
-        }
-
         orden.FechaModificacion = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -1026,11 +1021,6 @@ public class OrdenServicioService : IOrdenServicioService
                 orden.FechaCierre       = DateTime.UtcNow;
                 orden.FechaModificacion = DateTime.UtcNow;
 
-                if (!string.IsNullOrWhiteSpace(request.Observaciones))
-                {
-                    orden.Observaciones = request.Observaciones.Trim();
-                }
-
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
@@ -1051,11 +1041,6 @@ public class OrdenServicioService : IOrdenServicioService
             orden.FechaSalida       = DateTime.UtcNow;
             orden.FechaModificacion = DateTime.UtcNow;
 
-            if (!string.IsNullOrWhiteSpace(request.Observaciones))
-            {
-                orden.Observaciones = request.Observaciones.Trim();
-            }
-
             await _context.SaveChangesAsync();
             return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
         }
@@ -1064,11 +1049,6 @@ public class OrdenServicioService : IOrdenServicioService
         orden.Estado            = request.NuevoEstado;
         orden.FechaModificacion = DateTime.UtcNow;
 
-        if (!string.IsNullOrWhiteSpace(request.Observaciones))
-        {
-            orden.Observaciones = request.Observaciones.Trim();
-        }
-
         await _context.SaveChangesAsync();
         return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
     }
@@ -1076,6 +1056,7 @@ public class OrdenServicioService : IOrdenServicioService
     public async Task<ServiceResult<OrdenServicioResponse>> AsignarTecnicoAsync(
         Guid id,
         Guid tecnicoId,
+        string? observaciones = null,
         Guid? usuarioId = null)
     {
         var orden = await _context.OrdenesServicio
@@ -1117,6 +1098,11 @@ public class OrdenServicioService : IOrdenServicioService
         orden.TecnicoAsignado = tecnico;
         orden.FechaModificacion = DateTime.UtcNow;
 
+        var textoAuto = $"Asignación de técnico a {tecnico.NombreCompleto}";
+        var observacionHistorial = string.IsNullOrWhiteSpace(observaciones)
+            ? textoAuto
+            : $"{textoAuto}. {observaciones.Trim()}";
+
         _context.HistorialEstadosOrden.Add(new HistorialEstadoOrden
         {
             OrdenServicioId = orden.Id,
@@ -1124,7 +1110,7 @@ public class OrdenServicioService : IOrdenServicioService
             EstadoNuevo     = orden.Estado,
             UsuarioId       = usuarioId,
             FechaCambio     = DateTime.UtcNow,
-            Observaciones   = $"Asignación de técnico a {tecnico.NombreCompleto}",
+            Observaciones   = observacionHistorial,
             FechaCreacion   = DateTime.UtcNow,
             Activo          = true
         });
@@ -1402,6 +1388,14 @@ public class OrdenServicioService : IOrdenServicioService
             d.Total);
     }
 
+    private static string DeterminarTipoMedidor(Vehiculo? vehiculo)
+    {
+        if (vehiculo is null) return "Km";
+        if (vehiculo.TipoMedidor == TipoMedidor.Horas || vehiculo.TipoUnidad == TipoUnidad.MotoAcuatica || vehiculo.TipoUnidad == TipoUnidad.Generador)
+            return "Horas";
+        return "Km";
+    }
+
     private static OrdenServicioResponse MapToResponse(OrdenServicio orden)
     {
         var primeraVenta = orden.Ventas?.FirstOrDefault(v => v.Activo);
@@ -1465,7 +1459,8 @@ public class OrdenServicioService : IOrdenServicioService
             orden.UsuarioAprobacionGerencia?.NombreCompleto,
             orden.ObservacionesAprobacionGerencia,
             primeraVenta?.Id,
-            comprobanteTexto);
+            comprobanteTexto,
+            DeterminarTipoMedidor(orden.Vehiculo));
     }
 
     private static OrdenServicioDetalleResponse MapToDetalleResponse(OrdenServicio orden)
@@ -1568,6 +1563,7 @@ public class OrdenServicioService : IOrdenServicioService
             orden.Vehiculo?.NumeroMotor,
             historial,
             primeraVenta?.Id,
-            comprobanteTexto);
+            comprobanteTexto,
+            DeterminarTipoMedidor(orden.Vehiculo));
     }
 }

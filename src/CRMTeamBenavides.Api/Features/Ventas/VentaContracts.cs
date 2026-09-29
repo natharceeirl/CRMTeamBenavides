@@ -1,10 +1,12 @@
+using CRMTeamBenavides.Domain.Entities;
+
 namespace CRMTeamBenavides.Api.Features.Ventas;
 
 public record CreateVentaRequest(
     Guid ClienteId,
-    Guid? OrdenServicioId,
-    List<CreateDetalleVentaRequest> Detalles,
-    bool EsCotizacion);
+    Guid? OrdenServicioId = null,
+    List<CreateDetalleVentaRequest>? Detalles = null,
+    bool EsCotizacion = false);
 
 public record CreateDetalleVentaRequest(
     Guid ProductoId,

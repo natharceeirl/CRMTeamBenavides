@@ -54,9 +54,20 @@ public class ConfiguracionService : IConfiguracionService
         if (request.PorcentajeIgv < 0 || request.PorcentajeIgv > 100)
             return ServiceResult<ConfiguracionEmpresaResponse>.Invalid("El porcentaje de IGV debe estar entre 0 y 100.");
 
+        string? rucNormalizado = null;
+        if (!string.IsNullOrWhiteSpace(request.Ruc))
+        {
+            var rucTrim = request.Ruc.Trim();
+            if (rucTrim.Length != 11 || !rucTrim.All(char.IsDigit))
+            {
+                return ServiceResult<ConfiguracionEmpresaResponse>.Invalid("El RUC debe tener exactamente 11 dígitos numéricos.");
+            }
+            rucNormalizado = rucTrim;
+        }
+
         var config = await GetOrCreateEntityAsync(ct);
         config.NombreEmpresa = request.NombreEmpresa.Trim();
-        config.Ruc = string.IsNullOrWhiteSpace(request.Ruc) ? null : request.Ruc.Trim();
+        config.Ruc = rucNormalizado;
         config.PorcentajeIgv = request.PorcentajeIgv;
         config.FechaModificacion = DateTime.UtcNow;
 
