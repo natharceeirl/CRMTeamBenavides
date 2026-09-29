@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Form, Input } from 'antd'
 import { CloseOutlined, MessageOutlined, SendOutlined } from '@ant-design/icons'
 import { useConsultarChatbot, useFaqs, useSolicitarAgente } from '../api/chatbot'
@@ -32,6 +32,13 @@ export function ChatbotWidget() {
   const faqs = useFaqs()
   const consultar = useConsultarChatbot()
   const solicitarAgente = useSolicitarAgente()
+
+  // La respuesta llega abajo: sin bajar hasta ella parecía que el asistente no contestaba.
+  const lista = useRef<HTMLDivElement>(null)
+  const escribiendo = consultar.isPending
+  useEffect(() => {
+    lista.current?.scrollTo?.({ top: lista.current.scrollHeight, behavior: 'smooth' })
+  }, [mensajes, sugerencias, formularioAgente, escribiendo, abierto])
 
   const agregar = (mensaje: Mensaje) => setMensajes((previos) => [...previos, mensaje])
 
@@ -103,7 +110,7 @@ export function ChatbotWidget() {
               onClick={() => setAbierto(false)}
             />
           </header>
-          <div className="chatbot-mensajes">
+          <div className="chatbot-mensajes" ref={lista} aria-live="polite">
             {mensajes.map((mensaje, indice) => (
               <div key={`${indice}-${mensaje.texto}`} className={`mensaje ${mensaje.de}`}>
                 {mensaje.texto}

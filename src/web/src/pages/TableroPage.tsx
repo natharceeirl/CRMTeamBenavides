@@ -6,7 +6,7 @@ import { AvisoError } from '../components/AvisoError'
 import { EstadoOrdenApiTag } from '../components/EstadoOrdenApiTag'
 import { Indicadores } from '../components/Indicadores'
 import { GraficoBarras } from '../components/GraficoBarras'
-import { esEstadoTerminal, useOrdenes } from '../api/ordenes'
+import { esEstadoTerminal, fechaIngresoOrden, useOrdenes } from '../api/ordenes'
 import {
   barrasPorEstado,
   enTaller,
@@ -63,7 +63,7 @@ const columnas: TableProps<OrdenServicioResponse>['columns'] = [
     title: 'Ingreso',
     key: 'ingreso',
     className: 'num',
-    render: (_, orden) => fechaHora(orden.fechaIngreso ?? orden.fechaApertura),
+    render: (_, orden) => fechaHora(fechaIngresoOrden(orden)),
   },
 ]
 

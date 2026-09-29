@@ -20,6 +20,7 @@ export function useActualizarConfiguracionEmpresa() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Configuración guardada' },
     mutationFn: (datos: ActualizarConfiguracionEmpresaRequest) =>
       solicitar<ConfiguracionEmpresaResponse>('/configuracion/empresa', {
         metodo: 'PUT',

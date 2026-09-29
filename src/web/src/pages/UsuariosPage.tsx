@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Input, Modal, Popconfirm, Space, Table, Tabs, Tag, message, type TableProps } from 'antd'
+import { Button, Input, Modal, Popconfirm, Space, Table, Tabs, Tag, type TableProps } from 'antd'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { ModalUsuario } from '../components/ModalUsuario'
@@ -10,8 +10,11 @@ import { PermisoGuard } from '../components/PermisoGuard'
 import { useEliminarUsuario, useResetPasswordUsuario, useUsuarios } from '../api/usuarios'
 import { useEliminarRol, useRoles } from '../api/roles'
 import type { RolResponse, UsuarioResponse } from '../api/tipos'
+import { useSesion } from '../auth/sesion'
+import { avisos } from '../utils/avisos'
 
 export function UsuariosPage() {
+  const { usuario: yo } = useSesion()
   const usuarios = useUsuarios()
   const roles = useRoles()
   const eliminarUsuario = useEliminarUsuario()
@@ -33,7 +36,16 @@ export function UsuariosPage() {
   const [modalPermisos, setModalPermisos] = useState(false)
 
   const columnasUsuarios: TableProps<UsuarioResponse>['columns'] = [
-    { title: 'Nombre', dataIndex: 'nombreCompleto', render: (nombre: string) => <strong>{nombre}</strong> },
+    {
+      title: 'Nombre',
+      dataIndex: 'nombreCompleto',
+      render: (nombre: string, usuario) => (
+        <>
+          <strong>{nombre}</strong>
+          {usuario.id === yo?.id && <Tag style={{ marginInlineStart: 8 }}>Tú</Tag>}
+        </>
+      ),
+    },
     { title: 'Correo', dataIndex: 'email' },
     { title: 'Teléfono', dataIndex: 'phoneNumber', className: 'num', render: (valor: string | null) => valor ?? '—' },
     {
@@ -86,17 +98,20 @@ export function UsuariosPage() {
               Contraseña
             </Button>
           </PermisoGuard>
-          <PermisoGuard permiso="usuarios.eliminar">
-            <Popconfirm
-              title="Dar de baja al usuario"
-              description="Deja de poder iniciar sesión."
-              okText="Dar de baja"
-              cancelText="Cancelar"
-              onConfirm={() => eliminarUsuario.mutate(usuario.id)}
-            >
-              <Button type="link">Dar de baja</Button>
-            </Popconfirm>
-          </PermisoGuard>
+          {/* Nadie se da de baja a sí mismo: perdería el acceso en el acto. */}
+          {usuario.id !== yo?.id && (
+            <PermisoGuard permiso="usuarios.eliminar">
+              <Popconfirm
+                title="Dar de baja al usuario"
+                description="Deja de poder iniciar sesión."
+                okText="Dar de baja"
+                cancelText="Cancelar"
+                onConfirm={() => eliminarUsuario.mutate(usuario.id)}
+              >
+                <Button type="link">Dar de baja</Button>
+              </Popconfirm>
+            </PermisoGuard>
+          )}
         </Space>
       ),
     },
@@ -239,10 +254,9 @@ export function UsuariosPage() {
               usuarioId: usuarioEnResetPassword.id,
               nuevoPassword: nuevoPasswordReset.trim(),
             })
-            message.success('Contraseña actualizada con éxito')
             setModalResetPassword(false)
-          } catch {
-            message.error('Error al restablecer la contraseña')
+          } catch (fallo) {
+            avisos.error(fallo instanceof Error ? fallo.message : 'No se pudo restablecer la contraseña')
           }
         }}
         confirmLoading={resetPassword.isPending}

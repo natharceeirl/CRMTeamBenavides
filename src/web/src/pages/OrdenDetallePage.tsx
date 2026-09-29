@@ -16,6 +16,7 @@ import {
   TIPOS_ATENCION,
   TIPOS_FALLA,
   esEstadoTerminal,
+  fechaIngresoOrden,
   estadosVedadosAlTecnico,
   etiquetaDe,
   motivoBloqueoAprobacion,
@@ -105,31 +106,30 @@ export function OrdenDetallePage() {
   const anulando = estadoDestino === ESTADO.cancelada
   const bloqueoAprobacion = motivoBloqueoAprobacion(datos)
 
+  // Pocas columnas para que la tabla quepa junto a la columna lateral en una
+  // laptop de 1366 px: tipo, código y afectación van bajo el concepto, y el
+  // subtotal está en el bloque de totales.
   const columnas: TableProps<DetalleServicioResponse>['columns'] = [
-    { title: 'Concepto', dataIndex: 'descripcion' },
     {
-      title: 'Tipo',
-      key: 'tipo',
-      render: (_, detalle) => {
-        const nombre =
-          detalle.tipoItemNombre ??
-          nombresTipoItem[detalle.tipoItem ?? (detalle.esRepuesto ? 0 : 2)] ??
-          'Repuesto'
-        return <Tag>{nombre}</Tag>
+      title: 'Concepto',
+      dataIndex: 'descripcion',
+      render: (descripcion: string, detalle) => {
+        const tipo = nombresTipoItem[detalle.tipoItem ?? (detalle.esRepuesto ? 0 : 2)] ?? detalle.tipoItemNombre
+        const afectacion = detalle.tipoAfectacionIgv ?? 0
+        const datos = [
+          tipo,
+          detalle.productoCodigo,
+          // Gravado es lo normal: solo se avisa cuando no lo es.
+          afectacion === 0 ? null : (nombresTipoAfectacion[afectacion] ?? detalle.tipoAfectacionIgvNombre),
+        ].filter(Boolean)
+        return (
+          <>
+            <div>{descripcion}</div>
+            <div className="texto-secundario">{datos.join(' · ')}</div>
+          </>
+        )
       },
     },
-    {
-      title: 'Afectación',
-      key: 'afectacion',
-      render: (_, detalle) => {
-        const afectacion =
-          detalle.tipoAfectacionIgvNombre ??
-          nombresTipoAfectacion[detalle.tipoAfectacionIgv ?? 0] ??
-          'Gravado'
-        return <Tag color={detalle.tipoAfectacionIgv === 0 ? 'blue' : 'default'}>{afectacion}</Tag>
-      },
-    },
-    { title: 'Código', dataIndex: 'productoCodigo', className: 'num', render: (codigo: string | null) => codigo ?? '—' },
     { title: 'Cant.', dataIndex: 'cantidad', align: 'right', className: 'num' },
     {
       title: 'P. unit.',
@@ -137,13 +137,6 @@ export function OrdenDetallePage() {
       align: 'right',
       className: 'num',
       render: (precio: number) => importe(precio),
-    },
-    {
-      title: 'Subtotal',
-      dataIndex: 'subtotalGravado',
-      align: 'right',
-      className: 'num',
-      render: (_, detalle) => importe(detalle.subtotalGravado ?? detalle.subtotal),
     },
     {
       title: 'IGV',
@@ -265,7 +258,7 @@ export function OrdenDetallePage() {
           tamano="mediano"
           items={[
             { etiqueta: 'Cliente', valor: datos.clienteNombre },
-            { etiqueta: 'Ingreso', valor: fechaHora(datos.fechaIngreso ?? datos.fechaApertura) },
+            { etiqueta: 'Ingreso', valor: fechaHora(fechaIngresoOrden(datos)) },
             { etiqueta: 'Entrega estimada', valor: fechaHora(datos.fechaEstimadaEntrega) },
             { etiqueta: 'Medidor al ingresar', valor: lecturaIngresoOrden(datos) },
             { etiqueta: 'Total', valor: datos.total > 0 ? soles(datos.total) : '—' },
@@ -415,7 +408,7 @@ export function OrdenDetallePage() {
                     return {
                       key: cambio.id,
                       color: cambiaEstado ? undefined : 'gray',
-                      children: (
+                      content: (
                         <div>
                           <strong>
                             {cambiaEstado

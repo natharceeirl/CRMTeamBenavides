@@ -5,7 +5,7 @@ import { Link, useNavigate } from 'react-router'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { EstadoOrdenApiTag } from '../components/EstadoOrdenApiTag'
-import { nombresEstado, useOrdenes } from '../api/ordenes'
+import { fechaIngresoOrden, nombresEstado, useOrdenes } from '../api/ordenes'
 import { useTecnicos } from '../api/usuarios'
 import type { OrdenServicioResponse } from '../api/tipos'
 import { fechaHora, referenciaOrden } from '../utils/formato'
@@ -52,7 +52,7 @@ const columnas: TableProps<OrdenServicioResponse>['columns'] = [
     title: 'Ingreso',
     key: 'ingreso',
     className: 'num',
-    render: (_, orden) => fechaHora(orden.fechaIngreso ?? orden.fechaApertura),
+    render: (_, orden) => fechaHora(fechaIngresoOrden(orden)),
   },
   {
     title: 'Entrega estimada',

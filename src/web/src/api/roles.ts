@@ -26,6 +26,7 @@ export function useGuardarRol() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Rol guardado' },
     mutationFn: ({ id, datos }: { id?: string; datos: RolRequest }) =>
       id
         ? solicitar<RolResponse>(`/roles/${id}`, { metodo: 'PUT', cuerpo: datos })
@@ -40,6 +41,7 @@ export function useEliminarRol() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Rol eliminado' },
     mutationFn: (id: string) => solicitar<void>(`/roles/${id}`, { metodo: 'DELETE' }),
     onSuccess: async () => {
       await consultas.invalidateQueries({ queryKey: clavesRoles.todos })
@@ -51,6 +53,7 @@ export function useAsignarPermiso() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Permiso asignado' },
     mutationFn: ({ rolId, permisoId }: { rolId: string; permisoId: string }) =>
       solicitar<void>(`/roles/${rolId}/permisos`, { metodo: 'POST', cuerpo: { permisoId } }),
     onSuccess: async (_datos, { rolId }) => {
@@ -63,6 +66,7 @@ export function useQuitarPermiso() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Permiso quitado' },
     mutationFn: ({ rolId, permisoId }: { rolId: string; permisoId: string }) =>
       solicitar<void>(`/roles/${rolId}/permisos/${permisoId}`, { metodo: 'DELETE' }),
     onSuccess: async (_datos, { rolId }) => {

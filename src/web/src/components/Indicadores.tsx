@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react'
+
 type Indicador = {
   etiqueta: string
   valor: string | number
@@ -14,7 +16,7 @@ type Props = {
 // Solo etiqueta y valor: sin subtextos ni variaciones debajo del número.
 export function Indicadores({ items, tamano = 'grande' }: Readonly<Props>) {
   return (
-    <div className="indicadores">
+    <div className="indicadores" style={{ '--columnas': items.length } as CSSProperties}>
       {items.map((item) => {
         const clases = [
           'indicador-valor',

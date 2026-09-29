@@ -1,4 +1,4 @@
-import { Form, Input, Modal, message } from 'antd'
+import { Form, Input, Modal } from 'antd'
 import { useCambiarMiPassword } from '../api/usuarios'
 import { AvisoError } from './AvisoError'
 
@@ -28,7 +28,6 @@ export function ModalCambiarPassword({ abierto, onCerrar }: Readonly<Props>) {
       passwordActual: campos.passwordActual,
       passwordNueva: campos.passwordNueva,
     })
-    message.success('Contraseña actualizada')
     cerrar()
   }
 

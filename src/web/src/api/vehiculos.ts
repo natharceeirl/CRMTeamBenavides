@@ -20,6 +20,7 @@ export function useGuardarVehiculo() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Unidad guardada' },
     mutationFn: ({ id, datos }: { id?: string; datos: VehiculoRequest }) =>
       id
         ? solicitar<VehiculoResponse>(`/vehiculos/${id}`, { metodo: 'PUT', cuerpo: datos })
@@ -34,6 +35,7 @@ export function useEliminarVehiculo() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Unidad dada de baja' },
     mutationFn: (id: string) => solicitar<void>(`/vehiculos/${id}`, { metodo: 'DELETE' }),
     onSuccess: async () => {
       await consultas.invalidateQueries({ queryKey: clavesVehiculos.todos })

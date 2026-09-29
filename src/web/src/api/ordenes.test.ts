@@ -1,10 +1,13 @@
+import dayjs from 'dayjs'
 import { describe, expect, it } from 'vitest'
 import {
   ESTADO,
   GERENCIA,
   PRESUPUESTO,
   esEstadoTerminal,
+  fechaIngresoOrden,
   motivoBloqueoAprobacion,
+  motivoEntregaInvalida,
   nombresEstado,
   permiteEditarDetalles,
   transicionesValidas,
@@ -99,5 +102,22 @@ describe('motivoBloqueoAprobacion', () => {
 
   it('una orden anterior a las aprobaciones no queda bloqueada', () => {
     expect(motivoBloqueoAprobacion({})).toBeNull()
+  })
+})
+
+describe('fechas de la orden', () => {
+  it('las órdenes antiguas traen el ingreso en 0001-01-01: vale la apertura', () => {
+    const apertura = '2026-09-12T14:30:00Z'
+    expect(fechaIngresoOrden({ fechaApertura: apertura, fechaIngreso: '0001-01-01T00:00:00' })).toBe(apertura)
+    expect(fechaIngresoOrden({ fechaApertura: apertura })).toBe(apertura)
+    expect(fechaIngresoOrden({ fechaApertura: apertura, fechaIngreso: '2026-09-29T13:56:53Z' })).toBe('2026-09-29T13:56:53Z')
+  })
+
+  it('la entrega estimada no puede quedar antes del ingreso', () => {
+    const ingreso = dayjs('2026-09-29T09:00')
+    expect(motivoEntregaInvalida(dayjs('2026-09-01T10:00'), ingreso)).toContain('no puede ser anterior al ingreso (29/09/2026 09:00)')
+    expect(motivoEntregaInvalida(dayjs('2026-09-29T09:00'), ingreso)).toBeNull()
+    expect(motivoEntregaInvalida(dayjs('2026-10-02T18:00'), ingreso)).toBeNull()
+    expect(motivoEntregaInvalida(null, ingreso)).toBeNull()
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { identificadorUnidad, lecturaIngresoOrden, lecturaMedidor, nombreTipoUnidad, ordenMidePorHoras } from './unidades'
+import { identificadorUnidad, lecturaIngresoOrden, lecturaMedidor, nombreTipoUnidad, ordenMidePorHoras, ultimaLecturaRegistrada } from './unidades'
 import { referenciaOrden } from './formato'
 
 describe('unidades', () => {
@@ -36,5 +36,21 @@ describe('referenciaOrden', () => {
   it('cae al inicio del id si no hay correlativo', () => {
     expect(referenciaOrden({ id: 'abcdef12-0000', numeroOrden: null })).toBe('#ABCDEF12')
     expect(referenciaOrden('abcdef12-0000')).toBe('#ABCDEF12')
+  })
+})
+
+describe('ultimaLecturaRegistrada', () => {
+  it('toma la mayor entre la unidad y sus órdenes anteriores', () => {
+    const ordenes = [{ kilometrajeIngreso: 12000 }, { kilometrajeIngreso: 18900 }, { lecturaMedidorIngreso: 15000 }]
+    expect(ultimaLecturaRegistrada(false, 17500, ordenes)).toBe(18900)
+  })
+
+  it('en horas lee las horas de uso, no los kilómetros', () => {
+    const ordenes = [{ horasUsoIngreso: 86.5 }, { kilometrajeIngreso: 99999 }]
+    expect(ultimaLecturaRegistrada(true, 80, ordenes)).toBe(86.5)
+  })
+
+  it('sin lecturas no hay mínimo', () => {
+    expect(ultimaLecturaRegistrada(false, null, [])).toBeNull()
   })
 })

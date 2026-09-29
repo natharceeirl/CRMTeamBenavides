@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { solicitar } from './http'
+import { avisoSegun } from './avisos'
 import type {
   ActualizarProductoRequest,
   AjusteRequest,
@@ -84,6 +85,7 @@ export function useGuardarProducto() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Repuesto guardado' },
     mutationFn: ({
       id,
       datos,
@@ -104,6 +106,7 @@ export function useEliminarProducto() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Repuesto dado de baja' },
     mutationFn: (id: string) => solicitar<void>(`/productos/${id}`, { metodo: 'DELETE' }),
     onSuccess: async () => {
       await consultas.invalidateQueries({ queryKey: clavesInventario.productos })
@@ -116,6 +119,9 @@ export function useMovimientoDeStock() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: avisoSegun<{ tipo: 'entradas' | 'salidas' | 'ajustes' }>(({ tipo }) =>
+        tipo === 'entradas' ? 'Entrada registrada' : tipo === 'salidas' ? 'Salida registrada' : 'Ajuste registrado',
+      ) },
     mutationFn: ({
       id,
       tipo,
@@ -136,6 +142,7 @@ export function useGuardarCategoria() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Categoría guardada' },
     mutationFn: ({ id, datos }: { id?: string; datos: CategoriaProductoRequest }) =>
       id
         ? solicitar<CategoriaProductoResponse>(`/categorias-producto/${id}`, {
@@ -157,6 +164,7 @@ export function useEliminarCategoria() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Categoría eliminada' },
     mutationFn: (id: string) => solicitar<void>(`/categorias-producto/${id}`, { metodo: 'DELETE' }),
     onSuccess: async () => {
       await consultas.invalidateQueries({ queryKey: clavesInventario.categorias })

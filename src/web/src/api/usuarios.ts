@@ -50,6 +50,7 @@ export function useCrearUsuario() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Usuario creado' },
     mutationFn: (datos: CrearUsuarioRequest) =>
       solicitar<UsuarioResponse>('/usuarios', { metodo: 'POST', cuerpo: datos }),
     onSuccess: async () => {
@@ -62,6 +63,7 @@ export function useActualizarUsuario() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Usuario guardado' },
     mutationFn: ({ id, datos }: { id: string; datos: ActualizarUsuarioRequest }) =>
       solicitar<UsuarioResponse>(`/usuarios/${id}`, { metodo: 'PUT', cuerpo: datos }),
     onSuccess: async () => {
@@ -74,6 +76,7 @@ export function useEliminarUsuario() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Usuario dado de baja' },
     mutationFn: (id: string) => solicitar<void>(`/usuarios/${id}`, { metodo: 'DELETE' }),
     onSuccess: async () => {
       await consultas.invalidateQueries({ queryKey: clavesUsuarios.todos })
@@ -85,6 +88,7 @@ export function useAsignarRolAUsuario() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Rol asignado' },
     mutationFn: ({ usuarioId, rolId }: { usuarioId: string; rolId: string }) =>
       solicitar<void>(`/usuarios/${usuarioId}/roles`, { metodo: 'POST', cuerpo: { rolId } }),
     onSuccess: async (_datos, { usuarioId }) => {
@@ -98,6 +102,7 @@ export function useQuitarRolAUsuario() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Rol quitado' },
     mutationFn: ({ usuarioId, rolId }: { usuarioId: string; rolId: string }) =>
       solicitar<void>(`/usuarios/${usuarioId}/roles/${rolId}`, { metodo: 'DELETE' }),
     onSuccess: async (_datos, { usuarioId }) => {
@@ -109,6 +114,7 @@ export function useQuitarRolAUsuario() {
 
 export function useResetPasswordUsuario() {
   return useMutation({
+    meta: { exito: 'Contraseña restablecida' },
     mutationFn: ({ usuarioId, nuevoPassword }: { usuarioId: string; nuevoPassword: string }) =>
       solicitar<{ message: string }>(`/usuarios/${usuarioId}/reset-password`, {
         metodo: 'POST',
@@ -119,6 +125,7 @@ export function useResetPasswordUsuario() {
 
 export function useCambiarMiPassword() {
   return useMutation({
+    meta: { exito: 'Contraseña actualizada' },
     mutationFn: (datos: CambiarPasswordRequest) =>
       solicitar<{ message: string }>('/auth/cambiar-password', {
         metodo: 'POST',

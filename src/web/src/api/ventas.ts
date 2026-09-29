@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { solicitar } from './http'
+import { avisoSegun } from './avisos'
 import { clavesInventario } from './inventario'
 import type {
   ComprobanteResponse,
@@ -87,6 +88,7 @@ export function useCrearVenta() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: avisoSegun<CrearVentaRequest>((datos) => (datos.esCotizacion ? 'Cotización creada' : 'Venta registrada')) },
     mutationFn: (datos: CrearVentaRequest) =>
       solicitar<VentaDetalleResponse>('/ventas', { metodo: 'POST', cuerpo: datos }),
     onSuccess: async () => {
@@ -99,6 +101,7 @@ export function useConfirmarVenta() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Venta confirmada' },
     mutationFn: (id: string) =>
       solicitar<VentaDetalleResponse>(`/ventas/${id}/confirmar`, { metodo: 'PUT' }),
     onSuccess: async () => {
@@ -111,6 +114,7 @@ export function useAnularVenta() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Venta anulada' },
     mutationFn: (id: string) =>
       solicitar<VentaDetalleResponse>(`/ventas/${id}/anular`, { metodo: 'PUT' }),
     onSuccess: async () => {
@@ -123,6 +127,7 @@ export function useRegistrarComprobante() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Comprobante registrado' },
     mutationFn: ({ ventaId, datos }: { ventaId: string; datos: RegistrarComprobanteRequest }) =>
       solicitar<ComprobanteResponse>(`/ventas/${ventaId}/comprobante`, { metodo: 'POST', cuerpo: datos }),
     onSuccess: async (_, variables) => {
@@ -138,6 +143,7 @@ export function useAnularComprobante() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Comprobante anulado' },
     mutationFn: (ventaId: string) =>
       solicitar<ComprobanteResponse>(`/ventas/${ventaId}/comprobante/anular`, { metodo: 'PUT' }),
     onSuccess: async (_, ventaId) => {

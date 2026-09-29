@@ -1,12 +1,25 @@
-import type { Dayjs } from 'dayjs'
+import dayjs, { type Dayjs } from 'dayjs'
 import { Button, DatePicker, Form, Input, InputNumber, Select } from 'antd'
 import { useNavigate } from 'react-router'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
-import { MODALIDADES_ATENCION, TIPOS_ATENCION, TIPOS_FALLA, useAbrirOrden } from '../api/ordenes'
+import {
+  MODALIDADES_ATENCION,
+  TIPOS_ATENCION,
+  TIPOS_FALLA,
+  motivoEntregaInvalida,
+  useAbrirOrden,
+  useOrdenes,
+} from '../api/ordenes'
 import { useVehiculos } from '../api/vehiculos'
 import { useTecnicos } from '../api/usuarios'
-import { identificadorUnidad, lecturaMedidor, midePorHoras } from '../utils/unidades'
+import {
+  identificadorUnidad,
+  lecturaActualUnidad,
+  midePorHoras,
+  textoLectura,
+  ultimaLecturaRegistrada,
+} from '../utils/unidades'
 import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
 
@@ -37,6 +50,13 @@ export function NuevaOrdenPage() {
   const vehiculoId = Form.useWatch('vehiculoId', formulario)
   const unidad = (vehiculos.data ?? []).find((vehiculo) => vehiculo.id === vehiculoId)
   const enHoras = unidad ? midePorHoras(unidad) : false
+  // El medidor no retrocede: la lectura nueva se compara con la de la unidad y
+  // con la de sus órdenes anteriores.
+  const ordenesDeLaUnidad = useOrdenes({ vehiculoId }, Boolean(vehiculoId))
+  const ultimaLectura = unidad
+    ? ultimaLecturaRegistrada(enHoras, lecturaActualUnidad(unidad), ordenesDeLaUnidad.data ?? [])
+    : null
+  const textoUltimaLectura = ultimaLectura == null ? '—' : textoLectura(ultimaLectura, enHoras)
 
   const enviar = async (campos: Campos) => {
     const orden = await abrir.mutateAsync({
@@ -102,7 +122,19 @@ export function NuevaOrdenPage() {
               <Form.Item
                 label={enHoras ? 'Horas de uso al ingresar' : 'Kilometraje al ingresar'}
                 name="lecturaIngreso"
-                extra={unidad ? `Última lectura registrada: ${lecturaMedidor(unidad)}` : undefined}
+                dependencies={['vehiculoId']}
+                extra={unidad ? `Última lectura registrada: ${textoUltimaLectura}` : undefined}
+                rules={[
+                  {
+                    validator: async (_, lectura: number | null | undefined) => {
+                      if (lectura != null && ultimaLectura != null && lectura < ultimaLectura) {
+                        throw new Error(
+                          `No puede ser menor que la última lectura registrada (${textoLectura(ultimaLectura, enHoras)}).`,
+                        )
+                      }
+                    },
+                  },
+                ]}
               >
                 <InputNumber min={0} precision={enHoras ? 1 : 0} style={{ width: '100%' }} />
               </Form.Item>
@@ -136,8 +168,25 @@ export function NuevaOrdenPage() {
               <Form.Item label="Tipo de falla" name="tipoFalla">
                 <Select allowClear placeholder="Sin clasificar" options={TIPOS_FALLA} />
               </Form.Item>
-              <Form.Item label="Entrega estimada" name="fechaEstimadaEntrega">
-                <DatePicker showTime={{ format: 'HH:mm' }} format="DD/MM/YYYY HH:mm" style={{ width: '100%' }} />
+              <Form.Item
+                label="Entrega estimada"
+                name="fechaEstimadaEntrega"
+                rules={[
+                  {
+                    // La unidad ingresa ahora: la entrega no puede quedar en el pasado.
+                    validator: async (_, entrega: Dayjs | null | undefined) => {
+                      const motivo = motivoEntregaInvalida(entrega, dayjs())
+                      if (motivo) throw new Error(motivo)
+                    },
+                  },
+                ]}
+              >
+                <DatePicker
+                  showTime={{ format: 'HH:mm' }}
+                  format="DD/MM/YYYY HH:mm"
+                  disabledDate={(dia) => dia.isBefore(dayjs(), 'day')}
+                  style={{ width: '100%' }}
+                />
               </Form.Item>
               <Form.Item label="Falla o pedido del cliente" name="motivoFalla" className="ancho-completo">
                 <Input.TextArea rows={3} placeholder="Qué pide el cliente y qué síntomas reporta" />

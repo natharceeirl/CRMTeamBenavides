@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Input, Modal, Space, Tag } from 'antd'
+import { Button, Input, Modal, Tag } from 'antd'
 import {
   GERENCIA,
   PRESUPUESTO,
@@ -87,110 +87,121 @@ export function PanelAprobaciones({ orden }: Readonly<Props>) {
       <div className="seccion-titulo">
         <h2>Aprobaciones</h2>
       </div>
-      <table className="tabla-simple">
-        <tbody>
-          <tr>
-            <td>Presupuesto del cliente</td>
-            <td>
-              <Tag color={colorPresupuesto[presupuesto]} style={{ marginInlineEnd: 0 }}>
-                {nombresPresupuesto[presupuesto]}
-              </Tag>
-              {orden.fechaRespuestaCliente && (
-                <div className="texto-secundario">{fechaHora(orden.fechaRespuestaCliente)}</div>
+      <div className="aprobaciones">
+        <div className="aprobacion">
+          <div className="aprobacion-cabecera">
+            <span>Presupuesto del cliente</span>
+            <Tag color={colorPresupuesto[presupuesto]} style={{ marginInlineEnd: 0 }}>
+              {nombresPresupuesto[presupuesto]}
+            </Tag>
+          </div>
+          {orden.fechaRespuestaCliente && (
+            <div className="texto-secundario">{fechaHora(orden.fechaRespuestaCliente)}</div>
+          )}
+          {orden.observacionesPresupuestoCliente && (
+            <p className="aprobacion-nota">{orden.observacionesPresupuestoCliente}</p>
+          )}
+          {!cerrada && puedeRegistrarRespuesta && (
+            <div className="aprobacion-acciones">
+              {presupuesto !== PRESUPUESTO.aprobado && (
+                <Button
+                  onClick={() =>
+                    abrir({
+                      destino: 'cliente',
+                      estado: PRESUPUESTO.aprobado,
+                      titulo: 'El cliente aprobó el presupuesto',
+                      motivoObligatorio: false,
+                    })
+                  }
+                >
+                  El cliente aprobó
+                </Button>
               )}
-              {orden.observacionesPresupuestoCliente && <div>{orden.observacionesPresupuestoCliente}</div>}
-            </td>
-          </tr>
-          <tr>
-            <td>Gerencia</td>
-            <td>
-              <Tag color={colorGerencia[aprobacion]} style={{ marginInlineEnd: 0 }}>
-                {nombresGerencia[aprobacion]}
-              </Tag>
-              {orden.fechaAprobacionGerencia && aprobacion !== GERENCIA.noAplica && (
-                <div className="texto-secundario">
-                  {fechaHora(orden.fechaAprobacionGerencia)}
-                  {orden.usuarioAprobacionGerenciaNombre ? ` · ${orden.usuarioAprobacionGerenciaNombre}` : ''}
-                </div>
+              {presupuesto !== PRESUPUESTO.rechazado && (
+                <Button
+                  danger
+                  onClick={() =>
+                    abrir({
+                      destino: 'cliente',
+                      estado: PRESUPUESTO.rechazado,
+                      titulo: 'El cliente rechazó el presupuesto',
+                      motivoObligatorio: true,
+                    })
+                  }
+                >
+                  El cliente rechazó
+                </Button>
               )}
-              {orden.observacionesAprobacionGerencia && <div>{orden.observacionesAprobacionGerencia}</div>}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+            </div>
+          )}
+        </div>
 
-      {!cerrada && puedeRegistrarRespuesta && (
-        <Space wrap style={{ marginTop: 12 }}>
-          {presupuesto !== PRESUPUESTO.aprobado && (
-            <Button
-              onClick={() =>
-                abrir({
-                  destino: 'cliente',
-                  estado: PRESUPUESTO.aprobado,
-                  titulo: 'El cliente aprobó el presupuesto',
-                  motivoObligatorio: false,
-                })
-              }
-            >
-              El cliente aprobó
-            </Button>
+        <div className="aprobacion">
+          <div className="aprobacion-cabecera">
+            <span>Gerencia</span>
+            <Tag color={colorGerencia[aprobacion]} style={{ marginInlineEnd: 0 }}>
+              {nombresGerencia[aprobacion]}
+            </Tag>
+          </div>
+          {orden.fechaAprobacionGerencia && aprobacion !== GERENCIA.noAplica && (
+            <div className="texto-secundario">
+              {fechaHora(orden.fechaAprobacionGerencia)}
+              {orden.usuarioAprobacionGerenciaNombre ? ` · ${orden.usuarioAprobacionGerenciaNombre}` : ''}
+            </div>
           )}
-          {presupuesto !== PRESUPUESTO.rechazado && (
-            <Button
-              danger
-              onClick={() =>
-                abrir({
-                  destino: 'cliente',
-                  estado: PRESUPUESTO.rechazado,
-                  titulo: 'El cliente rechazó el presupuesto',
-                  motivoObligatorio: true,
-                })
-              }
-            >
-              El cliente rechazó
-            </Button>
+          {orden.observacionesAprobacionGerencia && (
+            <p className="aprobacion-nota">{orden.observacionesAprobacionGerencia}</p>
           )}
-        </Space>
-      )}
-
-      {!cerrada && puedeDecidirGerencia && (
-        <Space wrap style={{ marginTop: 12 }}>
-          {aprobacion !== GERENCIA.aprobado && (
-            <Button
-              type="primary"
-              onClick={() =>
-                abrir({ destino: 'gerencia', estado: GERENCIA.aprobado, titulo: 'Aprobar como Gerencia', motivoObligatorio: false })
-              }
-            >
-              Aprobar
-            </Button>
+          {!cerrada && puedeDecidirGerencia && (
+            <div className="aprobacion-acciones">
+              {aprobacion !== GERENCIA.aprobado && (
+                <Button
+                  type="primary"
+                  onClick={() =>
+                    abrir({
+                      destino: 'gerencia',
+                      estado: GERENCIA.aprobado,
+                      titulo: 'Aprobar como Gerencia',
+                      motivoObligatorio: false,
+                    })
+                  }
+                >
+                  Aprobar
+                </Button>
+              )}
+              {aprobacion !== GERENCIA.rechazado && (
+                <Button
+                  danger
+                  onClick={() =>
+                    abrir({
+                      destino: 'gerencia',
+                      estado: GERENCIA.rechazado,
+                      titulo: 'Rechazar como Gerencia',
+                      motivoObligatorio: true,
+                    })
+                  }
+                >
+                  Rechazar
+                </Button>
+              )}
+              {aprobacion === GERENCIA.noAplica && (
+                <Button
+                  onClick={() =>
+                    abrir({
+                      destino: 'gerencia',
+                      estado: GERENCIA.pendiente,
+                      titulo: 'Requerir aprobación de Gerencia',
+                      motivoObligatorio: true,
+                    })
+                  }
+                >
+                  Requerir aprobación
+                </Button>
+              )}
+            </div>
           )}
-          {aprobacion !== GERENCIA.rechazado && (
-            <Button
-              danger
-              onClick={() =>
-                abrir({ destino: 'gerencia', estado: GERENCIA.rechazado, titulo: 'Rechazar como Gerencia', motivoObligatorio: true })
-              }
-            >
-              Rechazar
-            </Button>
-          )}
-          {aprobacion === GERENCIA.noAplica && (
-            <Button
-              onClick={() =>
-                abrir({
-                  destino: 'gerencia',
-                  estado: GERENCIA.pendiente,
-                  titulo: 'Requerir aprobación de Gerencia',
-                  motivoObligatorio: true,
-                })
-              }
-            >
-              Requerir aprobación
-            </Button>
-          )}
-        </Space>
-      )}
+        </div>
+      </div>
 
       <Modal
         title={accion?.titulo}

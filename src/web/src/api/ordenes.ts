@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { Dayjs } from 'dayjs'
 import { solicitar } from './http'
+import { avisoSegun, type AvisoExito } from './avisos'
 import type {
   ActualizarOrdenRequest,
   AgregarDetalleRequest,
@@ -125,6 +127,26 @@ export function motivoBloqueoAprobacion(
   return null
 }
 
+/**
+ * Fecha en que la unidad entró al taller. Las órdenes anteriores al formato de
+ * recepción traen `fechaIngreso` en 0001-01-01; para esas vale la apertura.
+ */
+export function fechaIngresoOrden(orden: { fechaApertura: string; fechaIngreso?: string | null }): string {
+  if (orden.fechaIngreso && new Date(orden.fechaIngreso).getUTCFullYear() > 1900) {
+    return orden.fechaIngreso
+  }
+  return orden.fechaApertura
+}
+
+/**
+ * La entrega estimada no puede quedar antes del ingreso de la unidad. Se compara
+ * por minuto porque el selector no maneja segundos.
+ */
+export function motivoEntregaInvalida(entrega: Dayjs | null | undefined, ingreso: Dayjs): string | null {
+  if (!entrega || !entrega.isBefore(ingreso, 'minute')) return null
+  return `La entrega estimada no puede ser anterior al ingreso (${ingreso.format('DD/MM/YYYY HH:mm')}).`
+}
+
 /** Filtros que acepta GET /api/ordenes-servicio. La búsqueda y las fechas las resuelve la API. */
 export type FiltrosOrdenes = {
   estado?: number
@@ -177,6 +199,9 @@ export function useAbrirOrden() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: avisoSegun<AperturaOrdenRequest, OrdenServicioResponse>((_, orden) =>
+        orden.numeroOrden ? `Orden ${orden.numeroOrden} abierta` : 'Orden abierta',
+      ) },
     mutationFn: (datos: AperturaOrdenRequest) =>
       solicitar<OrdenServicioResponse>('/ordenes-servicio', { metodo: 'POST', cuerpo: datos }),
     onSuccess: async () => {
@@ -186,10 +211,11 @@ export function useAbrirOrden() {
 }
 
 /** Mutación sobre una orden que, al terminar, refresca la lista y el detalle. */
-function useAccionOrden<T>(ruta: string) {
+function useAccionOrden<T>(ruta: string, exito: AvisoExito) {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito },
     mutationFn: ({ id, datos }: { id: string; datos: T }) =>
       solicitar<OrdenServicioResponse>(`/ordenes-servicio/${id}/${ruta}`, {
         metodo: 'PUT',
@@ -202,18 +228,33 @@ function useAccionOrden<T>(ruta: string) {
 }
 
 /** El personal registra la respuesta del cliente al presupuesto; queda en el historial. */
-export const useResponderPresupuesto = () => useAccionOrden<RespuestaPresupuestoRequest>('aprobacion-cliente')
+export const useResponderPresupuesto = () =>
+  useAccionOrden<RespuestaPresupuestoRequest>(
+    'aprobacion-cliente',
+    avisoSegun<{ datos: RespuestaPresupuestoRequest }>(({ datos }) =>
+      datos.estado === PRESUPUESTO.rechazado ? 'Rechazo del presupuesto registrado' : 'Aprobación del presupuesto registrada',
+    ),
+  )
 
 /** Solo con `ordenes.aprobar_gerencia`. */
-export const useAprobacionGerencia = () => useAccionOrden<AprobacionGerenciaRequest>('aprobacion-gerencia')
+export const useAprobacionGerencia = () =>
+  useAccionOrden<AprobacionGerenciaRequest>(
+    'aprobacion-gerencia',
+    avisoSegun<{ datos: AprobacionGerenciaRequest }>(({ datos }) => {
+      if (datos.estado === GERENCIA.aprobado) return 'Aprobado por Gerencia'
+      if (datos.estado === GERENCIA.rechazado) return 'Rechazado por Gerencia'
+      return 'Aprobación de Gerencia requerida'
+    }),
+  )
 
-export const useAsignarTecnico = () => useAccionOrden<AsignarTecnicoRequest>('asignar-tecnico')
+export const useAsignarTecnico = () => useAccionOrden<AsignarTecnicoRequest>('asignar-tecnico', 'Técnico asignado')
 
 /** PUT /api/ordenes-servicio/{id}: datos de recepción y seguimiento de la orden. */
 export function useActualizarOrden() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Datos de la orden guardados' },
     mutationFn: ({ id, datos }: { id: string; datos: ActualizarOrdenRequest }) =>
       solicitar<OrdenServicioResponse>(`/ordenes-servicio/${id}`, {
         metodo: 'PUT',
@@ -229,6 +270,7 @@ export function useRegistrarDiagnostico() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Diagnóstico guardado' },
     mutationFn: ({ id, datos }: { id: string; datos: DiagnosticoRequest }) =>
       solicitar<OrdenServicioResponse>(`/ordenes-servicio/${id}/diagnostico`, {
         metodo: 'PUT',
@@ -244,6 +286,7 @@ export function useAgregarDetalle() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Ítem agregado a la orden' },
     mutationFn: ({ id, datos }: { id: string; datos: AgregarDetalleRequest }) =>
       solicitar<DetalleServicioResponse>(`/ordenes-servicio/${id}/detalles`, {
         metodo: 'POST',
@@ -259,6 +302,7 @@ export function useEliminarDetalle() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Ítem quitado de la orden' },
     mutationFn: ({ id, detalleId }: { id: string; detalleId: string }) =>
       solicitar<{ message: string }>(`/ordenes-servicio/${id}/detalles/${detalleId}`, {
         metodo: 'DELETE',
@@ -273,6 +317,9 @@ export function useCambiarEstado() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: avisoSegun<{ datos: CambiarEstadoRequest }>(({ datos }) =>
+        datos.nuevoEstado === ESTADO.cancelada ? 'Orden anulada' : `Orden en «${nombresEstado[datos.nuevoEstado]}»`,
+      ) },
     mutationFn: ({ id, datos }: { id: string; datos: CambiarEstadoRequest }) =>
       solicitar<OrdenServicioResponse>(`/ordenes-servicio/${id}/estado`, {
         metodo: 'PUT',

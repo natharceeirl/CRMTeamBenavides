@@ -27,6 +27,7 @@ export function useGuardarCliente() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Cliente guardado' },
     mutationFn: ({ id, datos }: { id?: string; datos: ClienteRequest }) =>
       id
         ? solicitar<ClienteResponse>(`/clientes/${id}`, { metodo: 'PUT', cuerpo: datos })
@@ -41,6 +42,7 @@ export function useEliminarCliente() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Cliente dado de baja' },
     mutationFn: (id: string) => solicitar<void>(`/clientes/${id}`, { metodo: 'DELETE' }),
     onSuccess: async () => {
       await consultas.invalidateQueries({ queryKey: clavesClientes.todos })

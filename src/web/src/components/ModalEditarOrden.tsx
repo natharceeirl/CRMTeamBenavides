@@ -1,8 +1,16 @@
 import dayjs, { type Dayjs } from 'dayjs'
 import { DatePicker, Form, Input, InputNumber, Modal, Select } from 'antd'
-import { MODALIDADES_ATENCION, TIPOS_ATENCION, TIPOS_FALLA, useActualizarOrden } from '../api/ordenes'
+import {
+  MODALIDADES_ATENCION,
+  TIPOS_ATENCION,
+  TIPOS_FALLA,
+  fechaIngresoOrden,
+  motivoEntregaInvalida,
+  useActualizarOrden,
+  useOrdenes,
+} from '../api/ordenes'
 import type { OrdenServicioDetalleResponse } from '../api/tipos'
-import { ordenMidePorHoras } from '../utils/unidades'
+import { ordenMidePorHoras, textoLectura, ultimaLecturaRegistrada } from '../utils/unidades'
 import { AvisoError } from './AvisoError'
 
 type Props = {
@@ -31,6 +39,16 @@ export function ModalEditarOrden({ abierto, orden, onCerrar }: Readonly<Props>) 
   const actualizar = useActualizarOrden()
 
   const enHoras = ordenMidePorHoras(orden)
+  const ingreso = dayjs(fechaIngresoOrden(orden))
+
+  // La lectura de esta orden no puede ser menor que la de las órdenes que la
+  // unidad tuvo antes. La lectura actual de la unidad no cuenta: pudo
+  // registrarse después de esta orden.
+  const ordenesDeLaUnidad = useOrdenes({ vehiculoId: orden.vehiculoId }, abierto)
+  const anteriores = (ordenesDeLaUnidad.data ?? []).filter(
+    (otra) => otra.id !== orden.id && dayjs(fechaIngresoOrden(otra)).isBefore(ingreso),
+  )
+  const lecturaAnterior = ultimaLecturaRegistrada(enHoras, null, anteriores)
 
   const cerrar = () => {
     actualizar.reset()
@@ -92,10 +110,43 @@ export function ModalEditarOrden({ abierto, orden, onCerrar }: Readonly<Props>) 
           <Form.Item label="Tipo de falla" name="tipoFalla">
             <Select allowClear placeholder="Sin clasificar" options={TIPOS_FALLA} />
           </Form.Item>
-          <Form.Item label="Entrega estimada" name="fechaEstimadaEntrega">
-            <DatePicker showTime={{ format: 'HH:mm' }} format="DD/MM/YYYY HH:mm" style={{ width: '100%' }} />
+          <Form.Item
+            label="Entrega estimada"
+            name="fechaEstimadaEntrega"
+            rules={[
+              {
+                validator: async (_, entrega: Dayjs | null | undefined) => {
+                  const motivo = motivoEntregaInvalida(entrega, ingreso)
+                  if (motivo) throw new Error(motivo)
+                },
+              },
+            ]}
+          >
+            <DatePicker
+              showTime={{ format: 'HH:mm' }}
+              format="DD/MM/YYYY HH:mm"
+              disabledDate={(dia) => dia.isBefore(ingreso, 'day')}
+              style={{ width: '100%' }}
+            />
           </Form.Item>
-          <Form.Item label={enHoras ? 'Horas de uso al ingresar' : 'Kilometraje al ingresar'} name="lecturaIngreso">
+          <Form.Item
+            label={enHoras ? 'Horas de uso al ingresar' : 'Kilometraje al ingresar'}
+            name="lecturaIngreso"
+            extra={
+              lecturaAnterior == null ? undefined : `Orden anterior: ${textoLectura(lecturaAnterior, enHoras)}`
+            }
+            rules={[
+              {
+                validator: async (_, lectura: number | null | undefined) => {
+                  if (lectura != null && lecturaAnterior != null && lectura < lecturaAnterior) {
+                    throw new Error(
+                      `No puede ser menor que la de la orden anterior (${textoLectura(lecturaAnterior, enHoras)}).`,
+                    )
+                  }
+                },
+              },
+            ]}
+          >
             <InputNumber min={0} precision={enHoras ? 1 : 0} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item label="Falla o pedido del cliente" name="motivoFalla" className="ancho-completo">

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Button, Form, Input, InputNumber, message } from 'antd'
+import { Button, Form, Input, InputNumber } from 'antd'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { useActualizarConfiguracionEmpresa, useConfiguracionEmpresa } from '../api/configuracion'
@@ -36,7 +36,6 @@ export function ConfiguracionPage() {
       ruc: campos.ruc?.trim() ? campos.ruc.trim() : null,
       porcentajeIgv: campos.porcentajeIgv,
     })
-    message.success('Configuración guardada')
   }
 
   return (

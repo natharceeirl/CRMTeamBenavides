@@ -20,15 +20,24 @@ export function nombreTipoUnidad(unidad: Pick<VehiculoResponse, 'tipoUnidadId'>)
 export const midePorHoras = (unidad: Pick<VehiculoResponse, 'tipoMedidorId'>) =>
   unidad.tipoMedidorId === MEDIDOR_HORAS
 
+type LecturaDeUnidad = Pick<VehiculoResponse, 'tipoMedidorId' | 'lecturaMedidorActual' | 'kilometraje' | 'horasUso'>
+
+/** Lectura actual del medidor de la unidad, en km u horas según su medidor. */
+export function lecturaActualUnidad(unidad: LecturaDeUnidad): number | null {
+  return (
+    (midePorHoras(unidad)
+      ? (unidad.lecturaMedidorActual ?? unidad.horasUso)
+      : (unidad.lecturaMedidorActual ?? unidad.kilometraje)) ?? null
+  )
+}
+
+/** «12 450 km» o «86 h». */
+export const textoLectura = (lectura: number, enHoras: boolean) => `${entero(lectura)} ${enHoras ? 'h' : 'km'}`
+
 /** «12 450 km» o «86 h», según el medidor de la unidad. */
-export function lecturaMedidor(
-  unidad: Pick<VehiculoResponse, 'tipoMedidorId' | 'lecturaMedidorActual' | 'kilometraje' | 'horasUso'>,
-): string {
-  const lectura = midePorHoras(unidad)
-    ? (unidad.lecturaMedidorActual ?? unidad.horasUso)
-    : (unidad.lecturaMedidorActual ?? unidad.kilometraje)
-  if (lectura == null) return '—'
-  return `${entero(lectura)} ${midePorHoras(unidad) ? 'h' : 'km'}`
+export function lecturaMedidor(unidad: LecturaDeUnidad): string {
+  const lectura = lecturaActualUnidad(unidad)
+  return lectura == null ? '—' : textoLectura(lectura, midePorHoras(unidad))
 }
 
 /**
@@ -46,14 +55,36 @@ export function ordenMidePorHoras(orden: {
   return orden.tipoUnidad === 'MotoAcuatica' || orden.tipoUnidad === 'Generador'
 }
 
-/** Lectura del medidor al ingresar la unidad al taller, o «—». */
-export function lecturaIngresoOrden(orden: Parameters<typeof ordenMidePorHoras>[0]): string {
-  const enHoras = ordenMidePorHoras(orden)
+type LecturaDeOrden = Parameters<typeof ordenMidePorHoras>[0]
+
+/** Lectura con que ingresó la unidad, en km u horas. */
+function lecturaDeOrden(orden: LecturaDeOrden, enHoras: boolean): number | null {
+  const propia = enHoras ? orden.horasUsoIngreso : orden.kilometrajeIngreso
   // La lectura genérica de la API cubre las órdenes que no traen km ni horas.
-  const lectura = enHoras
-    ? (orden.horasUsoIngreso ?? orden.lecturaMedidorIngreso)
-    : (orden.kilometrajeIngreso ?? orden.lecturaMedidorIngreso)
-  return lectura == null ? '—' : `${entero(lectura)} ${enHoras ? 'h' : 'km'}`
+  return propia ?? orden.lecturaMedidorIngreso ?? null
+}
+
+/** Lectura del medidor al ingresar la unidad al taller, o «—». */
+export function lecturaIngresoOrden(orden: LecturaDeOrden): string {
+  const enHoras = ordenMidePorHoras(orden)
+  const lectura = lecturaDeOrden(orden, enHoras)
+  return lectura == null ? '—' : textoLectura(lectura, enHoras)
+}
+
+/**
+ * La mayor lectura ya registrada para la unidad: la suya y la de sus órdenes
+ * anteriores. Un medidor no retrocede, así que una lectura nueva no puede ser
+ * menor.
+ */
+export function ultimaLecturaRegistrada(
+  enHoras: boolean,
+  lecturaUnidad: number | null,
+  ordenesAnteriores: LecturaDeOrden[],
+): number | null {
+  const lecturas = [lecturaUnidad, ...ordenesAnteriores.map((orden) => lecturaDeOrden(orden, enHoras))].filter(
+    (lectura): lectura is number => lectura != null,
+  )
+  return lecturas.length === 0 ? null : Math.max(...lecturas)
 }
 
 /** Placa si tiene; si no, VIN o serie. Las motos acuáticas y los generadores no llevan placa. */

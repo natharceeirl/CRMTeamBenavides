@@ -34,6 +34,7 @@ export function useCrearServicio() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Servicio creado' },
     mutationFn: (datos: CrearServicioRequest) =>
       solicitar<ServicioResponse>('/servicios', { metodo: 'POST', cuerpo: datos }),
     onSuccess: async () => {
@@ -46,6 +47,7 @@ export function useActualizarServicio() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Servicio guardado' },
     mutationFn: ({ id, datos }: { id: string; datos: ActualizarServicioRequest }) =>
       solicitar<ServicioResponse>(`/servicios/${id}`, {
         metodo: 'PUT',
@@ -61,6 +63,7 @@ export function useEliminarServicio() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Servicio dado de baja' },
     mutationFn: (id: string) =>
       solicitar<void>(`/servicios/${id}`, { metodo: 'DELETE' }),
     onSuccess: async () => {

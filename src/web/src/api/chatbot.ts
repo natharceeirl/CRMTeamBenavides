@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { solicitar } from './http'
+import { avisoSegun } from './avisos'
 import type {
   ConsultaBandejaResponse,
   ConsultaChatbotRequest,
@@ -95,6 +96,7 @@ export function useGuardarFaq() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Pregunta frecuente guardada' },
     mutationFn: ({ id, datos }: { id?: string; datos: FaqRequest }) =>
       id
         ? solicitar<FaqResponse>(`/chatbot/admin/faqs/${id}`, { metodo: 'PUT', cuerpo: datos })
@@ -109,6 +111,7 @@ export function useEliminarFaq() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Pregunta frecuente eliminada' },
     mutationFn: (id: string) =>
       solicitar<void>(`/chatbot/admin/faqs/${id}`, { metodo: 'DELETE' }),
     onSuccess: async () => {
@@ -128,6 +131,7 @@ export function useAsignarAgente() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: 'Consulta asignada' },
     mutationFn: ({ id, agenteId }: { id: string; agenteId: string }) =>
       solicitar<ConsultaBandejaResponse>(`/chatbot/admin/consultas/${id}/asignar`, {
         metodo: 'PUT',
@@ -143,6 +147,9 @@ export function useResolverConsulta() {
   const consultas = useQueryClient()
 
   return useMutation({
+    meta: { exito: avisoSegun<{ datos: ResolverConsultaRequest }>(({ datos }) =>
+        datos.estado === 3 ? 'Consulta descartada' : 'Consulta resuelta',
+      ) },
     mutationFn: ({ id, datos }: { id: string; datos: ResolverConsultaRequest }) =>
       solicitar<ConsultaBandejaResponse>(`/chatbot/admin/consultas/${id}/resolver`, {
         metodo: 'PUT',
