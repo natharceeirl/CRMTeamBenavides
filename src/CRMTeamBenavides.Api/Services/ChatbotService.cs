@@ -69,10 +69,31 @@ public class ChatbotService : IChatbotService
         var tokens = ExtraerTokens(request.Mensaje);
         var normUserMsg = NormalizarTexto(request.Mensaje);
 
+        // Un saludo o un mensaje sin palabras útiles («hola», «buenas tardes») no
+        // es una consulta: se responde con lo que el asistente sabe resolver.
+        if (tokens.Count == 0)
+        {
+            var temas = faqsActivas
+                .OrderBy(f => f.Orden)
+                .ThenBy(f => f.Pregunta)
+                .Take(3)
+                .Select(f => MapToFaqResponse(f))
+                .ToList();
+
+            return ServiceResult<ConsultaChatbotResponse>.Success(new ConsultaChatbotResponse(
+                ResueltoPorFaq:   false,
+                Faq:              null,
+                Sugerencias:      temas,
+                RequiereAgente:   false,
+                ConsultaId:       null,
+                MensajeRespuesta: "¡Hola! Soy el asistente de Team Benavides. Puedo ayudarte con horarios, servicios y cotizaciones, o ponerte en contacto con un asesor. ¿Qué necesitas?"));
+        }
+
         FaqItem? bestMatch = null;
         int maxScore = 0;
         int bestTokensMatched = 0;
         bool bestFraseMatch = false;
+        var puntajes = new List<(FaqItem Faq, int Puntaje)>();
 
         foreach (var faq in faqsActivas)
         {
@@ -126,6 +147,8 @@ public class ChatbotService : IChatbotService
                 }
             }
 
+            puntajes.Add((faq, score));
+
             if (score > maxScore)
             {
                 maxScore = score;
@@ -155,33 +178,32 @@ public class ChatbotService : IChatbotService
             }
         }
 
-        Guid? clienteId = null;
-        if (usuarioAutenticadoId.HasValue)
+        if (resuelto)
         {
-            clienteId = await ObtenerClienteIdDeUsuarioAsync(usuarioAutenticadoId.Value);
-        }
+            Guid? clienteId = null;
+            if (usuarioAutenticadoId.HasValue)
+            {
+                clienteId = await ObtenerClienteIdDeUsuarioAsync(usuarioAutenticadoId.Value);
+            }
 
-        var consulta = new ConsultaChatbot
-        {
-            Canal                 = string.IsNullOrWhiteSpace(request.Canal) ? "Web" : request.Canal.Trim(),
-            ClienteId             = clienteId,
-            NombreContacto        = request.NombreContacto?.Trim(),
-            TelefonoContacto      = request.TelefonoContacto?.Trim(),
-            MensajeConsulta       = request.Mensaje.Trim(),
-            FaqItemId             = resuelto ? bestMatch!.Id : null,
-            RequiereAtencionAgente = !resuelto,
-            EstadoAtencion        = resuelto ? EstadoAtencionConsulta.Resuelto : EstadoAtencionConsulta.Pendiente,
-            FechaDerivacion       = !resuelto ? DateTime.UtcNow : null,
-            FechaResolucion       = resuelto ? DateTime.UtcNow : null,
-            FechaCreacion         = DateTime.UtcNow,
-            Activo                = true
-        };
+            var consulta = new ConsultaChatbot
+            {
+                Canal                  = string.IsNullOrWhiteSpace(request.Canal) ? "Web" : request.Canal.Trim(),
+                ClienteId              = clienteId,
+                NombreContacto         = request.NombreContacto?.Trim(),
+                TelefonoContacto       = request.TelefonoContacto?.Trim(),
+                MensajeConsulta        = request.Mensaje.Trim(),
+                FaqItemId              = bestMatch!.Id,
+                RequiereAtencionAgente = false,
+                EstadoAtencion         = EstadoAtencionConsulta.Resuelto,
+                FechaResolucion        = DateTime.UtcNow,
+                FechaCreacion          = DateTime.UtcNow,
+                Activo                 = true
+            };
 
-        _context.ConsultasChatbot.Add(consulta);
-        await _context.SaveChangesAsync();
+            _context.ConsultasChatbot.Add(consulta);
+            await _context.SaveChangesAsync();
 
-        if (resuelto && bestMatch != null)
-        {
             await _context.FaqItems
                 .Where(f => f.Id == bestMatch.Id)
                 .ExecuteUpdateAsync(s => s
@@ -189,46 +211,39 @@ public class ChatbotService : IChatbotService
                     .SetProperty(f => f.FechaModificacion, DateTime.UtcNow));
 
             bestMatch.VecesConsultada++;
-        }
 
-        if (resuelto)
-        {
             return ServiceResult<ConsultaChatbotResponse>.Success(new ConsultaChatbotResponse(
                 ResueltoPorFaq:   true,
-                Faq:              MapToFaqResponse(bestMatch!),
+                Faq:              MapToFaqResponse(bestMatch),
                 Sugerencias:      new List<FaqResponse>(),
                 RequiereAgente:   false,
                 ConsultaId:       consulta.Id,
-                MensajeRespuesta: bestMatch!.Respuesta));
+                MensajeRespuesta: bestMatch.Respuesta));
         }
 
-        // Sugerir las FAQs más relevantes: si hubo una mejor coincidencia parcial (score > 0),
-        // se coloca primero en las sugerencias, seguida de las más consultadas o prioritarias.
-        var sugerenciasQuery = faqsActivas.AsEnumerable();
-        if (bestMatch != null && maxScore > 0)
-        {
-            sugerenciasQuery = sugerenciasQuery.OrderByDescending(f => f.Id == bestMatch.Id)
-                                               .ThenByDescending(f => f.VecesConsultada)
-                                               .ThenBy(f => f.Orden);
-        }
-        else
-        {
-            sugerenciasQuery = sugerenciasQuery.OrderByDescending(f => f.VecesConsultada)
-                                               .ThenBy(f => f.Orden);
-        }
-
-        var sugerencias = sugerenciasQuery
+        // Sin respuesta no se crea una consulta pendiente: solo pasa a la bandeja
+        // del personal cuando el cliente pide un asesor (SolicitarAgenteAsync).
+        // Se sugieren únicamente las preguntas que coinciden en algo con el mensaje.
+        var sugerencias = puntajes
+            .Where(p => p.Puntaje > 0)
+            .OrderByDescending(p => p.Puntaje)
+            .ThenByDescending(p => p.Faq.VecesConsultada)
+            .ThenBy(p => p.Faq.Orden)
             .Take(3)
-            .Select(f => MapToFaqResponse(f))
+            .Select(p => MapToFaqResponse(p.Faq))
             .ToList();
+
+        var mensaje = sugerencias.Count > 0
+            ? "No encontré una respuesta exacta. Quizá te sirva alguna de estas preguntas; si no, un asesor del taller puede contactarte."
+            : "No encontré una respuesta para eso. Si quieres, un asesor del taller puede contactarte.";
 
         return ServiceResult<ConsultaChatbotResponse>.Success(new ConsultaChatbotResponse(
             ResueltoPorFaq:   false,
             Faq:              null,
             Sugerencias:      sugerencias,
             RequiereAgente:   true,
-            ConsultaId:       consulta.Id,
-            MensajeRespuesta: "No encontré una respuesta específica para tu consulta. Puedes revisar nuestras preguntas frecuentes sugeridas o solicitar la atención de un asesor del taller."));
+            ConsultaId:       null,
+            MensajeRespuesta: mensaje));
     }
 
     public async Task<ServiceResult<SolicitudAgenteResponse>> SolicitarAgenteAsync(

@@ -97,5 +97,16 @@ void main() {
       expect(respuesta.sugerencias, isEmpty);
       expect(respuesta.requiereAgente, isFalse);
     });
+
+    test('sin respuesta no hay consulta: el id llega nulo y no como texto vacío', () {
+      // Un id vacío haría fallar al pedir un asesor: la API no puede leerlo como Guid.
+      final respuesta = RespuestaChatbotApi.desdeJson({
+        'consultaId': null,
+        'requiereAgente': true,
+        'mensajeRespuesta': 'No encontré una respuesta para eso.',
+      });
+
+      expect(respuesta.consultaId, isNull);
+    });
   });
 }

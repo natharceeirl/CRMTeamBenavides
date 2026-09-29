@@ -1,3 +1,4 @@
+using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Features.Roles;
 using CRMTeamBenavides.Api.Features.Usuarios;
 using CRMTeamBenavides.Data;
@@ -121,12 +122,24 @@ public class UsuarioService : IUsuarioService
         return ServiceResult<UsuarioResponse>.Success(MapToResponse(usuario, roles));
     }
 
-    public async Task<ServiceResult<bool>> DeleteAsync(Guid id)
+    public async Task<ServiceResult<bool>> DeleteAsync(Guid id, Guid? usuarioActualId)
     {
         var usuario = await _userManager.Users.FirstOrDefaultAsync(u => u.Id == id && u.Activo);
         if (usuario is null)
         {
             return ServiceResult<bool>.NotFound();
+        }
+
+        // Quien se da de baja pierde el acceso en el acto.
+        if (usuarioActualId == id)
+        {
+            return ServiceResult<bool>.Invalid("No puedes darte de baja a ti mismo.");
+        }
+
+        if (await EsUltimaCuentaDeGerenciaAsync(id))
+        {
+            return ServiceResult<bool>.Invalid(
+                "Es la última cuenta con el rol Gerencia/Admin. Asigna ese rol a otra cuenta antes de darla de baja.");
         }
 
         usuario.Activo = false;
@@ -188,6 +201,7 @@ public class UsuarioService : IUsuarioService
     public async Task<ServiceResult<bool>> QuitarRolAsync(Guid usuarioId, Guid rolId)
     {
         var asignacion = await _context.UsuarioRoles
+            .Include(ur => ur.Rol)
             .FirstOrDefaultAsync(ur => ur.UsuarioId == usuarioId && ur.RolId == rolId);
 
         if (asignacion is null)
@@ -195,10 +209,31 @@ public class UsuarioService : IUsuarioService
             return ServiceResult<bool>.NotFound();
         }
 
+        if (asignacion.Rol.Nombre == RolesDefinidos.GerenciaAdmin && await EsUltimaCuentaDeGerenciaAsync(usuarioId))
+        {
+            return ServiceResult<bool>.Invalid(
+                "Es la última cuenta con el rol Gerencia/Admin. Asigna ese rol a otra cuenta antes de quitárselo.");
+        }
+
         _context.UsuarioRoles.Remove(asignacion);
         await _context.SaveChangesAsync();
 
         return ServiceResult<bool>.Success(true);
+    }
+
+    /// <summary>
+    /// Sin ninguna cuenta activa de Gerencia/Admin nadie podría administrar
+    /// usuarios ni permisos.
+    /// </summary>
+    private async Task<bool> EsUltimaCuentaDeGerenciaAsync(Guid usuarioId)
+    {
+        var cuentasDeGerencia = await _context.UsuarioRoles
+            .Where(ur => ur.Rol.Nombre == RolesDefinidos.GerenciaAdmin && ur.Rol.Activo && ur.Usuario.Activo)
+            .Select(ur => ur.UsuarioId)
+            .Distinct()
+            .ToListAsync();
+
+        return cuentasDeGerencia.Count == 1 && cuentasDeGerencia[0] == usuarioId;
     }
 
     private async Task<List<string>> GetRoleNamesAsync(Guid usuarioId)

@@ -614,7 +614,7 @@ class RespuestaChatbotApi {
   });
 
   factory RespuestaChatbotApi.desdeJson(Map<String, dynamic> json) => RespuestaChatbotApi(
-        consultaId: json['consultaId'] as String? ?? '',
+        consultaId: json['consultaId'] as String?,
         mensajeRespuesta: json['mensajeRespuesta'] as String? ?? '',
         resueltoPorFaq: json['resueltoPorFaq'] as bool? ?? false,
         requiereAgente: json['requiereAgente'] as bool? ?? false,
@@ -623,7 +623,9 @@ class RespuestaChatbotApi {
             .toList(),
       );
 
-  final String consultaId;
+  /// Solo si respondió una pregunta frecuente: sin respuesta no se registra
+  /// consulta, y al pedir un asesor el backend crea una nueva.
+  final String? consultaId;
   final String mensajeRespuesta;
   final bool resueltoPorFaq;
   final bool requiereAgente;

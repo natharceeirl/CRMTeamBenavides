@@ -100,11 +100,18 @@ public static class RolSeeder
         // -------------------------------------------------------------------
         // 2. Roles Definitivos (Migración canónica de nombres)
         // -------------------------------------------------------------------
-        // Migrar roles antiguos a nombres canónicos si existen
-        var rolAdminAntiguo = await context.Roles
-            .FirstOrDefaultAsync(r => r.Nombre == "Admin" || r.Nombre == "Administrador");
+        // Migrar roles antiguos a nombres canónicos si existen. Solo mientras el
+        // canónico no exista: si quedaban «Admin» y «Administrador», el segundo
+        // arranque intentaba renombrar el otro y chocaba con el índice único.
+        var existeGerenciaAdmin = await context.Roles.AnyAsync(r => r.Nombre == RolGerenciaAdmin);
+        var rolAdminAntiguo = existeGerenciaAdmin
+            ? null
+            : await context.Roles
+                .Where(r => r.Nombre == "Admin" || r.Nombre == "Administrador")
+                .OrderByDescending(r => r.Activo)
+                .FirstOrDefaultAsync();
 
-        if (rolAdminAntiguo is not null && rolAdminAntiguo.Nombre != RolGerenciaAdmin)
+        if (rolAdminAntiguo is not null)
         {
             rolAdminAntiguo.Nombre = RolGerenciaAdmin;
             rolAdminAntiguo.Descripcion = "Gerencia y Administrador del sistema con acceso total";

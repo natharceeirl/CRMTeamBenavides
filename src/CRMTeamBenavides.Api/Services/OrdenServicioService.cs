@@ -181,6 +181,32 @@ public class OrdenServicioService : IOrdenServicioService
             }
         }
 
+        var ahora = DateTime.UtcNow;
+
+        var motivoEntrega = MotivoEntregaInvalida(request.FechaEstimadaEntrega, ahora);
+        if (motivoEntrega is not null)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid(motivoEntrega);
+        }
+
+        // Un medidor no retrocede: la lectura nueva no puede ser menor que la de
+        // la unidad ni que la de sus órdenes anteriores.
+        var lecturaNueva = LecturaSegunMedidor(
+            vehiculo.TipoMedidor, request.KilometrajeIngreso, request.HorasUsoIngreso, request.LecturaMedidorIngreso);
+        if (lecturaNueva.HasValue)
+        {
+            var ultimaDeOrdenes = await UltimaLecturaDeOrdenesAsync(vehiculo.Id, vehiculo.TipoMedidor);
+            var ultimaRegistrada = new[] { LecturaActualDeUnidad(vehiculo), ultimaDeOrdenes }.Max();
+            var motivoLectura = MotivoLecturaMenor(
+                lecturaNueva.Value, ultimaRegistrada, vehiculo.TipoMedidor, "la última registrada para la unidad");
+            if (motivoLectura is not null)
+            {
+                return ServiceResult<OrdenServicioResponse>.Invalid(motivoLectura);
+            }
+
+            AvanzarLecturaDeUnidad(vehiculo, lecturaNueva.Value);
+        }
+
         var numeroOrden = await GenerarNumeroOrdenAsync();
 
         var orden = new OrdenServicio
@@ -197,10 +223,10 @@ public class OrdenServicioService : IOrdenServicioService
             TipoFalla              = request.TipoFalla,
             KilometrajeIngreso     = request.KilometrajeIngreso ?? vehiculo.Kilometraje,
             HorasUsoIngreso        = request.HorasUsoIngreso ?? vehiculo.HorasUso,
-            LecturaMedidorIngreso  = request.LecturaMedidorIngreso ?? vehiculo.LecturaMedidorActual,
+            LecturaMedidorIngreso  = request.LecturaMedidorIngreso ?? lecturaNueva ?? vehiculo.LecturaMedidorActual,
             Estado                 = EstadoOrdenServicio.Abierta,
-            FechaApertura          = DateTime.UtcNow,
-            FechaIngreso           = DateTime.UtcNow,
+            FechaApertura          = ahora,
+            FechaIngreso           = ahora,
             FechaCreacion          = DateTime.UtcNow,
             Activo                 = true
         };
@@ -262,6 +288,12 @@ public class OrdenServicioService : IOrdenServicioService
         {
             return ServiceResult<OrdenServicioResponse>.Invalid(
                 $"No se puede registrar diagnóstico en una orden que se encuentra en estado '{orden.Estado}'.");
+        }
+
+        var motivoEntrega = MotivoEntregaInvalida(request.FechaEstimadaEntrega, IngresoDeOrden(orden));
+        if (motivoEntrega is not null)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid(motivoEntrega);
         }
 
         if (request.TecnicoAsignadoId.HasValue)
@@ -352,6 +384,32 @@ public class OrdenServicioService : IOrdenServicioService
         {
             return ServiceResult<OrdenServicioResponse>.Invalid(
                 $"No se pueden modificar datos en una orden que se encuentra en estado '{orden.Estado}'.");
+        }
+
+        var motivoEntrega = MotivoEntregaInvalida(request.FechaEstimadaEntrega, IngresoDeOrden(orden));
+        if (motivoEntrega is not null)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid(motivoEntrega);
+        }
+
+        // La lectura de esta orden no puede ser menor que la de las órdenes que la
+        // unidad tuvo antes. La lectura actual de la unidad no cuenta: pudo
+        // registrarse después de esta orden.
+        var lecturaNueva = LecturaSegunMedidor(
+            orden.Vehiculo.TipoMedidor, request.KilometrajeIngreso, request.HorasUsoIngreso, request.LecturaMedidorIngreso);
+        if (lecturaNueva.HasValue)
+        {
+            var ultimaAnterior = await UltimaLecturaDeOrdenesAsync(
+                orden.VehiculoId, orden.Vehiculo.TipoMedidor, excluirOrdenId: orden.Id, antesDe: orden.FechaApertura);
+            var motivoLectura = MotivoLecturaMenor(
+                lecturaNueva.Value, ultimaAnterior, orden.Vehiculo.TipoMedidor, "la de la orden anterior de la unidad");
+            if (motivoLectura is not null)
+            {
+                return ServiceResult<OrdenServicioResponse>.Invalid(motivoLectura);
+            }
+
+            AvanzarLecturaDeUnidad(orden.Vehiculo, lecturaNueva.Value);
+            if (!request.LecturaMedidorIngreso.HasValue) orden.LecturaMedidorIngreso = lecturaNueva.Value;
         }
 
         if (request.TecnicoAsignadoId.HasValue)
@@ -1192,6 +1250,92 @@ public class OrdenServicioService : IOrdenServicioService
 
         await _context.SaveChangesAsync();
         return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
+    }
+
+    // --- Lectura del medidor y fechas de la recepción ---
+
+    private static readonly System.Globalization.CultureInfo CulturaPeru = System.Globalization.CultureInfo.GetCultureInfo("es-PE");
+
+    /// <summary>Lectura con que ingresa la unidad, en km u horas según su medidor.</summary>
+    private static decimal? LecturaSegunMedidor(TipoMedidor medidor, int? kilometraje, decimal? horasUso, decimal? lecturaGenerica)
+    {
+        var propia = medidor == TipoMedidor.Kilometraje ? (decimal?)kilometraje : horasUso;
+        return propia ?? lecturaGenerica;
+    }
+
+    private static decimal? LecturaActualDeUnidad(Vehiculo vehiculo) =>
+        vehiculo.LecturaMedidorActual
+        ?? (vehiculo.TipoMedidor == TipoMedidor.Kilometraje ? (decimal?)vehiculo.Kilometraje : vehiculo.HorasUso);
+
+    private static string TextoLectura(decimal lectura, TipoMedidor medidor) =>
+        medidor == TipoMedidor.Kilometraje
+            ? $"{lectura.ToString("N0", CulturaPeru)} km"
+            : $"{lectura.ToString("0.#", CulturaPeru)} h";
+
+    /// <summary>
+    /// Mayor lectura registrada en las órdenes de la unidad. Con <paramref name="antesDe"/>
+    /// solo cuentan las abiertas antes de esa fecha.
+    /// </summary>
+    private async Task<decimal?> UltimaLecturaDeOrdenesAsync(
+        Guid vehiculoId,
+        TipoMedidor medidor,
+        Guid? excluirOrdenId = null,
+        DateTime? antesDe = null)
+    {
+        var consulta = _context.OrdenesServicio
+            .AsNoTracking()
+            .Where(o => o.VehiculoId == vehiculoId && o.Activo);
+
+        if (excluirOrdenId.HasValue) consulta = consulta.Where(o => o.Id != excluirOrdenId.Value);
+        if (antesDe.HasValue) consulta = consulta.Where(o => o.FechaApertura < antesDe.Value);
+
+        var lecturas = await consulta
+            .Select(o => new { o.KilometrajeIngreso, o.HorasUsoIngreso, o.LecturaMedidorIngreso })
+            .ToListAsync();
+
+        return lecturas
+            .Select(l => LecturaSegunMedidor(medidor, l.KilometrajeIngreso, l.HorasUsoIngreso, l.LecturaMedidorIngreso))
+            .Where(l => l.HasValue)
+            .Max();
+    }
+
+    private static string? MotivoLecturaMenor(decimal lectura, decimal? minima, TipoMedidor medidor, string referencia) =>
+        minima.HasValue && lectura < minima.Value
+            ? $"La lectura del medidor ({TextoLectura(lectura, medidor)}) no puede ser menor que {referencia} ({TextoLectura(minima.Value, medidor)})."
+            : null;
+
+    /// <summary>La lectura de la unidad solo avanza: un medidor no retrocede.</summary>
+    private static void AvanzarLecturaDeUnidad(Vehiculo vehiculo, decimal lectura)
+    {
+        var actual = LecturaActualDeUnidad(vehiculo);
+        if (actual.HasValue && lectura <= actual.Value) return;
+
+        vehiculo.LecturaMedidorActual = lectura;
+        if (vehiculo.TipoMedidor == TipoMedidor.Kilometraje)
+            vehiculo.Kilometraje = (int)Math.Round(lectura);
+        else
+            vehiculo.HorasUso = lectura;
+        vehiculo.FechaModificacion = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Ingreso de la unidad al taller. Las órdenes anteriores al formato de
+    /// atención pueden no tenerlo: para esas vale la apertura.
+    /// </summary>
+    private static DateTime IngresoDeOrden(OrdenServicio orden) =>
+        orden.FechaIngreso.Year > 1900 ? orden.FechaIngreso : orden.FechaApertura;
+
+    /// <summary>
+    /// La entrega estimada no puede quedar antes del ingreso. Se compara por
+    /// minuto porque la web y la app eligen la hora sin segundos.
+    /// </summary>
+    private static string? MotivoEntregaInvalida(DateTime? entrega, DateTime ingreso)
+    {
+        if (!entrega.HasValue) return null;
+        var ingresoAlMinuto = new DateTime(ingreso.Ticks - (ingreso.Ticks % TimeSpan.TicksPerMinute), ingreso.Kind);
+        return entrega.Value.ToUniversalTime() < ingresoAlMinuto.ToUniversalTime()
+            ? "La fecha estimada de entrega no puede ser anterior al ingreso de la unidad."
+            : null;
     }
 
     private static void RecalcularTotalesOrden(OrdenServicio orden)

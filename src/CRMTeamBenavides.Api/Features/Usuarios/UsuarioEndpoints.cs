@@ -1,3 +1,5 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Features.Auth;
 using CRMTeamBenavides.Api.Services;
@@ -50,13 +52,14 @@ public static class UsuarioEndpoints
         .RequireAuthorization(PermisosDefinidos.UsuariosEditar)
         .WithName("UpdateUsuario");
 
-        group.MapDelete("/{id:guid}", async (Guid id, IUsuarioService service) =>
+        group.MapDelete("/{id:guid}", async (Guid id, ClaimsPrincipal user, IUsuarioService service) =>
         {
-            var result = await service.DeleteAsync(id);
+            var result = await service.DeleteAsync(id, ObtenerUsuarioId(user));
             return result.Status switch
             {
                 ServiceResultStatus.Success => Results.NoContent(),
                 ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
                 _ => Results.Problem()
             };
         })
@@ -91,6 +94,7 @@ public static class UsuarioEndpoints
             {
                 ServiceResultStatus.Success => Results.NoContent(),
                 ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
                 _ => Results.Problem()
             };
         })
@@ -110,5 +114,12 @@ public static class UsuarioEndpoints
         })
         .RequireAuthorization(PermisosDefinidos.UsuariosResetPassword)
         .WithName("ResetPasswordUsuario");
+    }
+
+    private static Guid? ObtenerUsuarioId(ClaimsPrincipal user)
+    {
+        var subClaim = user.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+            ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(subClaim, out var usuarioId) ? usuarioId : null;
     }
 }

@@ -633,7 +633,8 @@ export type ConsultaChatbotResponse = {
   faq: FaqResponse | null
   sugerencias: FaqResponse[]
   requiereAgente: boolean
-  consultaId: string
+  /** Solo si respondió una pregunta frecuente: sin respuesta no se registra consulta. */
+  consultaId: string | null
   mensajeRespuesta: string
 }
 

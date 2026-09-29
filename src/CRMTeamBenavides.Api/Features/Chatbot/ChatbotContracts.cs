@@ -42,7 +42,8 @@ public record ConsultaChatbotResponse(
     FaqResponse? Faq,
     List<FaqResponse> Sugerencias,
     bool RequiereAgente,
-    Guid ConsultaId,
+    // Solo cuando una pregunta frecuente respondió; sin respuesta no se registra consulta.
+    Guid? ConsultaId,
     string MensajeRespuesta);
 
 public record SolicitarAgenteRequest(
