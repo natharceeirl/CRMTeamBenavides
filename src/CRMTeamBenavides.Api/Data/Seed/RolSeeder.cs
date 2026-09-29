@@ -51,6 +51,10 @@ public static class RolSeeder
             [PermisosDefinidos.InventarioEditar] = "Modificar repuestos y umbrales de stock",
             [PermisosDefinidos.InventarioAjustar] = "Registrar movimientos y ajustes de inventario",
             [PermisosDefinidos.InventarioEliminar] = "Dar de baja repuestos del catálogo",
+            [PermisosDefinidos.ServiciosVer] = "Consultar catálogo de servicios del taller",
+            [PermisosDefinidos.ServiciosCrear] = "Registrar nuevos servicios en el catálogo",
+            [PermisosDefinidos.ServiciosEditar] = "Modificar servicios y precios sugeridos",
+            [PermisosDefinidos.ServiciosEliminar] = "Dar de baja servicios del catálogo",
             [PermisosDefinidos.VentasVer] = "Consultar ventas y cotizaciones",
             [PermisosDefinidos.VentasCrear] = "Registrar cotizaciones y ventas directas",
             [PermisosDefinidos.VentasAnular] = "Anular ventas emitidas",
@@ -162,6 +166,7 @@ public static class RolSeeder
                 PermisosDefinidos.OrdenesAsignarTecnico, PermisosDefinidos.OrdenesAgregarItems,
                 PermisosDefinidos.PreciosModificar,
                 PermisosDefinidos.InventarioVer,
+                PermisosDefinidos.ServiciosVer, PermisosDefinidos.ServiciosCrear, PermisosDefinidos.ServiciosEditar,
                 PermisosDefinidos.VentasVer, PermisosDefinidos.VentasCrear,
                 PermisosDefinidos.CajaConsultar, PermisosDefinidos.CajaRegistrarIngreso, PermisosDefinidos.CajaRegistrarEgreso,
                 PermisosDefinidos.ReportesVerOperativos
@@ -176,7 +181,8 @@ public static class RolSeeder
                 PermisosDefinidos.OrdenesAgregarItems,
                 PermisosDefinidos.OrdenesCambiarEstado,
                 PermisosDefinidos.UnidadesVer,
-                PermisosDefinidos.InventarioVer
+                PermisosDefinidos.InventarioVer,
+                PermisosDefinidos.ServiciosVer
             },
 
             // Vendedor: Gestiona ventas y mostrador.
@@ -186,6 +192,7 @@ public static class RolSeeder
                 PermisosDefinidos.VentasVer, PermisosDefinidos.VentasCrear,
                 PermisosDefinidos.ClientesVer, PermisosDefinidos.ClientesCrear,
                 PermisosDefinidos.InventarioVer,
+                PermisosDefinidos.ServiciosVer,
                 PermisosDefinidos.CajaConsultar, PermisosDefinidos.CajaRegistrarIngreso,
                 PermisosDefinidos.ReportesVerOperativos
             },

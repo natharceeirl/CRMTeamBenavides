@@ -23,6 +23,10 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
     public DbSet<OrdenServicio> OrdenesServicio => Set<OrdenServicio>();
     public DbSet<DetalleServicio> DetallesServicio => Set<DetalleServicio>();
     public DbSet<HistorialEstadoOrden> HistorialEstadosOrden => Set<HistorialEstadoOrden>();
+    public DbSet<Servicio> Servicios => Set<Servicio>();
+
+    // Configuración
+    public DbSet<ConfiguracionEmpresa> ConfiguracionesEmpresa => Set<ConfiguracionEmpresa>();
 
     // Inventario
     public DbSet<CategoriaProducto> CategoriasProducto => Set<CategoriaProducto>();
@@ -136,6 +140,19 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
             .StartsAt(1)
             .IncrementsBy(1);
 
+        // Configuración de Empresa
+        modelBuilder.Entity<ConfiguracionEmpresa>(entity =>
+        {
+            entity.Property(c => c.PorcentajeIgv).HasPrecision(5, 2);
+        });
+
+        // Catálogo de Servicios
+        modelBuilder.Entity<Servicio>(entity =>
+        {
+            entity.Property(s => s.PrecioSugerido).HasPrecision(12, 2);
+            entity.HasIndex(s => s.Nombre);
+        });
+
         // --- Evitar borrado en cascada accidental y configurar Taller ---
         modelBuilder.Entity<OrdenServicio>(entity =>
         {
@@ -148,6 +165,19 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
                 .WithMany()
                 .HasForeignKey(o => o.ClienteId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.Property(o => o.LecturaMedidorIngreso).HasPrecision(12, 2);
+            entity.Property(o => o.HorasUsoIngreso).HasPrecision(12, 2);
+            entity.Property(o => o.SubtotalGravado).HasPrecision(12, 2);
+            entity.Property(o => o.SubtotalExonerado).HasPrecision(12, 2);
+            entity.Property(o => o.SubtotalInafecto).HasPrecision(12, 2);
+            entity.Property(o => o.MontoIgv).HasPrecision(12, 2);
+            entity.Property(o => o.Total).HasPrecision(12, 2);
+
+            entity.HasOne(o => o.UsuarioAprobacionGerencia)
+                .WithMany()
+                .HasForeignKey(o => o.UsuarioAprobacionGerenciaId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(o => o.NumeroOrden)
                 .IsUnique();
@@ -173,6 +203,31 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
             entity.HasIndex(h => h.FechaCambio);
         });
 
+        modelBuilder.Entity<DetalleServicio>(entity =>
+        {
+            entity.Property(d => d.PrecioUnitario).HasPrecision(12, 2);
+            entity.Property(d => d.CostoUnitarioHistorico).HasPrecision(12, 2);
+            entity.Property(d => d.SubtotalGravado).HasPrecision(12, 2);
+            entity.Property(d => d.PorcentajeIgvAplicado).HasPrecision(5, 2);
+            entity.Property(d => d.MontoIgv).HasPrecision(12, 2);
+            entity.Property(d => d.Total).HasPrecision(12, 2);
+
+            entity.HasOne(d => d.OrdenServicio)
+                .WithMany(o => o.Detalles)
+                .HasForeignKey(d => d.OrdenServicioId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(d => d.Producto)
+                .WithMany()
+                .HasForeignKey(d => d.ProductoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.Servicio)
+                .WithMany()
+                .HasForeignKey(d => d.ServicioId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<Venta>(entity =>
         {
             entity.HasOne(v => v.Cliente)
@@ -185,11 +240,6 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
                 .HasForeignKey(v => v.OrdenServicioId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
-
-        modelBuilder.Entity<DetalleServicio>()
-            .HasOne(d => d.Producto)
-            .WithMany()
-            .OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<DetalleVenta>()
             .HasOne(d => d.Producto)

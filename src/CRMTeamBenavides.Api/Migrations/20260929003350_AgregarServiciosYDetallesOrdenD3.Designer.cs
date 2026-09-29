@@ -3,6 +3,7 @@ using System;
 using CRMTeamBenavides.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CRMTeamBenavides.Api.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260929003350_AgregarServiciosYDetallesOrdenD3")]
+    partial class AgregarServiciosYDetallesOrdenD3
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -595,16 +598,7 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Property<int>("Estado")
                         .HasColumnType("integer");
 
-                    b.Property<int>("EstadoAprobacionGerencia")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("EstadoPresupuestoCliente")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime>("FechaApertura")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("FechaAprobacionGerencia")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("FechaCierre")
@@ -620,9 +614,6 @@ namespace CRMTeamBenavides.Api.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("FechaModificacion")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("FechaRespuestaCliente")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("FechaSalida")
@@ -658,12 +649,6 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Property<string>("Observaciones")
                         .HasColumnType("text");
 
-                    b.Property<string>("ObservacionesAprobacionGerencia")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ObservacionesPresupuestoCliente")
-                        .HasColumnType("text");
-
                     b.Property<string>("Solucion")
                         .HasColumnType("text");
 
@@ -692,9 +677,6 @@ namespace CRMTeamBenavides.Api.Migrations
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 
-                    b.Property<Guid?>("UsuarioAprobacionGerenciaId")
-                        .HasColumnType("uuid");
-
                     b.Property<Guid>("VehiculoId")
                         .HasColumnType("uuid");
 
@@ -708,8 +690,6 @@ namespace CRMTeamBenavides.Api.Migrations
                         .IsUnique();
 
                     b.HasIndex("TecnicoAsignadoId");
-
-                    b.HasIndex("UsuarioAprobacionGerenciaId");
 
                     b.HasIndex("VehiculoId");
 
@@ -1377,11 +1357,6 @@ namespace CRMTeamBenavides.Api.Migrations
                         .WithMany()
                         .HasForeignKey("TecnicoAsignadoId");
 
-                    b.HasOne("CRMTeamBenavides.Domain.Entities.Usuario", "UsuarioAprobacionGerencia")
-                        .WithMany()
-                        .HasForeignKey("UsuarioAprobacionGerenciaId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("CRMTeamBenavides.Domain.Entities.Vehiculo", "Vehiculo")
                         .WithMany("OrdenesServicio")
                         .HasForeignKey("VehiculoId")
@@ -1391,8 +1366,6 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Navigation("Cliente");
 
                     b.Navigation("TecnicoAsignado");
-
-                    b.Navigation("UsuarioAprobacionGerencia");
 
                     b.Navigation("Vehiculo");
                 });

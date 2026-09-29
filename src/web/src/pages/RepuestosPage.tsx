@@ -6,6 +6,7 @@ import { AvisoError } from '../components/AvisoError'
 import { EstadoStock } from '../components/EstadoStock'
 import { ModalProducto } from '../components/ModalProducto'
 import { ModalCategoria } from '../components/ModalCategoria'
+import { ModalServicio } from '../components/ModalServicio'
 import { ModalMovimientoStock, type TipoMovimiento } from '../components/ModalMovimientoStock'
 import {
   MOVIMIENTO,
@@ -15,7 +16,14 @@ import {
   useMovimientos,
   useProductos,
 } from '../api/inventario'
-import type { CategoriaProductoResponse, MovimientoInventarioResponse, ProductoResponse } from '../api/tipos'
+import { useEliminarServicio, useServicios } from '../api/servicios'
+import {
+  nombresTipoAfectacion,
+  type CategoriaProductoResponse,
+  type MovimientoInventarioResponse,
+  type ProductoResponse,
+  type ServicioResponse,
+} from '../api/tipos'
 import { colores } from '../theme/tokens'
 import { entero, fechaHora, soles } from '../utils/formato'
 import { useSesion } from '../auth/sesion'
@@ -33,6 +41,8 @@ export function RepuestosPage() {
   const [modalMovimiento, setModalMovimiento] = useState(false)
   const [categoriaEnEdicion, setCategoriaEnEdicion] = useState<CategoriaProductoResponse | null>(null)
   const [modalCategoria, setModalCategoria] = useState(false)
+  const [servicioEnEdicion, setServicioEnEdicion] = useState<ServicioResponse | null>(null)
+  const [modalServicio, setModalServicio] = useState(false)
 
   const { tienePermiso } = useSesion()
   const puedeCrear = tienePermiso(PERMISOS.inventarioCrear)
@@ -41,13 +51,19 @@ export function RepuestosPage() {
   const puedeDarDeBaja = tienePermiso(PERMISOS.inventarioEliminar)
   // El costo es dato de gestión: lo ve quien administra el catálogo o los reportes financieros.
   const veCosto = puedeEditar || tienePermiso(PERMISOS.reportesVerFinancieros)
+  const veServicios = tienePermiso(PERMISOS.serviciosVer)
+  const puedeCrearServicio = tienePermiso(PERMISOS.serviciosCrear)
+  const puedeEditarServicio = tienePermiso(PERMISOS.serviciosEditar)
+  const puedeDarDeBajaServicio = tienePermiso(PERMISOS.serviciosEliminar)
 
   // La búsqueda, la categoría y el stock bajo los filtra la API.
   const productos = useProductos({ categoriaId, busqueda: texto, bajoStock: soloBajoStock })
   const categorias = useCategoriasProducto()
+  const servicios = useServicios(true, veServicios)
   const movimientos = useMovimientos()
   const eliminarProducto = useEliminarProducto()
   const eliminarCategoria = useEliminarCategoria()
+  const eliminarServicio = useEliminarServicio()
 
   const abrirMovimiento = (producto: ProductoResponse, tipo: TipoMovimiento) => {
     setProductoEnMovimiento(producto)
@@ -228,27 +244,89 @@ export function RepuestosPage() {
     },
   ]
 
+  const columnasServicios: TableProps<ServicioResponse>['columns'] = [
+    { title: 'Servicio', dataIndex: 'nombre', render: (nombre: string) => <strong>{nombre}</strong> },
+    {
+      title: 'Precio Sugerido',
+      dataIndex: 'precioSugerido',
+      align: 'right',
+      className: 'num',
+      render: (precio: number) => soles(precio),
+    },
+    {
+      title: 'Afectación IGV',
+      dataIndex: 'tipoAfectacionIgv',
+      render: (tipo: number) => (
+        <Tag color={tipo === 0 ? 'blue' : 'default'}>
+          {nombresTipoAfectacion[tipo] ?? 'Gravado'}
+        </Tag>
+      ),
+    },
+    {
+      title: '',
+      key: 'acciones',
+      align: 'right',
+      render: (_, servicio) => (
+        <Space size="small">
+          {puedeEditarServicio && (
+            <Button
+              type="link"
+              onClick={() => {
+                setServicioEnEdicion(servicio)
+                setModalServicio(true)
+              }}
+            >
+              Editar
+            </Button>
+          )}
+          {puedeDarDeBajaServicio && (
+            <Popconfirm
+              title="Dar de baja el servicio"
+              okText="Dar de baja"
+              cancelText="Cancelar"
+              onConfirm={() => eliminarServicio.mutate(servicio.id)}
+            >
+              <Button type="link">Dar de baja</Button>
+            </Popconfirm>
+          )}
+        </Space>
+      ),
+    },
+  ]
+
   return (
     <>
       <BarraSuperior
         titulo="Repuestos e inventario"
         acciones={
-          puedeCrear && (
-            <Button
-              type="primary"
-              onClick={() => {
-                setProductoEnEdicion(null)
-                setModalProducto(true)
-              }}
-            >
-              Registrar repuesto
-            </Button>
-          )
+          <Space>
+            {puedeCrearServicio && (
+              <Button
+                onClick={() => {
+                  setServicioEnEdicion(null)
+                  setModalServicio(true)
+                }}
+              >
+                Nuevo servicio
+              </Button>
+            )}
+            {puedeCrear && (
+              <Button
+                type="primary"
+                onClick={() => {
+                  setProductoEnEdicion(null)
+                  setModalProducto(true)
+                }}
+              >
+                Registrar repuesto
+              </Button>
+            )}
+          </Space>
         }
       />
       <div className="pagina">
         <AvisoError
-          error={productos.error ?? movimientos.error ?? eliminarProducto.error ?? eliminarCategoria.error}
+          error={productos.error ?? movimientos.error ?? eliminarProducto.error ?? eliminarCategoria.error ?? eliminarServicio.error}
         />
         <Tabs
           items={[
@@ -298,6 +376,39 @@ export function RepuestosPage() {
                 </>
               ),
             },
+            ...(veServicios
+              ? [
+                  {
+                    key: 'servicios',
+                    label: 'Servicios',
+                    children: (
+                      <>
+                        {puedeCrearServicio && (
+                          <div className="filtros">
+                            <Button
+                              type="primary"
+                              onClick={() => {
+                                setServicioEnEdicion(null)
+                                setModalServicio(true)
+                              }}
+                            >
+                              Nuevo servicio
+                            </Button>
+                          </div>
+                        )}
+                        <Table
+                          rowKey="id"
+                          columns={columnasServicios}
+                          dataSource={servicios.data ?? []}
+                          pagination={false}
+                          loading={servicios.isPending}
+                          locale={{ emptyText: 'Todavía no hay servicios en catálogo' }}
+                        />
+                      </>
+                    ),
+                  },
+                ]
+              : []),
             {
               key: 'movimientos',
               label: 'Kardex',
@@ -365,6 +476,11 @@ export function RepuestosPage() {
         abierto={modalCategoria}
         categoria={categoriaEnEdicion}
         onCerrar={() => setModalCategoria(false)}
+      />
+      <ModalServicio
+        abierto={modalServicio}
+        servicio={servicioEnEdicion}
+        onCerrar={() => setModalServicio(false)}
       />
     </>
   )

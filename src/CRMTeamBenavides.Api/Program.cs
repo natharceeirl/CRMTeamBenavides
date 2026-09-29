@@ -4,10 +4,12 @@ using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Features.Auth;
 using CRMTeamBenavides.Api.Features.CategoriasProducto;
 using CRMTeamBenavides.Api.Features.Clientes;
+using CRMTeamBenavides.Api.Features.Configuracion;
 using CRMTeamBenavides.Api.Features.Inventario;
 using CRMTeamBenavides.Api.Features.OrdenesServicio;
 using CRMTeamBenavides.Api.Features.Permisos;
 using CRMTeamBenavides.Api.Features.Roles;
+using CRMTeamBenavides.Api.Features.Servicios;
 using CRMTeamBenavides.Api.Features.Usuarios;
 using CRMTeamBenavides.Api.Features.Vehiculos;
 using CRMTeamBenavides.Api.Features.Chatbot;
@@ -116,6 +118,12 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(OrdenServicioEndpoints.PoliticaVerOrdenes, policy =>
         policy.Requirements.Add(new PermissionRequirement(PermisosDefinidos.OrdenesVerTodas, PermisosDefinidos.OrdenesVerAsignadas)));
 
+    options.AddPolicy(OrdenServicioEndpoints.PoliticaAprobacionCliente, policy =>
+        policy.Requirements.Add(new PermissionRequirement(
+            PermisosDefinidos.OrdenesEditar,
+            PermisosDefinidos.PortalAcceso,
+            PermisosDefinidos.VentasCrear)));
+
     foreach (var permiso in PermisosDefinidos.Todos)
     {
         options.AddPolicy(permiso, policy =>
@@ -137,6 +145,8 @@ builder.Services.AddScoped<IVentaService, VentaService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IReporteService, ReporteService>();
 builder.Services.AddScoped<IChatbotService, ChatbotService>();
+builder.Services.AddScoped<IConfiguracionService, ConfiguracionService>();
+builder.Services.AddScoped<IServicioService, ServicioService>();
 
 // ---------------------------------------------------------------------------
 // Yamaha API — infraestructura del conector
@@ -214,5 +224,7 @@ app.MapVentaEndpoints();
 app.MapDashboardEndpoints();
 app.MapReporteEndpoints();
 app.MapChatbotEndpoints();
+app.MapConfiguracionEndpoints();
+app.MapServicioEndpoints();
 
 app.Run();

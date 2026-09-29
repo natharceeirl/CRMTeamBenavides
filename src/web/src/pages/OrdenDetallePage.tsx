@@ -1,23 +1,12 @@
 import { useState } from 'react'
-import {
-  Button,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  Popconfirm,
-  Select,
-  Table,
-  Tag,
-  Timeline,
-  type TableProps,
-} from 'antd'
+import { Button, Input, Modal, Popconfirm, Select, Table, Tag, Timeline, type TableProps } from 'antd'
 import { Link, useParams } from 'react-router'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { EstadoOrdenApiTag } from '../components/EstadoOrdenApiTag'
 import { Indicadores } from '../components/Indicadores'
 import { ModalRepuestoOrden } from '../components/ModalRepuestoOrden'
+import { ModalItemOrden } from '../components/ModalItemOrden'
 import { ModalEditarOrden } from '../components/ModalEditarOrden'
 import {
   ESTADO,
@@ -29,7 +18,6 @@ import {
   etiquetaDe,
   nombresEstado,
   permiteEditarDetalles,
-  useAgregarDetalle,
   useCambiarEstado,
   useEliminarDetalle,
   useOrden,
@@ -37,17 +25,16 @@ import {
   transicionesValidas,
 } from '../api/ordenes'
 import { useTecnicos } from '../api/usuarios'
-import type { DetalleServicioResponse, HistorialEstadoOrdenResponse } from '../api/tipos'
+import {
+  nombresTipoAfectacion,
+  nombresTipoItem,
+  type DetalleServicioResponse,
+  type HistorialEstadoOrdenResponse,
+} from '../api/tipos'
 import { fechaHora, importe, referenciaOrden, soles } from '../utils/formato'
 import { lecturaIngresoOrden } from '../utils/unidades'
 import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
-
-type CamposManoObra = {
-  descripcion: string
-  cantidad: number
-  precioUnitario: number
-}
 
 const porFecha = (a: HistorialEstadoOrdenResponse, b: HistorialEstadoOrdenResponse) =>
   new Date(a.fechaCambio).getTime() - new Date(b.fechaCambio).getTime()
@@ -70,17 +57,16 @@ export function OrdenDetallePage() {
   const tecnicos = useTecnicos(puedeAsignar && tienePermiso(PERMISOS.usuariosVer))
 
   const guardarDiagnostico = useRegistrarDiagnostico()
-  const agregarDetalle = useAgregarDetalle()
   const eliminarDetalle = useEliminarDetalle()
   const cambiarEstado = useCambiarEstado()
 
-  const [formularioMano] = Form.useForm<CamposManoObra>()
   const [textoDiagnostico, setTextoDiagnostico] = useState<string | null>(null)
   const [textoSolucion, setTextoSolucion] = useState<string | null>(null)
   const [tecnico, setTecnico] = useState<string | null>(null)
   const [estadoDestino, setEstadoDestino] = useState<number | null>(null)
   const [observacionesCambio, setObservacionesCambio] = useState('')
   const [modalRepuesto, setModalRepuesto] = useState(false)
+  const [modalItem, setModalItem] = useState(false)
   const [modalEditar, setModalEditar] = useState(false)
 
   if (orden.isPending) {
@@ -117,17 +103,29 @@ export function OrdenDetallePage() {
   const historial = [...(datos.historial ?? [])].sort(porFecha)
   const anulando = estadoDestino === ESTADO.cancelada
 
-  const repuestos = datos.detalles
-    .filter((detalle) => detalle.esRepuesto)
-    .reduce((suma, detalle) => suma + detalle.subtotal, 0)
-  const manoDeObra = datos.total - repuestos
-
   const columnas: TableProps<DetalleServicioResponse>['columns'] = [
     { title: 'Concepto', dataIndex: 'descripcion' },
     {
       title: 'Tipo',
       key: 'tipo',
-      render: (_, detalle) => (detalle.esRepuesto ? 'Repuesto' : 'Mano de obra'),
+      render: (_, detalle) => {
+        const nombre =
+          detalle.tipoItemNombre ??
+          nombresTipoItem[detalle.tipoItem ?? (detalle.esRepuesto ? 0 : 2)] ??
+          'Repuesto'
+        return <Tag>{nombre}</Tag>
+      },
+    },
+    {
+      title: 'Afectación',
+      key: 'afectacion',
+      render: (_, detalle) => {
+        const afectacion =
+          detalle.tipoAfectacionIgvNombre ??
+          nombresTipoAfectacion[detalle.tipoAfectacionIgv ?? 0] ??
+          'Gravado'
+        return <Tag color={detalle.tipoAfectacionIgv === 0 ? 'blue' : 'default'}>{afectacion}</Tag>
+      },
     },
     { title: 'Código', dataIndex: 'productoCodigo', className: 'num', render: (codigo: string | null) => codigo ?? '—' },
     { title: 'Cant.', dataIndex: 'cantidad', align: 'right', className: 'num' },
@@ -139,11 +137,25 @@ export function OrdenDetallePage() {
       render: (precio: number) => importe(precio),
     },
     {
-      title: 'Importe',
-      dataIndex: 'subtotal',
+      title: 'Subtotal',
+      dataIndex: 'subtotalGravado',
       align: 'right',
       className: 'num',
-      render: (subtotal: number) => importe(subtotal),
+      render: (_, detalle) => importe(detalle.subtotalGravado ?? detalle.subtotal),
+    },
+    {
+      title: 'IGV',
+      dataIndex: 'montoIgv',
+      align: 'right',
+      className: 'num',
+      render: (igv: number | undefined) => importe(igv ?? 0),
+    },
+    {
+      title: 'Total',
+      dataIndex: 'total',
+      align: 'right',
+      className: 'num',
+      render: (_, detalle) => importe(detalle.total ?? detalle.subtotal),
     },
     {
       title: '',
@@ -163,19 +175,6 @@ export function OrdenDetallePage() {
         ) : null,
     },
   ]
-
-  const registrarManoDeObra = async (campos: CamposManoObra) => {
-    await agregarDetalle.mutateAsync({
-      id: datos.id,
-      datos: {
-        productoId: null,
-        descripcion: campos.descripcion.trim(),
-        cantidad: campos.cantidad,
-        precioUnitario: campos.precioUnitario,
-      },
-    })
-    formularioMano.resetFields()
-  }
 
   const diagnosticoActual = (textoDiagnostico ?? datos.diagnostico ?? '').trim()
 
@@ -249,7 +248,7 @@ export function OrdenDetallePage() {
       </header>
 
       <div className="pagina">
-        <AvisoError error={agregarDetalle.error ?? eliminarDetalle.error ?? guardarDiagnostico.error} />
+        <AvisoError error={eliminarDetalle.error ?? guardarDiagnostico.error} />
 
         <Indicadores
           tamano="mediano"
@@ -276,12 +275,24 @@ export function OrdenDetallePage() {
             />
             <div className="totales">
               <div>
-                <div className="etiqueta">Mano de obra</div>
-                <div className="valor">{importe(manoDeObra)}</div>
+                <div className="etiqueta">Subtotal gravado</div>
+                <div className="valor">{soles(datos.subtotalGravado ?? 0)}</div>
               </div>
+              {(datos.subtotalExonerado ?? 0) > 0 && (
+                <div>
+                  <div className="etiqueta">Exonerado</div>
+                  <div className="valor">{soles(datos.subtotalExonerado ?? 0)}</div>
+                </div>
+              )}
+              {(datos.subtotalInafecto ?? 0) > 0 && (
+                <div>
+                  <div className="etiqueta">Inafecto</div>
+                  <div className="valor">{soles(datos.subtotalInafecto ?? 0)}</div>
+                </div>
+              )}
               <div>
-                <div className="etiqueta">Repuestos</div>
-                <div className="valor">{importe(repuestos)}</div>
+                <div className="etiqueta">IGV</div>
+                <div className="valor">{soles(datos.montoIgv ?? 0)}</div>
               </div>
               <div>
                 <div className="etiqueta">Total</div>
@@ -291,54 +302,15 @@ export function OrdenDetallePage() {
 
             {editableItems && puedeAgregarItems && (
               <>
-                {puedeFijarPrecios && (
-                  <>
-                    <div className="seccion-titulo" style={{ marginTop: 24 }}>
-                      <h2>Agregar mano de obra</h2>
-                    </div>
-                    <Form<CamposManoObra>
-                      form={formularioMano}
-                      layout="vertical"
-                      requiredMark={false}
-                      onFinish={registrarManoDeObra}
-                      initialValues={{ cantidad: 1 }}
-                    >
-                      <div className="formulario-grid">
-                        <Form.Item
-                          label="Concepto"
-                          name="descripcion"
-                          className="ancho-completo"
-                          rules={[{ required: true, message: 'Describe el trabajo' }]}
-                        >
-                          <Input placeholder="Mantenimiento de 12 000 km, revisión de frenos…" />
-                        </Form.Item>
-                        <Form.Item
-                          label="Cantidad"
-                          name="cantidad"
-                          rules={[{ required: true, message: 'Indica la cantidad' }]}
-                        >
-                          <InputNumber min={1} style={{ width: '100%' }} />
-                        </Form.Item>
-                        <Form.Item
-                          label="Precio unitario"
-                          name="precioUnitario"
-                          rules={[{ required: true, message: 'Indica el precio' }]}
-                        >
-                          <InputNumber min={0} precision={2} style={{ width: '100%' }} />
-                        </Form.Item>
-                      </div>
-                      <Button type="primary" htmlType="submit" loading={agregarDetalle.isPending}>
-                        Agregar
-                      </Button>
-                    </Form>
-                  </>
-                )}
-                <Button style={{ marginTop: 16 }} onClick={() => setModalRepuesto(true)}>
-                  Agregar repuesto del inventario
-                </Button>
+                <div style={{ marginTop: 16, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <Button type="primary" onClick={() => setModalItem(true)}>
+                    Agregar ítem (repuesto o servicio)
+                  </Button>
+                  <Button onClick={() => setModalRepuesto(true)}>Agregar repuesto rápido</Button>
+                </div>
                 {!puedeFijarPrecios && (
                   <p className="texto-secundario" style={{ marginTop: 8 }}>
-                    El precio de cada repuesto sale del catálogo. La mano de obra la registra Recepción.
+                    Los precios salen del catálogo; tu usuario no puede cambiarlos.
                   </p>
                 )}
               </>
@@ -513,6 +485,13 @@ export function OrdenDetallePage() {
           </aside>
         </div>
       </div>
+
+      <ModalItemOrden
+        abierto={modalItem}
+        ordenId={datos.id}
+        puedeModificarPrecios={puedeFijarPrecios}
+        onCerrar={() => setModalItem(false)}
+      />
 
       <ModalRepuestoOrden
         abierto={modalRepuesto}

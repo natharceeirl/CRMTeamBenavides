@@ -38,6 +38,7 @@ export function lecturaMedidor(
 export function ordenMidePorHoras(orden: {
   kilometrajeIngreso?: number | null
   horasUsoIngreso?: number | null
+  lecturaMedidorIngreso?: number | null
   tipoUnidad?: string | null
 }): boolean {
   if (orden.kilometrajeIngreso != null) return false
@@ -47,10 +48,12 @@ export function ordenMidePorHoras(orden: {
 
 /** Lectura del medidor al ingresar la unidad al taller, o «—». */
 export function lecturaIngresoOrden(orden: Parameters<typeof ordenMidePorHoras>[0]): string {
-  if (ordenMidePorHoras(orden)) {
-    return orden.horasUsoIngreso == null ? '—' : `${entero(orden.horasUsoIngreso)} h`
-  }
-  return orden.kilometrajeIngreso == null ? '—' : `${entero(orden.kilometrajeIngreso)} km`
+  const enHoras = ordenMidePorHoras(orden)
+  // La lectura genérica de la API cubre las órdenes que no traen km ni horas.
+  const lectura = enHoras
+    ? (orden.horasUsoIngreso ?? orden.lecturaMedidorIngreso)
+    : (orden.kilometrajeIngreso ?? orden.lecturaMedidorIngreso)
+  return lectura == null ? '—' : `${entero(lectura)} ${enHoras ? 'h' : 'km'}`
 }
 
 /** Placa si tiene; si no, VIN o serie. Las motos acuáticas y los generadores no llevan placa. */

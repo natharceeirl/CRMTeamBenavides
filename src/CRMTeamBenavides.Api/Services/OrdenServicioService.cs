@@ -1,3 +1,4 @@
+using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Features.OrdenesServicio;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
@@ -10,11 +11,16 @@ public class OrdenServicioService : IOrdenServicioService
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<Usuario> _userManager;
+    private readonly IConfiguracionService _configuracionService;
 
-    public OrdenServicioService(ApplicationDbContext context, UserManager<Usuario> userManager)
+    public OrdenServicioService(
+        ApplicationDbContext context,
+        UserManager<Usuario> userManager,
+        IConfiguracionService configuracionService)
     {
         _context = context;
         _userManager = userManager;
+        _configuracionService = configuracionService;
     }
 
     private async Task<string> GenerarNumeroOrdenAsync()
@@ -123,6 +129,8 @@ public class OrdenServicioService : IOrdenServicioService
             .Include(o => o.TecnicoAsignado)
             .Include(o => o.Detalles.Where(d => d.Activo))
                 .ThenInclude(d => d.Producto)
+            .Include(o => o.Detalles.Where(d => d.Activo))
+                .ThenInclude(d => d.Servicio)
             .Include(o => o.HistorialEstados.Where(h => h.Activo))
                 .ThenInclude(h => h.Usuario)
             .Include(o => o.Ventas.Where(v => v.Activo))
@@ -189,6 +197,7 @@ public class OrdenServicioService : IOrdenServicioService
             TipoFalla              = request.TipoFalla,
             KilometrajeIngreso     = request.KilometrajeIngreso ?? vehiculo.Kilometraje,
             HorasUsoIngreso        = request.HorasUsoIngreso ?? vehiculo.HorasUso,
+            LecturaMedidorIngreso  = request.LecturaMedidorIngreso ?? vehiculo.LecturaMedidorActual,
             Estado                 = EstadoOrdenServicio.Abierta,
             FechaApertura          = DateTime.UtcNow,
             FechaIngreso           = DateTime.UtcNow,
@@ -246,7 +255,7 @@ public class OrdenServicioService : IOrdenServicioService
 
         if (soloTecnicoId.HasValue && orden.TecnicoAsignadoId != soloTecnicoId.Value)
         {
-            return ServiceResult<OrdenServicioResponse>.Invalid("No tiene autorización para registrar diagnósticos en órdenes asignadas a otro técnico.");
+            return ServiceResult<OrdenServicioResponse>.Forbidden("No tiene autorización para registrar diagnósticos en órdenes asignadas a otro técnico.");
         }
 
         if (orden.Estado == EstadoOrdenServicio.Cancelada || orden.Estado == EstadoOrdenServicio.Entregada)
@@ -336,7 +345,7 @@ public class OrdenServicioService : IOrdenServicioService
 
         if (soloTecnicoId.HasValue && orden.TecnicoAsignadoId != soloTecnicoId.Value)
         {
-            return ServiceResult<OrdenServicioResponse>.Invalid("No tiene autorización para modificar órdenes asignadas a otro técnico.");
+            return ServiceResult<OrdenServicioResponse>.Forbidden("No tiene autorización para modificar órdenes asignadas a otro técnico.");
         }
 
         if (orden.Estado == EstadoOrdenServicio.Cancelada || orden.Estado == EstadoOrdenServicio.Entregada)
@@ -369,6 +378,7 @@ public class OrdenServicioService : IOrdenServicioService
         if (request.TipoFalla.HasValue) orden.TipoFalla = request.TipoFalla.Value;
         if (request.KilometrajeIngreso.HasValue) orden.KilometrajeIngreso = request.KilometrajeIngreso.Value;
         if (request.HorasUsoIngreso.HasValue) orden.HorasUsoIngreso = request.HorasUsoIngreso.Value;
+        if (request.LecturaMedidorIngreso.HasValue) orden.LecturaMedidorIngreso = request.LecturaMedidorIngreso.Value;
 
         orden.FechaModificacion = DateTime.UtcNow;
 
@@ -434,6 +444,7 @@ public class OrdenServicioService : IOrdenServicioService
         }
 
         var orden = await _context.OrdenesServicio
+            .Include(o => o.Detalles)
             .FirstOrDefaultAsync(o => o.Id == ordenServicioId && o.Activo);
 
         if (orden is null)
@@ -443,7 +454,7 @@ public class OrdenServicioService : IOrdenServicioService
 
         if (soloTecnicoId.HasValue && orden.TecnicoAsignadoId != soloTecnicoId.Value)
         {
-            return ServiceResult<DetalleServicioResponse>.Invalid("No tiene autorización para modificar órdenes asignadas a otro técnico.");
+            return ServiceResult<DetalleServicioResponse>.Forbidden("No tiene autorización para modificar órdenes asignadas a otro técnico.");
         }
 
         if (orden.Estado == EstadoOrdenServicio.Entregada || orden.Estado == EstadoOrdenServicio.Cancelada)
@@ -458,17 +469,37 @@ public class OrdenServicioService : IOrdenServicioService
                 "No se pueden agregar detalles a una orden en estado 'Lista'. Debe reabrirse a 'EnProceso' para realizar trabajos adicionales.");
         }
 
-        // --- Caso 1: Repuesto / Producto de inventario ---
-        if (request.ProductoId.HasValue)
+        var porcentajeIgvVigente = await _configuracionService.ObtenerPorcentajeIgvVigenteAsync();
+
+        // Determinar TipoItem
+        var tipoItem = request.TipoItem ?? (request.ProductoId.HasValue
+            ? TipoItemServicio.Repuesto
+            : (request.ServicioId.HasValue ? TipoItemServicio.Servicio : TipoItemServicio.ManoDeObra));
+
+        // Determinar TipoAfectacionIgv inicial
+        var tipoAfectacion = request.TipoAfectacionIgv ?? TipoAfectacionIgv.Gravado;
+
+        decimal precioFinal = 0m;
+        decimal costoHistorico = 0m;
+
+        string descripcion = request.Descripcion?.Trim() ?? string.Empty;
+        Producto? producto = null;
+        Servicio? servicio = null;
+
+        if (tipoItem == TipoItemServicio.Repuesto)
         {
+            if (!request.ProductoId.HasValue)
+            {
+                return ServiceResult<DetalleServicioResponse>.Invalid("El ID del producto es obligatorio para ítems de tipo Repuesto.");
+            }
+
             await using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                // Bloqueo pesimista a nivel de fila (FOR UPDATE) para evitar condiciones de carrera en stock
                 await _context.Database.ExecuteSqlInterpolatedAsync(
                     $"SELECT \"Id\" FROM \"Productos\" WHERE \"Id\" = {request.ProductoId.Value} FOR UPDATE");
 
-                var producto = await _context.Productos
+                producto = await _context.Productos
                     .FirstOrDefaultAsync(p => p.Id == request.ProductoId.Value && p.Activo);
 
                 if (producto is null)
@@ -480,6 +511,26 @@ public class OrdenServicioService : IOrdenServicioService
                 {
                     return ServiceResult<DetalleServicioResponse>.Invalid(
                         $"Stock insuficiente para el producto '{producto.Nombre}'. Stock disponible: {producto.StockActual}, solicitado: {request.Cantidad}.");
+                }
+
+                costoHistorico = producto.Costo;
+
+                if (puedeModificarPrecios && request.PrecioUnitario.HasValue && request.PrecioUnitario.Value >= 0)
+                {
+                    precioFinal = request.PrecioUnitario.Value;
+                }
+                else
+                {
+                    if (!puedeModificarPrecios && request.PrecioUnitario.HasValue && request.PrecioUnitario.Value != producto.PrecioVenta)
+                    {
+                        return ServiceResult<DetalleServicioResponse>.Forbidden("El rol Técnico no está autorizado a fijar o modificar precios de repuestos.");
+                    }
+                    precioFinal = producto.PrecioVenta;
+                }
+
+                if (string.IsNullOrWhiteSpace(descripcion))
+                {
+                    descripcion = producto.Nombre;
                 }
 
                 producto.StockActual -= request.Cantidad;
@@ -497,39 +548,40 @@ public class OrdenServicioService : IOrdenServicioService
                 };
                 _context.MovimientosInventario.Add(movimiento);
 
-                var descripcion = !string.IsNullOrWhiteSpace(request.Descripcion)
-                    ? request.Descripcion.Trim()
-                    : producto.Nombre;
-
-                var precioFinal = (puedeModificarPrecios && request.PrecioUnitario.HasValue && request.PrecioUnitario.Value >= 0)
-                    ? request.PrecioUnitario.Value
-                    : producto.PrecioVenta;
+                var (subtotalGravado, igvCalculado, totalCalculado, porcIgv) =
+                    CalcularFinanzasLinea(request.Cantidad, precioFinal, tipoAfectacion, porcentajeIgvVigente);
 
                 var detalle = new DetalleServicio
                 {
-                    OrdenServicioId = orden.Id,
-                    ProductoId      = producto.Id,
-                    Producto        = producto,
-                    Descripcion     = descripcion,
-                    Cantidad        = request.Cantidad,
-                    PrecioUnitario  = precioFinal,
-                    FechaCreacion   = DateTime.UtcNow,
-                    Activo          = true
+                    OrdenServicioId        = orden.Id,
+                    TipoItem               = tipoItem,
+                    ProductoId             = producto.Id,
+                    Producto               = producto,
+                    Descripcion            = descripcion,
+                    Cantidad               = request.Cantidad,
+                    PrecioUnitario         = precioFinal,
+                    CostoUnitarioHistorico = costoHistorico,
+                    TipoAfectacionIgv      = tipoAfectacion,
+                    SubtotalGravado        = subtotalGravado,
+                    PorcentajeIgvAplicado  = porcIgv,
+                    MontoIgv               = igvCalculado,
+                    Total                  = totalCalculado,
+                    FechaCreacion          = DateTime.UtcNow,
+                    Activo                 = true
                 };
+
                 _context.DetallesServicio.Add(detalle);
+                if (!orden.Detalles.Contains(detalle))
+                {
+                    orden.Detalles.Add(detalle);
+                }
+                RecalcularTotalesOrden(orden);
+                orden.FechaModificacion = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                return ServiceResult<DetalleServicioResponse>.Success(new DetalleServicioResponse(
-                    detalle.Id,
-                    detalle.ProductoId,
-                    producto.Codigo,
-                    detalle.Descripcion,
-                    detalle.Cantidad,
-                    detalle.PrecioUnitario,
-                    detalle.Cantidad * detalle.PrecioUnitario,
-                    true));
+                return ServiceResult<DetalleServicioResponse>.Success(MapToDetalleServicioResponse(detalle));
             }
             catch
             {
@@ -537,52 +589,137 @@ public class OrdenServicioService : IOrdenServicioService
                 throw;
             }
         }
-
-        // --- Caso 2: Mano de Obra / Servicio ---
-        if (!puedeModificarPrecios)
+        else if (tipoItem == TipoItemServicio.Servicio)
         {
-            return ServiceResult<DetalleServicioResponse>.Invalid(
-                "El rol Técnico no está autorizado a fijar o modificar precios de mano de obra.");
+            if (!request.ServicioId.HasValue)
+            {
+                return ServiceResult<DetalleServicioResponse>.Invalid("El ID del servicio es obligatorio para ítems de tipo Servicio.");
+            }
+
+            servicio = await _context.Servicios
+                .FirstOrDefaultAsync(s => s.Id == request.ServicioId.Value && s.Activo);
+
+            if (servicio is null)
+            {
+                return ServiceResult<DetalleServicioResponse>.Invalid("El servicio indicado no existe o está inactivo.");
+            }
+
+            if (!request.TipoAfectacionIgv.HasValue)
+            {
+                tipoAfectacion = servicio.TipoAfectacionIgv;
+            }
+
+            if (puedeModificarPrecios && request.PrecioUnitario.HasValue && request.PrecioUnitario.Value >= 0)
+            {
+                precioFinal = request.PrecioUnitario.Value;
+            }
+            else
+            {
+                if (!puedeModificarPrecios && request.PrecioUnitario.HasValue && request.PrecioUnitario.Value != servicio.PrecioSugerido)
+                {
+                    return ServiceResult<DetalleServicioResponse>.Forbidden("El rol Técnico no está autorizado a modificar precios sugeridos de servicios.");
+                }
+                precioFinal = servicio.PrecioSugerido;
+            }
+
+            if (string.IsNullOrWhiteSpace(descripcion))
+            {
+                descripcion = servicio.Nombre;
+            }
+
+            costoHistorico = 0m;
+
+            var (subtotalGravado, igvCalculado, totalCalculado, porcIgv) =
+                CalcularFinanzasLinea(request.Cantidad, precioFinal, tipoAfectacion, porcentajeIgvVigente);
+
+            var detalle = new DetalleServicio
+            {
+                OrdenServicioId        = orden.Id,
+                TipoItem               = tipoItem,
+                ServicioId             = servicio.Id,
+                Servicio               = servicio,
+                Descripcion            = descripcion,
+                Cantidad               = request.Cantidad,
+                PrecioUnitario         = precioFinal,
+                CostoUnitarioHistorico = costoHistorico,
+                TipoAfectacionIgv      = tipoAfectacion,
+                SubtotalGravado        = subtotalGravado,
+                PorcentajeIgvAplicado  = porcIgv,
+                MontoIgv               = igvCalculado,
+                Total                  = totalCalculado,
+                FechaCreacion          = DateTime.UtcNow,
+                Activo                 = true
+            };
+
+            _context.DetallesServicio.Add(detalle);
+            if (!orden.Detalles.Contains(detalle))
+            {
+                orden.Detalles.Add(detalle);
+            }
+            RecalcularTotalesOrden(orden);
+            orden.FechaModificacion = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return ServiceResult<DetalleServicioResponse>.Success(MapToDetalleServicioResponse(detalle));
         }
-
-        if (string.IsNullOrWhiteSpace(request.Descripcion))
+        else // ManoDeObra o Terceros
         {
-            return ServiceResult<DetalleServicioResponse>.Invalid("La descripción del servicio o mano de obra es obligatoria.");
+            if (!puedeModificarPrecios)
+            {
+                return ServiceResult<DetalleServicioResponse>.Forbidden(
+                    "El rol Técnico no está autorizado a fijar o modificar precios de mano de obra o terceros.");
+            }
+
+            if (string.IsNullOrWhiteSpace(descripcion))
+            {
+                return ServiceResult<DetalleServicioResponse>.Invalid("La descripción de la línea es obligatoria.");
+            }
+
+            if (!request.PrecioUnitario.HasValue || request.PrecioUnitario.Value < 0)
+            {
+                return ServiceResult<DetalleServicioResponse>.Invalid("El precio unitario es obligatorio y no puede ser negativo.");
+            }
+
+            precioFinal = request.PrecioUnitario.Value;
+            costoHistorico = 0m;
+
+            var (subtotalGravado, igvCalculado, totalCalculado, porcIgv) =
+                CalcularFinanzasLinea(request.Cantidad, precioFinal, tipoAfectacion, porcentajeIgvVigente);
+
+            var detalle = new DetalleServicio
+            {
+                OrdenServicioId        = orden.Id,
+                TipoItem               = tipoItem,
+                Descripcion            = descripcion,
+                Cantidad               = request.Cantidad,
+                PrecioUnitario         = precioFinal,
+                CostoUnitarioHistorico = costoHistorico,
+                TipoAfectacionIgv      = tipoAfectacion,
+                SubtotalGravado        = subtotalGravado,
+                PorcentajeIgvAplicado  = porcIgv,
+                MontoIgv               = igvCalculado,
+                Total                  = totalCalculado,
+                FechaCreacion          = DateTime.UtcNow,
+                Activo                 = true
+            };
+
+            _context.DetallesServicio.Add(detalle);
+            if (!orden.Detalles.Contains(detalle))
+            {
+                orden.Detalles.Add(detalle);
+            }
+            RecalcularTotalesOrden(orden);
+            orden.FechaModificacion = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return ServiceResult<DetalleServicioResponse>.Success(MapToDetalleServicioResponse(detalle));
         }
-
-        if (!request.PrecioUnitario.HasValue || request.PrecioUnitario.Value < 0)
-        {
-            return ServiceResult<DetalleServicioResponse>.Invalid("El precio unitario de la mano de obra es obligatorio y no puede ser negativo.");
-        }
-
-        var detalleServicio = new DetalleServicio
-        {
-            OrdenServicioId = orden.Id,
-            ProductoId      = null,
-            Descripcion     = request.Descripcion.Trim(),
-            Cantidad        = request.Cantidad,
-            PrecioUnitario  = request.PrecioUnitario.Value,
-            FechaCreacion   = DateTime.UtcNow,
-            Activo          = true
-        };
-
-        _context.DetallesServicio.Add(detalleServicio);
-        await _context.SaveChangesAsync();
-
-        return ServiceResult<DetalleServicioResponse>.Success(new DetalleServicioResponse(
-            detalleServicio.Id,
-            null,
-            null,
-            detalleServicio.Descripcion,
-            detalleServicio.Cantidad,
-            detalleServicio.PrecioUnitario,
-            detalleServicio.Cantidad * detalleServicio.PrecioUnitario,
-            false));
     }
 
     public async Task<ServiceResult<bool>> EliminarDetalleAsync(Guid ordenServicioId, Guid detalleId)
     {
         var orden = await _context.OrdenesServicio
+            .Include(o => o.Detalles)
             .FirstOrDefaultAsync(o => o.Id == ordenServicioId && o.Activo);
 
         if (orden is null)
@@ -602,20 +739,18 @@ public class OrdenServicioService : IOrdenServicioService
                 "No se pueden eliminar detalles de una orden en estado 'Lista'. Debe reabrirse a 'EnProceso' si requiere ajustes.");
         }
 
-        var detalle = await _context.DetallesServicio
-            .FirstOrDefaultAsync(d => d.Id == detalleId && d.OrdenServicioId == ordenServicioId && d.Activo);
+        var detalle = orden.Detalles.FirstOrDefault(d => d.Id == detalleId && d.Activo);
 
         if (detalle is null)
         {
             return ServiceResult<bool>.NotFound();
         }
 
-        if (detalle.ProductoId.HasValue)
+        if (detalle.ProductoId.HasValue && detalle.TipoItem == TipoItemServicio.Repuesto)
         {
             await using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                // Bloqueo pesimista a nivel de fila (FOR UPDATE) para evitar condiciones de carrera en stock
                 await _context.Database.ExecuteSqlInterpolatedAsync(
                     $"SELECT \"Id\" FROM \"Productos\" WHERE \"Id\" = {detalle.ProductoId.Value} FOR UPDATE");
 
@@ -643,6 +778,9 @@ public class OrdenServicioService : IOrdenServicioService
                 detalle.Activo = false;
                 detalle.FechaModificacion = DateTime.UtcNow;
 
+                RecalcularTotalesOrden(orden);
+                orden.FechaModificacion = DateTime.UtcNow;
+
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
@@ -657,6 +795,9 @@ public class OrdenServicioService : IOrdenServicioService
 
         detalle.Activo = false;
         detalle.FechaModificacion = DateTime.UtcNow;
+
+        RecalcularTotalesOrden(orden);
+        orden.FechaModificacion = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
         return ServiceResult<bool>.Success(true);
@@ -673,6 +814,7 @@ public class OrdenServicioService : IOrdenServicioService
                 .ThenInclude(v => v.Cliente)
             .Include(o => o.Cliente)
             .Include(o => o.TecnicoAsignado)
+            .Include(o => o.UsuarioAprobacionGerencia)
             .Include(o => o.Ventas)
                 .ThenInclude(v => v.Comprobante)
             .FirstOrDefaultAsync(o => o.Id == ordenServicioId && o.Activo);
@@ -682,11 +824,17 @@ public class OrdenServicioService : IOrdenServicioService
             return ServiceResult<OrdenServicioResponse>.NotFound();
         }
 
+        if (esTecnico && usuarioId.HasValue && orden.TecnicoAsignadoId != usuarioId.Value)
+        {
+            return ServiceResult<OrdenServicioResponse>.Forbidden(
+                "No tiene autorización para cambiar el estado de órdenes asignadas a otro técnico.");
+        }
+
         if (esTecnico && (request.NuevoEstado == EstadoOrdenServicio.Aprobada 
                        || request.NuevoEstado == EstadoOrdenServicio.Entregada 
                        || request.NuevoEstado == EstadoOrdenServicio.Cancelada))
         {
-            return ServiceResult<OrdenServicioResponse>.Invalid(
+            return ServiceResult<OrdenServicioResponse>.Forbidden(
                 "El rol Técnico no está autorizado a realizar la aprobación final, entrega ni cancelación de la orden.");
         }
 
@@ -727,6 +875,27 @@ public class OrdenServicioService : IOrdenServicioService
         {
             return ServiceResult<OrdenServicioResponse>.Invalid(
                 $"Transición de estado no permitida de '{orden.Estado}' a '{request.NuevoEstado}'.");
+        }
+
+        if (request.NuevoEstado == EstadoOrdenServicio.Aprobada)
+        {
+            if (orden.EstadoPresupuestoCliente == EstadoPresupuestoCliente.Rechazado)
+            {
+                return ServiceResult<OrdenServicioResponse>.Invalid(
+                    "No se puede aprobar la orden de servicio porque el presupuesto fue rechazado por el cliente.");
+            }
+
+            if (orden.EstadoAprobacionGerencia == EstadoAprobacionGerencia.Pendiente)
+            {
+                return ServiceResult<OrdenServicioResponse>.Invalid(
+                    "No se puede aprobar la orden de servicio porque requiere aprobación de Gerencia previa.");
+            }
+
+            if (orden.EstadoAprobacionGerencia == EstadoAprobacionGerencia.Rechazado)
+            {
+                return ServiceResult<OrdenServicioResponse>.Invalid(
+                    "No se puede aprobar la orden de servicio porque la aprobación de Gerencia fue rechazada.");
+            }
         }
 
         var estadoAnterior = orden.Estado;
@@ -846,6 +1015,249 @@ public class OrdenServicioService : IOrdenServicioService
         return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
     }
 
+    public async Task<ServiceResult<OrdenServicioResponse>> AsignarTecnicoAsync(
+        Guid id,
+        Guid tecnicoId,
+        Guid? usuarioId = null)
+    {
+        var orden = await _context.OrdenesServicio
+            .Include(o => o.Vehiculo)
+                .ThenInclude(v => v.Cliente)
+            .Include(o => o.Cliente)
+            .Include(o => o.TecnicoAsignado)
+            .FirstOrDefaultAsync(o => o.Id == id && o.Activo);
+
+        if (orden is null)
+        {
+            return ServiceResult<OrdenServicioResponse>.NotFound();
+        }
+
+        if (orden.Estado == EstadoOrdenServicio.Entregada || orden.Estado == EstadoOrdenServicio.Cancelada)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid(
+                $"No se puede asignar técnico a una orden que se encuentra en estado '{orden.Estado}'.");
+        }
+
+        var tecnico = await _userManager.Users
+            .FirstOrDefaultAsync(u => u.Id == tecnicoId && u.Activo);
+
+        if (tecnico is null)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid("El técnico indicado no existe o está inactivo.");
+        }
+
+        var esTecnicoRol = await _context.UsuarioRoles
+            .Where(ur => ur.UsuarioId == tecnicoId && ur.Rol.Activo)
+            .AnyAsync(ur => ur.Rol.Nombre == RolesDefinidos.Tecnico);
+
+        if (!esTecnicoRol)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid("El usuario seleccionado no cuenta con el rol de Técnico.");
+        }
+
+        orden.TecnicoAsignadoId = tecnicoId;
+        orden.TecnicoAsignado = tecnico;
+        orden.FechaModificacion = DateTime.UtcNow;
+
+        _context.HistorialEstadosOrden.Add(new HistorialEstadoOrden
+        {
+            OrdenServicioId = orden.Id,
+            EstadoAnterior  = orden.Estado,
+            EstadoNuevo     = orden.Estado,
+            UsuarioId       = usuarioId,
+            FechaCambio     = DateTime.UtcNow,
+            Observaciones   = $"Asignación de técnico a {tecnico.NombreCompleto}",
+            FechaCreacion   = DateTime.UtcNow,
+            Activo          = true
+        });
+
+        await _context.SaveChangesAsync();
+
+        return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
+    }
+
+    public async Task<ServiceResult<OrdenServicioResponse>> ResponderPresupuestoClienteAsync(
+        Guid id,
+        ResponderPresupuestoClienteRequest request,
+        Guid? soloClienteId = null,
+        Guid? usuarioId = null)
+    {
+        var orden = await _context.OrdenesServicio
+            .Include(o => o.Vehiculo)
+                .ThenInclude(v => v.Cliente)
+            .Include(o => o.Cliente)
+            .Include(o => o.TecnicoAsignado)
+            .Include(o => o.Detalles)
+            .Include(o => o.UsuarioAprobacionGerencia)
+            .Include(o => o.Ventas)
+                .ThenInclude(v => v.Comprobante)
+            .FirstOrDefaultAsync(o => o.Id == id && o.Activo);
+
+        if (orden is null)
+        {
+            return ServiceResult<OrdenServicioResponse>.NotFound();
+        }
+
+        var clienteAsociadoId = orden.ClienteId != Guid.Empty ? orden.ClienteId : orden.Vehiculo?.ClienteId;
+        if (soloClienteId.HasValue && clienteAsociadoId != soloClienteId.Value)
+        {
+            return ServiceResult<OrdenServicioResponse>.Forbidden(
+                "No tiene autorización para responder presupuestos de órdenes que no le pertenecen.");
+        }
+
+        if (orden.Estado == EstadoOrdenServicio.Entregada || orden.Estado == EstadoOrdenServicio.Cancelada)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid(
+                $"No se puede modificar la respuesta de presupuesto en una orden en estado terminal '{orden.Estado}'.");
+        }
+
+        orden.EstadoPresupuestoCliente = request.Estado;
+        orden.FechaRespuestaCliente = DateTime.UtcNow;
+        if (!string.IsNullOrWhiteSpace(request.Observaciones))
+        {
+            orden.ObservacionesPresupuestoCliente = request.Observaciones.Trim();
+        }
+        orden.FechaModificacion = DateTime.UtcNow;
+
+        _context.HistorialEstadosOrden.Add(new HistorialEstadoOrden
+        {
+            OrdenServicioId = orden.Id,
+            EstadoAnterior  = orden.Estado,
+            EstadoNuevo     = orden.Estado,
+            UsuarioId       = usuarioId,
+            FechaCambio     = DateTime.UtcNow,
+            Observaciones   = $"Respuesta de presupuesto del cliente: {request.Estado}. {request.Observaciones}".Trim(),
+            FechaCreacion   = DateTime.UtcNow,
+            Activo          = true
+        });
+
+        await _context.SaveChangesAsync();
+        return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
+    }
+
+    public async Task<ServiceResult<OrdenServicioResponse>> AprobacionGerenciaAsync(
+        Guid id,
+        AprobacionGerenciaRequest request,
+        Guid? usuarioId = null)
+    {
+        var orden = await _context.OrdenesServicio
+            .Include(o => o.Vehiculo)
+                .ThenInclude(v => v.Cliente)
+            .Include(o => o.Cliente)
+            .Include(o => o.TecnicoAsignado)
+            .Include(o => o.Detalles)
+            .Include(o => o.UsuarioAprobacionGerencia)
+            .Include(o => o.Ventas)
+                .ThenInclude(v => v.Comprobante)
+            .FirstOrDefaultAsync(o => o.Id == id && o.Activo);
+
+        if (orden is null)
+        {
+            return ServiceResult<OrdenServicioResponse>.NotFound();
+        }
+
+        if (orden.Estado == EstadoOrdenServicio.Entregada || orden.Estado == EstadoOrdenServicio.Cancelada)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid(
+                $"No se puede modificar la aprobación de gerencia en una orden en estado terminal '{orden.Estado}'.");
+        }
+
+        Usuario? usuario = null;
+        if (usuarioId.HasValue)
+        {
+            usuario = await _userManager.Users.FirstOrDefaultAsync(u => u.Id == usuarioId.Value && u.Activo);
+        }
+
+        orden.EstadoAprobacionGerencia = request.Estado;
+        orden.FechaAprobacionGerencia = DateTime.UtcNow;
+        orden.UsuarioAprobacionGerenciaId = usuarioId;
+        orden.UsuarioAprobacionGerencia = usuario;
+        if (!string.IsNullOrWhiteSpace(request.Observaciones))
+        {
+            orden.ObservacionesAprobacionGerencia = request.Observaciones.Trim();
+        }
+        orden.FechaModificacion = DateTime.UtcNow;
+
+        _context.HistorialEstadosOrden.Add(new HistorialEstadoOrden
+        {
+            OrdenServicioId = orden.Id,
+            EstadoAnterior  = orden.Estado,
+            EstadoNuevo     = orden.Estado,
+            UsuarioId       = usuarioId,
+            FechaCambio     = DateTime.UtcNow,
+            Observaciones   = $"Aprobación de Gerencia: {request.Estado}. {request.Observaciones}".Trim(),
+            FechaCreacion   = DateTime.UtcNow,
+            Activo          = true
+        });
+
+        await _context.SaveChangesAsync();
+        return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
+    }
+
+    private static void RecalcularTotalesOrden(OrdenServicio orden)
+    {
+        var detallesActivos = orden.Detalles
+            .Where(d => d.Activo)
+            .DistinctBy(d => d.Id)
+            .ToList();
+        orden.SubtotalGravado = decimal.Round(
+            detallesActivos.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Gravado).Sum(d => d.SubtotalGravado),
+            2, MidpointRounding.AwayFromZero);
+        orden.SubtotalExonerado = decimal.Round(
+            detallesActivos.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Exonerado).Sum(d => d.Total),
+            2, MidpointRounding.AwayFromZero);
+        orden.SubtotalInafecto = decimal.Round(
+            detallesActivos.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Inafecto).Sum(d => d.Total),
+            2, MidpointRounding.AwayFromZero);
+        orden.MontoIgv = decimal.Round(
+            detallesActivos.Sum(d => d.MontoIgv),
+            2, MidpointRounding.AwayFromZero);
+        orden.Total = decimal.Round(
+            detallesActivos.Sum(d => d.Total),
+            2, MidpointRounding.AwayFromZero);
+    }
+
+    private static (decimal SubtotalGravado, decimal MontoIgv, decimal Total, decimal PorcentajeIgvAplicado) CalcularFinanzasLinea(
+        int cantidad, decimal precioUnitario, TipoAfectacionIgv tipoAfectacion, decimal porcentajeIgvVigente)
+    {
+        decimal subtotalBruto = decimal.Round(cantidad * precioUnitario, 2, MidpointRounding.AwayFromZero);
+
+        if (tipoAfectacion == TipoAfectacionIgv.Gravado)
+        {
+            decimal montoIgv = decimal.Round(subtotalBruto * (porcentajeIgvVigente / 100m), 2, MidpointRounding.AwayFromZero);
+            decimal total = decimal.Round(subtotalBruto + montoIgv, 2, MidpointRounding.AwayFromZero);
+            return (subtotalBruto, montoIgv, total, porcentajeIgvVigente);
+        }
+        else
+        {
+            return (0m, 0m, subtotalBruto, 0m);
+        }
+    }
+
+    private static DetalleServicioResponse MapToDetalleServicioResponse(DetalleServicio d)
+    {
+        return new DetalleServicioResponse(
+            d.Id,
+            d.ProductoId,
+            d.Producto?.Codigo,
+            d.Descripcion,
+            d.Cantidad,
+            d.PrecioUnitario,
+            d.Cantidad * d.PrecioUnitario,
+            d.TipoItem == TipoItemServicio.Repuesto || d.ProductoId.HasValue,
+            d.ServicioId,
+            d.Servicio?.Nombre,
+            d.TipoItem,
+            d.TipoItem.ToString(),
+            d.CostoUnitarioHistorico,
+            d.TipoAfectacionIgv,
+            d.TipoAfectacionIgv.ToString(),
+            d.SubtotalGravado,
+            d.PorcentajeIgvAplicado,
+            d.MontoIgv,
+            d.Total);
+    }
+
     private static OrdenServicioResponse MapToResponse(OrdenServicio orden)
     {
         var primeraVenta = orden.Ventas?.FirstOrDefault(v => v.Activo);
@@ -892,6 +1304,22 @@ public class OrdenServicioService : IOrdenServicioService
             orden.TipoFalla.HasValue ? (int)orden.TipoFalla.Value : null,
             orden.KilometrajeIngreso,
             orden.HorasUsoIngreso,
+            orden.LecturaMedidorIngreso,
+            orden.SubtotalGravado,
+            orden.SubtotalExonerado,
+            orden.SubtotalInafecto,
+            orden.MontoIgv,
+            orden.Total,
+            (int)orden.EstadoPresupuestoCliente,
+            orden.EstadoPresupuestoCliente.ToString(),
+            orden.FechaRespuestaCliente,
+            orden.ObservacionesPresupuestoCliente,
+            (int)orden.EstadoAprobacionGerencia,
+            orden.EstadoAprobacionGerencia.ToString(),
+            orden.FechaAprobacionGerencia,
+            orden.UsuarioAprobacionGerenciaId,
+            orden.UsuarioAprobacionGerencia?.NombreCompleto,
+            orden.ObservacionesAprobacionGerencia,
             primeraVenta?.Id,
             comprobanteTexto);
     }
@@ -901,15 +1329,7 @@ public class OrdenServicioService : IOrdenServicioService
         var detalles = orden.Detalles
             .Where(d => d.Activo)
             .OrderBy(d => d.FechaCreacion)
-            .Select(d => new DetalleServicioResponse(
-                d.Id,
-                d.ProductoId,
-                d.Producto?.Codigo,
-                d.Descripcion,
-                d.Cantidad,
-                d.PrecioUnitario,
-                d.Cantidad * d.PrecioUnitario,
-                d.ProductoId.HasValue))
+            .Select(MapToDetalleServicioResponse)
             .ToList();
 
         var historial = orden.HistorialEstados?
@@ -928,7 +1348,7 @@ public class OrdenServicioService : IOrdenServicioService
                 h.Observaciones))
             .ToList() ?? new List<HistorialEstadoOrdenResponse>();
 
-        var total = detalles.Sum(d => d.Subtotal);
+        var total = orden.Total > 0 ? orden.Total : detalles.Sum(d => d.Total);
 
         var primeraVenta = orden.Ventas?.FirstOrDefault(v => v.Activo);
         var comprobanteTexto = primeraVenta?.Comprobante != null
@@ -984,6 +1404,21 @@ public class OrdenServicioService : IOrdenServicioService
             orden.TipoFalla.HasValue ? (int)orden.TipoFalla.Value : null,
             orden.KilometrajeIngreso,
             orden.HorasUsoIngreso,
+            orden.LecturaMedidorIngreso,
+            orden.SubtotalGravado,
+            orden.SubtotalExonerado,
+            orden.SubtotalInafecto,
+            orden.MontoIgv,
+            (int)orden.EstadoPresupuestoCliente,
+            orden.EstadoPresupuestoCliente.ToString(),
+            orden.FechaRespuestaCliente,
+            orden.ObservacionesPresupuestoCliente,
+            (int)orden.EstadoAprobacionGerencia,
+            orden.EstadoAprobacionGerencia.ToString(),
+            orden.FechaAprobacionGerencia,
+            orden.UsuarioAprobacionGerenciaId,
+            orden.UsuarioAprobacionGerencia?.NombreCompleto,
+            orden.ObservacionesAprobacionGerencia,
             orden.Vehiculo?.TipoUnidad.ToString(),
             orden.Vehiculo?.NumeroSerieVIN,
             orden.Vehiculo?.NumeroMotor,

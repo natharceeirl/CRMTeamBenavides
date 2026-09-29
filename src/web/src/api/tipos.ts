@@ -144,6 +144,67 @@ export type PermisoResponse = {
   activo: boolean
 }
 
+export const TIPO_ITEM_SERVICIO = {
+  repuesto: 0,
+  servicio: 1,
+  manoDeObra: 2,
+  terceros: 3,
+} as const
+
+export const nombresTipoItem: Record<number, string> = {
+  0: 'Repuesto',
+  1: 'Servicio',
+  2: 'Mano de obra',
+  3: 'Terceros',
+}
+
+export const TIPO_AFECTACION_IGV = {
+  gravado: 0,
+  exonerado: 1,
+  inafecto: 2,
+} as const
+
+export const nombresTipoAfectacion: Record<number, string> = {
+  0: 'Gravado',
+  1: 'Exonerado',
+  2: 'Inafecto',
+}
+
+export type ServicioResponse = {
+  id: string
+  nombre: string
+  precioSugerido: number
+  tipoAfectacionIgv: number
+  activo: boolean
+  fechaCreacion: string
+}
+
+export type CrearServicioRequest = {
+  nombre: string
+  precioSugerido: number
+  tipoAfectacionIgv?: number
+}
+
+export type ActualizarServicioRequest = {
+  nombre: string
+  precioSugerido: number
+  tipoAfectacionIgv?: number
+  activo?: boolean | null
+}
+
+export type ConfiguracionEmpresaResponse = {
+  id: string
+  nombreEmpresa: string
+  ruc: string | null
+  porcentajeIgv: number
+}
+
+export type ActualizarConfiguracionEmpresaRequest = {
+  nombreEmpresa: string
+  ruc: string | null
+  porcentajeIgv: number
+}
+
 export type DetalleServicioResponse = {
   id: string
   productoId: string | null
@@ -153,6 +214,17 @@ export type DetalleServicioResponse = {
   precioUnitario: number
   subtotal: number
   esRepuesto: boolean
+  servicioId?: string | null
+  servicioNombre?: string | null
+  tipoItem?: number
+  tipoItemNombre?: string | null
+  costoUnitarioHistorico?: number
+  tipoAfectacionIgv?: number
+  tipoAfectacionIgvNombre?: string | null
+  subtotalGravado?: number
+  porcentajeIgvAplicado?: number
+  montoIgv?: number
+  total?: number
 }
 
 export type HistorialEstadoOrdenResponse = {
@@ -199,6 +271,12 @@ export type OrdenServicioResponse = {
   tipoFallaId?: number | null
   kilometrajeIngreso?: number | null
   horasUsoIngreso?: number | null
+  lecturaMedidorIngreso?: number | null
+  subtotalGravado?: number
+  subtotalExonerado?: number
+  subtotalInafecto?: number
+  montoIgv?: number
+  total?: number
   ventaId?: string | null
   comprobanteSerieNumero?: string | null
 }
@@ -228,6 +306,7 @@ export type AperturaOrdenRequest = {
   tipoFalla?: number | null
   kilometrajeIngreso?: number | null
   horasUsoIngreso?: number | null
+  lecturaMedidorIngreso?: number | null
 }
 
 export type DiagnosticoRequest = {
@@ -250,14 +329,23 @@ export type ActualizarOrdenRequest = {
   tipoFalla?: number | null
   kilometrajeIngreso?: number | null
   horasUsoIngreso?: number | null
+  lecturaMedidorIngreso?: number | null
   tecnicoAsignadoId?: string | null
 }
 
 export type AgregarDetalleRequest = {
-  productoId: string | null
-  descripcion: string | null
+  productoId?: string | null
+  servicioId?: string | null
+  tipoItem?: number | null
+  descripcion?: string | null
   cantidad: number
-  precioUnitario: number | null
+  precioUnitario?: number | null
+  tipoAfectacionIgv?: number | null
+}
+
+export type AsignarTecnicoRequest = {
+  tecnicoId: string
+  observaciones?: string | null
 }
 
 export type CambiarEstadoRequest = {

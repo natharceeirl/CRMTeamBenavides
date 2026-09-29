@@ -256,6 +256,12 @@ class OrdenServicioApi {
     this.tipoFallaId,
     this.kilometrajeIngreso,
     this.horasUsoIngreso,
+    this.lecturaMedidorIngreso,
+    this.subtotalGravado,
+    this.subtotalExonerado,
+    this.subtotalInafecto,
+    this.montoIgv,
+    this.total,
   });
 
   factory OrdenServicioApi.desdeJson(Map<String, dynamic> json) => OrdenServicioApi(
@@ -283,6 +289,13 @@ class OrdenServicioApi {
         tipoFallaId: json['tipoFallaId'] as int?,
         kilometrajeIngreso: json['kilometrajeIngreso'] as int?,
         horasUsoIngreso: (json['horasUsoIngreso'] as num?)?.toDouble(),
+        // En la API es decimal: una lectura en horas puede traer decimales.
+        lecturaMedidorIngreso: (json['lecturaMedidorIngreso'] as num?)?.toDouble(),
+        subtotalGravado: (json['subtotalGravado'] as num?)?.toDouble(),
+        subtotalExonerado: (json['subtotalExonerado'] as num?)?.toDouble(),
+        subtotalInafecto: (json['subtotalInafecto'] as num?)?.toDouble(),
+        montoIgv: (json['montoIgv'] as num?)?.toDouble(),
+        total: (json['total'] as num?)?.toDouble(),
       );
 
   final String id;
@@ -311,6 +324,12 @@ class OrdenServicioApi {
   final int? tipoFallaId;
   final int? kilometrajeIngreso;
   final double? horasUsoIngreso;
+  final double? lecturaMedidorIngreso;
+  final double? subtotalGravado;
+  final double? subtotalExonerado;
+  final double? subtotalInafecto;
+  final double? montoIgv;
+  final double? total;
 
   String get unidad => '$vehiculoMarca $vehiculoModelo';
 
@@ -327,6 +346,10 @@ class OrdenServicioApi {
     }
     if (horasUsoIngreso != null) {
       return '${entero(horasUsoIngreso!)} h';
+    }
+    // La lectura genérica no dice si es km u horas: se muestra el número solo.
+    if (lecturaMedidorIngreso != null) {
+      return entero(lecturaMedidorIngreso!);
     }
     return null;
   }
@@ -368,6 +391,13 @@ class DetalleServicioApi {
     required this.subtotal,
     required this.esRepuesto,
     this.productoCodigo,
+    this.tipoItem,
+    this.tipoItemNombre,
+    this.tipoAfectacionIgv,
+    this.tipoAfectacionIgvNombre,
+    this.subtotalGravado,
+    this.montoIgv,
+    this.total,
   });
 
   factory DetalleServicioApi.desdeJson(Map<String, dynamic> json) => DetalleServicioApi(
@@ -378,6 +408,13 @@ class DetalleServicioApi {
         subtotal: (json['subtotal'] as num? ?? 0).toDouble(),
         esRepuesto: json['esRepuesto'] as bool? ?? false,
         productoCodigo: json['productoCodigo'] as String?,
+        tipoItem: json['tipoItem'] as int?,
+        tipoItemNombre: json['tipoItemNombre'] as String?,
+        tipoAfectacionIgv: json['tipoAfectacionIgv'] as int?,
+        tipoAfectacionIgvNombre: json['tipoAfectacionIgvNombre'] as String?,
+        subtotalGravado: (json['subtotalGravado'] as num?)?.toDouble(),
+        montoIgv: (json['montoIgv'] as num?)?.toDouble(),
+        total: (json['total'] as num?)?.toDouble(),
       );
 
   final String id;
@@ -387,6 +424,13 @@ class DetalleServicioApi {
   final double subtotal;
   final bool esRepuesto;
   final String? productoCodigo;
+  final int? tipoItem;
+  final String? tipoItemNombre;
+  final int? tipoAfectacionIgv;
+  final String? tipoAfectacionIgvNombre;
+  final double? subtotalGravado;
+  final double? montoIgv;
+  final double? total;
 }
 
 class OrdenServicioDetalleApi {
@@ -401,6 +445,12 @@ class OrdenServicioDetalleApi {
     this.numeroSerieVIN,
     this.numeroMotor,
     this.historial = const [],
+    this.lecturaMedidorIngreso,
+    this.subtotalGravado,
+    this.subtotalExonerado,
+    this.subtotalInafecto,
+    this.montoIgv,
+    this.porcentajeIgv,
   });
 
   factory OrdenServicioDetalleApi.desdeJson(Map<String, dynamic> json) {
@@ -422,6 +472,13 @@ class OrdenServicioDetalleApi {
       numeroSerieVIN: json['numeroSerieVIN'] as String?,
       numeroMotor: json['numeroMotor'] as String?,
       historial: historial,
+      // En la API es decimal: una lectura en horas puede traer decimales.
+      lecturaMedidorIngreso: (json['lecturaMedidorIngreso'] as num?)?.toDouble(),
+      subtotalGravado: (json['subtotalGravado'] as num?)?.toDouble(),
+      subtotalExonerado: (json['subtotalExonerado'] as num?)?.toDouble(),
+      subtotalInafecto: (json['subtotalInafecto'] as num?)?.toDouble(),
+      montoIgv: (json['montoIgv'] as num?)?.toDouble(),
+      porcentajeIgv: (json['porcentajeIgv'] as num?)?.toDouble(),
     );
   }
 
@@ -437,7 +494,14 @@ class OrdenServicioDetalleApi {
 
   /// Del más antiguo al más reciente.
   final List<HistorialEstadoApi> historial;
+  final double? lecturaMedidorIngreso;
+  final double? subtotalGravado;
+  final double? subtotalExonerado;
+  final double? subtotalInafecto;
+  final double? montoIgv;
+  final double? porcentajeIgv;
 }
+
 
 /// GET /api/dashboard/resumen
 class ResumenDashboardApi {
