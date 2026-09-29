@@ -102,6 +102,7 @@ export const enlaces: EnlaceMenu[] = [
   { ruta: '/reportes', texto: 'Reportes', permiso: PERMISOS.reportesVerOperativos },
   { ruta: '/chatbot', texto: 'Chatbot', ...ACCESO_CHATBOT },
   { ruta: '/usuarios', texto: 'Usuarios', permiso: PERMISOS.usuariosVer },
+  { ruta: '/configuracion', texto: 'Configuración', permiso: PERMISOS.configuracionEditar },
 ]
 
 /** Primera pantalla del menú a la que puede entrar, o null si no tiene ninguna. */

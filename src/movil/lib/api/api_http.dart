@@ -201,6 +201,41 @@ class ApiHttp {
     return datos.map(ProductoApi.desdeJson).toList();
   }
 
+  Future<List<ServicioApi>> servicios() async {
+    final datos = await _lista('/api/servicios?soloActivos=true');
+    return datos.map(ServicioApi.desdeJson).toList();
+  }
+
+  /// POST /api/ordenes-servicio/{id}/detalles. Sin `precios.modificar` el
+  /// backend toma el precio del catálogo y rechaza cambiarlo.
+  Future<void> agregarItem(
+    String ordenId, {
+    required int tipoItem,
+    required int cantidad,
+    String? productoId,
+    String? servicioId,
+    String? descripcion,
+    double? precioUnitario,
+    int? tipoAfectacionIgv,
+  }) async {
+    try {
+      await _dio.post<Map<String, dynamic>>(
+        '/api/ordenes-servicio/$ordenId/detalles',
+        data: {
+          'tipoItem': tipoItem,
+          'cantidad': cantidad,
+          'productoId': productoId,
+          'servicioId': servicioId,
+          'descripcion': descripcion,
+          'precioUnitario': precioUnitario,
+          'tipoAfectacionIgv': tipoAfectacionIgv,
+        },
+      );
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
   Future<List<CategoriaProductoApi>> categoriasProducto() async {
     final datos = await _lista('/api/categorias-producto');
     return datos.map(CategoriaProductoApi.desdeJson).toList();

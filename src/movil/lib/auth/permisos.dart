@@ -21,6 +21,7 @@ class Permisos {
   static const responderPresupuesto = [ordenesEditar, ventasCrear, portalAcceso];
   static const preciosModificar = 'precios.modificar';
   static const inventarioVer = 'inventario.ver';
+  static const serviciosVer = 'servicios.ver';
   static const inventarioEditar = 'inventario.editar';
   static const ventasVer = 'ventas.ver';
   static const reportesVerOperativos = 'reportes.ver_operativos';

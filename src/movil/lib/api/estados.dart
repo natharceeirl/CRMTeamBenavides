@@ -113,6 +113,39 @@ const nombresTipoUnidad = <int, String>{
 /// Enum TipoMedidor del backend: 0 kilómetros, 1 horas.
 const medidorHoras = 1;
 
+/// Enum TipoItemServicio del backend.
+class TipoItem {
+  const TipoItem._();
+
+  static const repuesto = 0;
+  static const servicio = 1;
+  static const manoDeObra = 2;
+  static const terceros = 3;
+}
+
+const nombresTipoItem = <int, String>{
+  TipoItem.repuesto: 'Repuesto',
+  TipoItem.servicio: 'Servicio',
+  TipoItem.manoDeObra: 'Mano de obra',
+  TipoItem.terceros: 'Terceros',
+};
+
+/// Repuestos y servicios salen del catálogo con su precio. La mano de obra
+/// libre y los terceros llevan un precio que alguien fija: sin
+/// `precios.modificar` el backend los rechaza.
+List<int> tiposDeItemPermitidos({required bool puedeFijarPrecios}) => [
+      TipoItem.repuesto,
+      TipoItem.servicio,
+      if (puedeFijarPrecios) ...[TipoItem.manoDeObra, TipoItem.terceros],
+    ];
+
+/// Enum TipoAfectacionIgv del backend.
+const nombresAfectacionIgv = <int, String>{0: 'Gravado', 1: 'Exonerado', 2: 'Inafecto'};
+
+/// La orden admite ítems nuevos salvo en Lista o cerrada.
+bool permiteEditarItems(int estadoId) =>
+    !esEstadoTerminal(estadoId) && estadoId != EstadoOrden.lista;
+
 /// Entregada y Cancelada no admiten más cambios.
 bool esEstadoTerminal(int estadoId) =>
     estadoId == EstadoOrden.entregada || estadoId == EstadoOrden.cancelada;

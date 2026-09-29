@@ -630,6 +630,28 @@ class RespuestaChatbotApi {
   final List<FaqApi> sugerencias;
 }
 
+/// GET /api/servicios: catálogo de servicios del taller con su precio.
+class ServicioApi {
+  const ServicioApi({
+    required this.id,
+    required this.nombre,
+    required this.precioSugerido,
+    required this.tipoAfectacionIgv,
+  });
+
+  factory ServicioApi.desdeJson(Map<String, dynamic> json) => ServicioApi(
+        id: json['id'] as String,
+        nombre: json['nombre'] as String? ?? '',
+        precioSugerido: (json['precioSugerido'] as num? ?? 0).toDouble(),
+        tipoAfectacionIgv: json['tipoAfectacionIgv'] as int? ?? 0,
+      );
+
+  final String id;
+  final String nombre;
+  final double precioSugerido;
+  final int tipoAfectacionIgv;
+}
+
 class CategoriaProductoApi {
   const CategoriaProductoApi({
     required this.id,

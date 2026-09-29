@@ -17,6 +17,7 @@ import { VentasPage } from './pages/VentasPage'
 import { ReportesPage } from './pages/ReportesPage'
 import { UsuariosPage } from './pages/UsuariosPage'
 import { ChatbotPage } from './pages/ChatbotPage'
+import { ConfiguracionPage } from './pages/ConfiguracionPage'
 
 export default function App() {
   return (
@@ -54,6 +55,9 @@ export default function App() {
           </Route>
           <Route element={<RutaConPermiso permiso={PERMISOS.usuariosVer} />}>
             <Route path="usuarios" element={<UsuariosPage />} />
+          </Route>
+          <Route element={<RutaConPermiso permiso={PERMISOS.configuracionEditar} />}>
+            <Route path="configuracion" element={<ConfiguracionPage />} />
           </Route>
         </Route>
       </Route>

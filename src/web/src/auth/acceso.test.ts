@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ACCESO_ORDENES, PERMISOS, cumpleAcceso, rutaInicial } from './acceso'
+import { ACCESO_ORDENES, PERMISOS, cumpleAcceso, enlaces, rutaInicial } from './acceso'
 
 /** Sesión mínima con los permisos que da el backend a cada rol (RolSeeder). */
 function sesionCon(roles: string[], permisos: string[]) {
@@ -48,6 +48,13 @@ describe('cumpleAcceso', () => {
 
   it('por rol exige tener uno de los roles', () => {
     expect(cumpleAcceso({ roles: ['Recepcion'] }, vendedor)).toBe(false)
+  })
+
+  it('solo quien edita la configuración ve la opción en el menú', () => {
+    const configuracion = enlaces.find((enlace) => enlace.ruta === '/configuracion')!
+    expect(cumpleAcceso(configuracion, sesionCon(['Gerencia/Admin'], []))).toBe(true)
+    expect(cumpleAcceso(configuracion, vendedor)).toBe(false)
+    expect(cumpleAcceso(configuracion, tecnico)).toBe(false)
   })
 })
 

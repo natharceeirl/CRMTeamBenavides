@@ -32,6 +32,7 @@ class SesionTecnico extends SesionNotifier {
           'ordenes.cambiar_estado',
           'unidades.ver',
           'inventario.ver',
+          'servicios.ver',
         ],
       );
 }

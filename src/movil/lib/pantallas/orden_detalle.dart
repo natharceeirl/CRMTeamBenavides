@@ -8,6 +8,7 @@ import '../auth/permisos.dart';
 import '../auth/sesion.dart';
 import '../formato.dart';
 import '../tema.dart';
+import 'agregar_item.dart';
 import 'comunes.dart';
 
 class PantallaOrdenDetalle extends ConsumerStatefulWidget {
@@ -37,6 +38,18 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
   void _refrescar() {
     ref.invalidate(ordenProvider(widget.ordenId));
     ref.invalidate(ordenesProvider);
+  }
+
+  Future<void> _agregarItem() async {
+    final agregado = await abrirAgregarItem(context, widget.ordenId);
+    if (agregado != true || !mounted) return;
+
+    _refrescar();
+    // El stock bajó: la tienda debe verlo al volver.
+    ref.invalidate(productosProvider);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Agregado a la orden')),
+    );
   }
 
   Future<void> _guardarDiagnostico() async {
@@ -349,11 +362,23 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                   ],
                 ),
               ),
-              if (sesion.esPersonal)
+              if (sesion.tienePermiso(Permisos.ordenesAgregarItems) &&
+                  permiteEditarItems(datosOrden.estadoId))
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Agregar repuesto o servicio'),
+                    onPressed: _guardando ? null : _agregarItem,
+                  ),
+                )
+              else if (datosOrden.estadoId == EstadoOrden.lista &&
+                  sesion.tienePermiso(Permisos.ordenesAgregarItems))
                 const Padding(
                   padding: EdgeInsets.fromLTRB(20, 16, 20, 0),
                   child: Text(
-                    'Los repuestos y la mano de obra se registran desde la web.',
+                    'Para agregar trabajos, la orden debe volver a «En proceso».',
                     style: TextStyle(color: Marca.textoSecundario),
                   ),
                 ),

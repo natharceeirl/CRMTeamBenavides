@@ -161,6 +161,10 @@ final productosProvider = FutureProvider.autoDispose<List<ProductoApi>>(
   (ref) => ref.watch(apiProvider).productos(),
 );
 
+final serviciosProvider = FutureProvider.autoDispose<List<ServicioApi>>(
+  (ref) => ref.watch(apiProvider).servicios(),
+);
+
 final categoriasProductoProvider =
     FutureProvider.autoDispose<List<CategoriaProductoApi>>(
   (ref) => ref.watch(apiProvider).categoriasProducto(),
