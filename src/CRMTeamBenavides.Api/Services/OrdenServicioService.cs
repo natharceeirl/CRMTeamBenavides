@@ -1607,4 +1607,149 @@ public class OrdenServicioService : IOrdenServicioService
             estadoPago,
             pagos);
     }
+
+    public async Task<ServiceResult<FormatoAtencionResponse>> GenerarFormatoAtencionAsync(
+        Guid id,
+        Guid? soloTecnicoId = null,
+        Guid? soloClienteId = null,
+        CancellationToken ct = default)
+    {
+        var orden = await _context.OrdenesServicio
+            .Include(o => o.Vehiculo)
+                .ThenInclude(v => v.Cliente)
+            .Include(o => o.Cliente)
+            .Include(o => o.TecnicoAsignado)
+            .Include(o => o.Detalles.Where(d => d.Activo))
+                .ThenInclude(d => d.Producto)
+            .Include(o => o.Detalles.Where(d => d.Activo))
+                .ThenInclude(d => d.Servicio)
+            .Include(o => o.Pagos.Where(p => p.Activo))
+            .FirstOrDefaultAsync(o => o.Id == id && o.Activo, ct);
+
+        if (orden is null)
+        {
+            return ServiceResult<FormatoAtencionResponse>.NotFound();
+        }
+
+        if (soloTecnicoId.HasValue && orden.TecnicoAsignadoId != soloTecnicoId.Value)
+        {
+            return ServiceResult<FormatoAtencionResponse>.NotFound();
+        }
+
+        var clienteAsociadoId = orden.ClienteId != Guid.Empty ? orden.ClienteId : orden.Vehiculo?.ClienteId ?? Guid.Empty;
+        if (soloClienteId.HasValue && clienteAsociadoId != soloClienteId.Value)
+        {
+            return ServiceResult<FormatoAtencionResponse>.NotFound();
+        }
+
+        var empresa = await _context.ConfiguracionesEmpresa.AsNoTracking().FirstOrDefaultAsync(ct);
+        var nombreTaller = !string.IsNullOrWhiteSpace(empresa?.NombreEmpresa) ? empresa.NombreEmpresa : "Team Benavides";
+        var razonSocial = !string.IsNullOrWhiteSpace(empresa?.RazonSocial) ? empresa.RazonSocial : "Team Benavides S.R.L.";
+        var ruc = empresa?.Ruc ?? "20601234567";
+        var direccion = empresa?.Direccion ?? "Av. Principal 123, Lima, Perú";
+        var telefono = empresa?.Telefono ?? "(01) 555-1234";
+        var email = empresa?.Email ?? "contacto@teambenavides.com";
+        var porcentajeIgv = empresa?.PorcentajeIgv ?? 18.00m;
+
+        var empresaDto = new FormatoAtencionTallerDto(
+            nombreTaller,
+            razonSocial,
+            ruc,
+            direccion,
+            telefono,
+            email);
+
+        var cliente = orden.Cliente ?? orden.Vehiculo?.Cliente;
+        var clienteDto = new FormatoAtencionClienteDto(
+            cliente?.Id ?? Guid.Empty,
+            cliente?.NombreCompleto ?? "Cliente no registrado",
+            cliente?.RazonSocial,
+            cliente?.TipoDocumento?.ToString(),
+            cliente?.NumeroDocumento ?? cliente?.DocumentoIdentidad,
+            cliente?.Telefono,
+            cliente?.Email,
+            cliente?.Direccion);
+
+        var vehiculo = orden.Vehiculo;
+        var tipoMedidorStr = DeterminarTipoMedidor(vehiculo);
+        decimal? lecturaIngreso = orden.LecturaMedidorIngreso
+            ?? (tipoMedidorStr == "Horas" ? orden.HorasUsoIngreso : orden.KilometrajeIngreso);
+        decimal? lecturaActual = vehiculo?.LecturaMedidorActual
+            ?? (tipoMedidorStr == "Horas" ? vehiculo?.HorasUso : vehiculo?.Kilometraje);
+
+        var unidadDto = new FormatoAtencionUnidadDto(
+            vehiculo?.Id ?? Guid.Empty,
+            vehiculo?.TipoUnidad.ToString() ?? "Motocicleta",
+            vehiculo?.Marca ?? string.Empty,
+            vehiculo?.Modelo ?? string.Empty,
+            vehiculo?.Anio,
+            vehiculo?.Placa,
+            vehiculo?.NumeroSerieVIN,
+            vehiculo?.NumeroMotor,
+            vehiculo?.Color,
+            tipoMedidorStr,
+            lecturaIngreso,
+            lecturaActual);
+
+        var ordenDto = new FormatoAtencionOrdenDto(
+            orden.Id,
+            orden.NumeroOrden ?? $"OS-{orden.Id.ToString()[..8].ToUpper()}",
+            (int)orden.Estado,
+            orden.Estado.ToString(),
+            orden.FechaIngreso,
+            orden.FechaEstimadaEntrega,
+            orden.FechaSalida,
+            orden.TipoAtencion.ToString(),
+            orden.ModalidadAtencion.ToString(),
+            orden.TipoFalla?.ToString());
+
+        var trabajoDto = new FormatoAtencionTrabajoDto(
+            orden.MotivoFalla,
+            orden.Diagnostico,
+            orden.Solucion,
+            orden.Observaciones,
+            orden.TecnicoAsignado?.NombreCompleto,
+            orden.TecnicoAsignado?.Email);
+
+        var itemsDto = orden.Detalles
+            .Where(d => d.Activo)
+            .OrderBy(d => d.TipoItem)
+            .ThenBy(d => d.FechaCreacion)
+            .Select(d => new FormatoAtencionItemDto(
+                d.Id,
+                d.TipoItem,
+                d.TipoItem.ToString(),
+                d.Descripcion,
+                d.Cantidad,
+                d.PrecioUnitario,
+                d.Total,
+                d.TipoAfectacionIgv.ToString()))
+            .ToList();
+
+        var totalPagado = orden.Pagos.Where(p => p.Activo).Sum(p => p.Monto);
+        var saldo = Math.Max(0m, orden.Total - totalPagado);
+
+        var financieroDto = new FormatoAtencionFinancieroDto(
+            orden.SubtotalGravado,
+            orden.SubtotalExonerado,
+            orden.SubtotalInafecto,
+            orden.MontoIgv,
+            orden.Total,
+            totalPagado,
+            saldo,
+            porcentajeIgv,
+            "PEN");
+
+        var response = new FormatoAtencionResponse(
+            empresaDto,
+            ordenDto,
+            clienteDto,
+            unidadDto,
+            trabajoDto,
+            itemsDto,
+            financieroDto,
+            DateTime.UtcNow);
+
+        return ServiceResult<FormatoAtencionResponse>.Success(response);
+    }
 }

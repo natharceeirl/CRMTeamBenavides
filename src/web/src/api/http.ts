@@ -147,6 +147,44 @@ export async function solicitar<T>(ruta: string, opciones: Opciones = {}): Promi
   return await interpretar<T>(await enviar(ruta, opciones))
 }
 
+export async function solicitarFormData<T>(
+  ruta: string,
+  formData: FormData,
+  metodo: 'POST' | 'PUT' = 'POST',
+): Promise<T> {
+  if (sesion && venció(sesion.accessTokenExpiration)) {
+    await renovarSesion()
+  }
+
+  const cabeceras: Record<string, string> = {}
+  if (sesion) {
+    cabeceras.Authorization = `Bearer ${sesion.accessToken}`
+  }
+
+  const enviarForm = () =>
+    fetch(`${RUTA_BASE}${ruta}`, {
+      method: metodo,
+      headers: cabeceras,
+      body: formData,
+    })
+
+  let respuesta = await enviarForm()
+
+  if (respuesta.status === 401 && sesion) {
+    const renovada = await renovarSesion()
+    if (!renovada) {
+      guardarSesion(null)
+      throw new ErrorApi(401, 'La sesión expiró. Vuelve a iniciar sesión.')
+    }
+    if (sesion) {
+      cabeceras.Authorization = `Bearer ${sesion.accessToken}`
+    }
+    respuesta = await enviarForm()
+  }
+
+  return await interpretar<T>(respuesta)
+}
+
 /**
  * Renueva los tokens. Varias llamadas en paralelo comparten una sola renovación,
  * porque el backend rota el refresh token: el segundo intento fallaría.

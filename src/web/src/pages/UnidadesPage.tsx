@@ -5,6 +5,7 @@ import { Link } from 'react-router'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { ModalVehiculo } from '../components/ModalVehiculo'
+import { ModalYamahaMock } from '../components/ModalYamahaMock'
 import { useEliminarVehiculo, useVehiculos } from '../api/vehiculos'
 import type { VehiculoResponse } from '../api/tipos'
 import { lecturaMedidor, nombreTipoUnidad } from '../utils/unidades'
@@ -15,6 +16,7 @@ export function UnidadesPage() {
   const [texto, setTexto] = useState('')
   const [editando, setEditando] = useState<VehiculoResponse | null>(null)
   const [modalAbierto, setModalAbierto] = useState(false)
+  const [modalYamaha, setModalYamaha] = useState(false)
 
   const { tienePermiso } = useSesion()
   const puedeCrear = tienePermiso(PERMISOS.unidadesCrear)
@@ -131,11 +133,16 @@ export function UnidadesPage() {
       <BarraSuperior
         titulo="Unidades"
         acciones={
-          puedeCrear && (
-            <Button type="primary" onClick={abrirNueva}>
-              Registrar unidad
+          <Space>
+            <Button onClick={() => setModalYamaha(true)}>
+              🏍️ Catálogo Yamaha (Mock)
             </Button>
-          )
+            {puedeCrear && (
+              <Button type="primary" onClick={abrirNueva}>
+                Registrar unidad
+              </Button>
+            )}
+          </Space>
         }
       />
       <div className="pagina">
@@ -163,6 +170,7 @@ export function UnidadesPage() {
         </section>
       </div>
       <ModalVehiculo abierto={modalAbierto} vehiculo={editando} onCerrar={() => setModalAbierto(false)} />
+      <ModalYamahaMock abierto={modalYamaha} onCerrar={() => setModalYamaha(false)} />
     </>
   )
 }

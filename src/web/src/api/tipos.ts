@@ -677,3 +677,151 @@ export type ResolverConsultaRequest = {
   estado: number
   notasAgente: string | null
 }
+
+// ---------------------------------------------------------------------------
+// D7 — FOTOS DE ORDEN DE SERVICIO
+// ---------------------------------------------------------------------------
+export type EtapaFotoOrdenServicio = 'Ingreso' | 'Diagnostico' | 'Reparacion' | 'Entrega'
+
+export type FotoOrdenServicioResponse = {
+  id: string
+  ordenServicioId: string
+  nombreArchivoOriginal: string
+  urlRelativa: string
+  contentType: string
+  tamanioBytes: number
+  etapa: number
+  etapaNombre: string
+  usuarioId: string
+  usuarioNombre: string | null
+  observacion: string | null
+  fechaCreacion: string
+}
+
+// ---------------------------------------------------------------------------
+// D7 — FORMATO OFICIAL DE ATENCIÓN
+// ---------------------------------------------------------------------------
+export type FormatoAtencionTallerDto = {
+  nombreTaller: string
+  razonSocial: string
+  ruc: string | null
+  direccion: string | null
+  telefono: string | null
+  email: string | null
+}
+
+export type FormatoAtencionOrdenDto = {
+  id: string
+  numeroOrden: string
+  estadoId: number
+  estadoNombre: string
+  fechaIngreso: string
+  fechaEstimadaEntrega: string | null
+  fechaSalida: string | null
+  tipoAtencion: string
+  modalidadAtencion: string
+  tipoFalla: string | null
+}
+
+export type FormatoAtencionClienteDto = {
+  id: string
+  nombreCompleto: string
+  razonSocial: string | null
+  tipoDocumento: string | null
+  numeroDocumento: string | null
+  telefono: string | null
+  email: string | null
+  direccion: string | null
+}
+
+export type FormatoAtencionUnidadDto = {
+  id: string
+  tipoUnidad: string
+  marca: string
+  modelo: string
+  anio: number | null
+  placa: string | null
+  numeroSerieVIN: string | null
+  numeroMotor: string | null
+  color: string | null
+  tipoMedidor: string
+  lecturaIngreso: number | null
+  lecturaActualSalida: number | null
+}
+
+export type FormatoAtencionTrabajoDto = {
+  motivoFalla: string | null
+  diagnostico: string | null
+  solucion: string | null
+  observaciones: string | null
+  tecnicoResponsable: string | null
+  tecnicoEmail: string | null
+}
+
+export type FormatoAtencionItemDto = {
+  id: string
+  tipoItem: number
+  tipoItemNombre: string
+  descripcion: string
+  cantidad: number
+  precioUnitario: number
+  total: number
+  afectacionIgv: string
+}
+
+export type FormatoAtencionFinancieroDto = {
+  subtotalGravado: number
+  subtotalExonerado: number
+  subtotalInafecto: number
+  montoIgv: number
+  total: number
+  totalPagado: number
+  saldoPendiente: number
+  porcentajeIgv: number
+  moneda: string
+}
+
+export type FormatoAtencionResponse = {
+  empresa: FormatoAtencionTallerDto
+  orden: FormatoAtencionOrdenDto
+  cliente: FormatoAtencionClienteDto
+  unidad: FormatoAtencionUnidadDto
+  trabajo: FormatoAtencionTrabajoDto
+  items: FormatoAtencionItemDto[]
+  financiero: FormatoAtencionFinancieroDto
+  fechaEmision: string
+}
+
+// ---------------------------------------------------------------------------
+// D7 — YAMAHA MOCK
+// ---------------------------------------------------------------------------
+export type YamahaEspecificacionesDto = {
+  motorTipo: string
+  cilindradaCc: number
+  potenciaHp: number
+  torqueNm: number
+  refrigeracion: string
+  capacidadTanque: string
+  capacidadAceiteMotor: string
+  tipoBujiaRecomendada: string
+  presionNeumaticos: string
+}
+
+export type YamahaConsultaMockResponse = {
+  esMock: boolean
+  avisoLegal: string
+  criterioConsultado: string
+  tipoBusqueda: string
+  codigoModelo: string
+  nombreComercial: string
+  anioFabricacion: number | null
+  categoria: string
+  vinEjemplo: string | null
+  numeroMotorEjemplo: string | null
+  estadoGarantia: string
+  campaniasServicio: string[]
+  intervalosMantenimiento: string[]
+  especificaciones: YamahaEspecificacionesDto
+  fechaConsultaUtc: string
+}
+

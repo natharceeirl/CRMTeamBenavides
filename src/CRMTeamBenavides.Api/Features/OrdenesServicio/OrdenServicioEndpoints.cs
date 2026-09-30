@@ -97,6 +97,70 @@ public static class OrdenServicioEndpoints
         .RequireAuthorization(PoliticaVerOrdenes)
         .WithName("GetHistorialOrdenServicio");
 
+        group.MapGet("/{id:guid}/formato-atencion", async (
+            Guid id,
+            string? formato,
+            ClaimsPrincipal user,
+            IOrdenServicioService service,
+            ApplicationDbContext dbContext) =>
+        {
+            var (soloTecnicoId, soloClienteId, debeDenegarAcceso) = await ResolverAislamientoAsync(user, dbContext);
+            if (debeDenegarAcceso)
+            {
+                return Results.NotFound();
+            }
+
+            var result = await service.GenerarFormatoAtencionAsync(id, soloTecnicoId, soloClienteId);
+            if (result.Status != ServiceResultStatus.Success)
+            {
+                return result.Status switch
+                {
+                    ServiceResultStatus.NotFound => Results.NotFound(),
+                    ServiceResultStatus.Forbidden => Results.Forbid(),
+                    _ => Results.Problem()
+                };
+            }
+
+            if (string.Equals(formato, "html", StringComparison.OrdinalIgnoreCase))
+            {
+                var html = FormatoAtencionHtmlBuilder.BuildHtml(result.Data!);
+                return Results.Content(html, "text/html", System.Text.Encoding.UTF8);
+            }
+
+            return Results.Ok(result.Data);
+        })
+        .RequireAuthorization(PoliticaVerOrdenes)
+        .WithName("GetFormatoAtencionOrdenServicio");
+
+        group.MapGet("/{id:guid}/formato-atencion/imprimir", async (
+            Guid id,
+            ClaimsPrincipal user,
+            IOrdenServicioService service,
+            ApplicationDbContext dbContext) =>
+        {
+            var (soloTecnicoId, soloClienteId, debeDenegarAcceso) = await ResolverAislamientoAsync(user, dbContext);
+            if (debeDenegarAcceso)
+            {
+                return Results.NotFound();
+            }
+
+            var result = await service.GenerarFormatoAtencionAsync(id, soloTecnicoId, soloClienteId);
+            if (result.Status != ServiceResultStatus.Success)
+            {
+                return result.Status switch
+                {
+                    ServiceResultStatus.NotFound => Results.NotFound(),
+                    ServiceResultStatus.Forbidden => Results.Forbid(),
+                    _ => Results.Problem()
+                };
+            }
+
+            var html = FormatoAtencionHtmlBuilder.BuildHtml(result.Data!);
+            return Results.Content(html, "text/html", System.Text.Encoding.UTF8);
+        })
+        .RequireAuthorization(PoliticaVerOrdenes)
+        .WithName("ImprimirFormatoAtencionOrdenServicio");
+
         group.MapPost("/", async (
             AperturaOrdenServicioRequest request,
             ClaimsPrincipal user,

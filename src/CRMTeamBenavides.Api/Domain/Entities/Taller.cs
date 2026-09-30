@@ -130,6 +130,7 @@ public class OrdenServicio : BaseEntity
     public ICollection<Venta> Ventas { get; set; } = new List<Venta>();
     public ICollection<Pago> Pagos { get; set; } = new List<Pago>();
     public ICollection<Comprobante> Comprobantes { get; set; } = new List<Comprobante>();
+    public ICollection<FotoOrdenServicio> Fotos { get; set; } = new List<FotoOrdenServicio>();
 }
 
 /// <summary>Historial o timeline de transiciones de estado de una orden de servicio.</summary>
@@ -188,3 +189,32 @@ public class DetalleServicio : BaseEntity
 
     public decimal Subtotal => Cantidad * PrecioUnitario;
 }
+
+public enum EtapaFotoOrdenServicio
+{
+    Ingreso,
+    Diagnostico,
+    Reparacion,
+    Entrega
+}
+
+/// <summary>Fotografía de evidencia o seguimiento asociada a una orden de servicio.</summary>
+public class FotoOrdenServicio : BaseEntity
+{
+    public Guid OrdenServicioId { get; set; }
+    public OrdenServicio OrdenServicio { get; set; } = null!;
+
+    public string NombreArchivoOriginal { get; set; } = string.Empty;
+    public string NombreArchivoAlmacenado { get; set; } = string.Empty;
+    public string RutaRelativa { get; set; } = string.Empty;
+    public string ContentType { get; set; } = string.Empty;
+    public long TamanioBytes { get; set; }
+
+    public EtapaFotoOrdenServicio Etapa { get; set; } = EtapaFotoOrdenServicio.Ingreso;
+
+    public Guid UsuarioId { get; set; }
+    public Usuario? Usuario { get; set; }
+
+    public string? Observacion { get; set; }
+}
+

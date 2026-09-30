@@ -14,6 +14,7 @@ import type {
   OrdenServicioDetalleResponse,
   OrdenServicioResponse,
   RespuestaPresupuestoRequest,
+  FormatoAtencionResponse,
 } from './tipos'
 
 /**
@@ -330,3 +331,12 @@ export function useCambiarEstado() {
     },
   })
 }
+
+export function useFormatoAtencionOrden(id?: string | null) {
+  return useQuery({
+    queryKey: ['formato-atencion', id],
+    queryFn: () => solicitar<FormatoAtencionResponse>(`/ordenes-servicio/${id}/formato-atencion`),
+    enabled: Boolean(id),
+  })
+}
+

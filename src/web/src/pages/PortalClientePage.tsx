@@ -19,6 +19,8 @@ import { AvisoError } from '../components/AvisoError'
 import { Indicadores } from '../components/Indicadores'
 import { EstadoOrdenApiTag } from '../components/EstadoOrdenApiTag'
 import { PanelAprobaciones } from '../components/PanelAprobaciones'
+import { ModalFotosOrden } from '../components/ModalFotosOrden'
+import { ModalFormatoAtencion } from '../components/ModalFormatoAtencion'
 import { useVehiculos } from '../api/vehiculos'
 import { fechaIngresoOrden, nombresEstado, useOrden, useOrdenes, PRESUPUESTO, nombresPresupuesto } from '../api/ordenes'
 import {
@@ -42,6 +44,8 @@ export function PortalClientePage() {
   const [tabActiva, setTabActiva] = useState('unidades')
   const [vehiculoHistorial, setVehiculoHistorial] = useState<VehiculoResponse | null>(null)
   const [ordenSeleccionadaId, setOrdenSeleccionadaId] = useState<string | null>(null)
+  const [modalFotosId, setModalFotosId] = useState<string | null>(null)
+  const [modalFormatoId, setModalFormatoId] = useState<string | null>(null)
 
   const resumenQuery = usePortalResumen()
   const vehiculosQuery = useVehiculos()
@@ -444,6 +448,12 @@ export function PortalClientePage() {
         open={ordenSeleccionadaId !== null}
         onCancel={() => setOrdenSeleccionadaId(null)}
         footer={[
+          <Button key="fotos" onClick={() => setModalFotosId(ordenSeleccionadaId)}>
+            📷 Ver Fotografías
+          </Button>,
+          <Button key="formato" type="primary" onClick={() => setModalFormatoId(ordenSeleccionadaId)}>
+            🖨️ Formato de Atención
+          </Button>,
           <Button key="cerrar" onClick={() => setOrdenSeleccionadaId(null)}>
             Cerrar
           </Button>,
@@ -584,6 +594,19 @@ export function PortalClientePage() {
           </div>
         )}
       </Modal>
+
+      <ModalFotosOrden
+        abierto={modalFotosId !== null}
+        ordenServicioId={modalFotosId ?? ''}
+        soloLectura={true}
+        onCerrar={() => setModalFotosId(null)}
+      />
+
+      <ModalFormatoAtencion
+        abierto={modalFormatoId !== null}
+        ordenServicioId={modalFormatoId ?? ''}
+        onCerrar={() => setModalFormatoId(null)}
+      />
     </>
   )
 }

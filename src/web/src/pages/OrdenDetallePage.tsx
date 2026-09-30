@@ -10,6 +10,9 @@ import { ModalItemOrden } from '../components/ModalItemOrden'
 import { ModalEditarOrden } from '../components/ModalEditarOrden'
 import { ModalAsignarTecnico } from '../components/ModalAsignarTecnico'
 import { PanelAprobaciones } from '../components/PanelAprobaciones'
+import { ModalFotosOrden } from '../components/ModalFotosOrden'
+import { ModalFormatoAtencion } from '../components/ModalFormatoAtencion'
+import { ModalYamahaMock } from '../components/ModalYamahaMock'
 import {
   ESTADO,
   MODALIDADES_ATENCION,
@@ -70,6 +73,9 @@ export function OrdenDetallePage() {
   const [modalItem, setModalItem] = useState(false)
   const [modalEditar, setModalEditar] = useState(false)
   const [modalTecnico, setModalTecnico] = useState(false)
+  const [modalFotos, setModalFotos] = useState(false)
+  const [modalFormato, setModalFormato] = useState(false)
+  const [modalYamaha, setModalYamaha] = useState(false)
 
   if (orden.isPending) {
     return (
@@ -233,6 +239,9 @@ export function OrdenDetallePage() {
           {puedeEditarOrden && !esEstadoTerminal(datos.estadoId) && (
             <Button onClick={() => setModalEditar(true)}>Editar datos</Button>
           )}
+          <Button onClick={() => setModalFotos(true)}>📷 Fotos</Button>
+          <Button onClick={() => setModalFormato(true)}>🖨️ Formato atención</Button>
+          <Button onClick={() => setModalYamaha(true)}>🏍️ Yamaha Mock</Button>
           {destinos.map((destino) => {
             const bloqueado = destino === ESTADO.aprobada ? bloqueoAprobacion : null
             return (
@@ -527,6 +536,25 @@ export function OrdenDetallePage() {
           Queda en el historial de la orden con tu usuario y la hora.
         </p>
       </Modal>
+
+      <ModalFotosOrden
+        abierto={modalFotos}
+        ordenServicioId={datos.id}
+        numeroOrden={datos.numeroOrden}
+        onCerrar={() => setModalFotos(false)}
+      />
+
+      <ModalFormatoAtencion
+        abierto={modalFormato}
+        ordenServicioId={datos.id}
+        onCerrar={() => setModalFormato(false)}
+      />
+
+      <ModalYamahaMock
+        abierto={modalYamaha}
+        criterioInicial={datos.vehiculoModelo || datos.numeroSerieVIN || 'MT-03'}
+        onCerrar={() => setModalYamaha(false)}
+      />
     </>
   )
 }

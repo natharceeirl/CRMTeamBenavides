@@ -24,6 +24,7 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
     public DbSet<DetalleServicio> DetallesServicio => Set<DetalleServicio>();
     public DbSet<HistorialEstadoOrden> HistorialEstadosOrden => Set<HistorialEstadoOrden>();
     public DbSet<Servicio> Servicios => Set<Servicio>();
+    public DbSet<FotoOrdenServicio> FotosOrdenServicio => Set<FotoOrdenServicio>();
 
     // Configuración
     public DbSet<ConfiguracionEmpresa> ConfiguracionesEmpresa => Set<ConfiguracionEmpresa>();
@@ -394,5 +395,28 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
             .HasOne(c => c.FaqItem)
             .WithMany()
             .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<FotoOrdenServicio>(entity =>
+        {
+            entity.ToTable("FotosOrdenServicio");
+
+            entity.HasOne(f => f.OrdenServicio)
+                .WithMany(o => o.Fotos)
+                .HasForeignKey(f => f.OrdenServicioId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(f => f.Usuario)
+                .WithMany()
+                .HasForeignKey(f => f.UsuarioId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.Property(f => f.NombreArchivoOriginal).HasMaxLength(255);
+            entity.Property(f => f.NombreArchivoAlmacenado).HasMaxLength(255);
+            entity.Property(f => f.RutaRelativa).HasMaxLength(500);
+            entity.Property(f => f.ContentType).HasMaxLength(100);
+            entity.Property(f => f.Observacion).HasMaxLength(1000);
+
+            entity.HasIndex(f => f.OrdenServicioId);
+        });
     }
 }

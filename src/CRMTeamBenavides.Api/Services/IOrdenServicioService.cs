@@ -72,4 +72,10 @@ public interface IOrdenServicioService
         Guid id,
         AprobacionGerenciaRequest request,
         Guid? usuarioId = null);
+
+    Task<ServiceResult<FormatoAtencionResponse>> GenerarFormatoAtencionAsync(
+        Guid id,
+        Guid? soloTecnicoId = null,
+        Guid? soloClienteId = null,
+        CancellationToken ct = default);
 }
