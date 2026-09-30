@@ -273,9 +273,9 @@ export function OrdenDetallePage() {
           {puedeEditarOrden && !esEstadoTerminal(datos.estadoId) && (
             <Button onClick={() => setModalEditar(true)}>Editar datos</Button>
           )}
-          <Button onClick={() => setModalFotos(true)}>📷 Fotos</Button>
-          <Button onClick={() => setModalFormato(true)}>🖨️ Formato atención</Button>
-          <Button onClick={() => setModalYamaha(true)}>🏍️ Yamaha Mock</Button>
+          <Button onClick={() => setModalFotos(true)}>Fotos</Button>
+          <Button onClick={() => setModalFormato(true)}>Formato de atención</Button>
+          <Button onClick={() => setModalYamaha(true)}>Catálogo Yamaha</Button>
           {destinos.map((destino) => {
             const bloqueado = destino === ESTADO.aprobada ? bloqueoAprobacion : null
             return (

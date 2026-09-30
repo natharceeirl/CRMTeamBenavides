@@ -1,25 +1,12 @@
-import { useState } from 'react'
-import {
-  Button,
-  Card,
-  Empty,
-  Form,
-  Image,
-  Input,
-  Modal,
-  Popconfirm,
-  Radio,
-  Select,
-  Space,
-  Spin,
-  Tag,
-  Typography,
-} from 'antd'
-import { useFotosOrden, useSubirFotoOrden, useEliminarFotoOrden } from '../api/fotos'
+import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Button, Form, Image, Input, Modal, Popconfirm, Segmented, Select, Space, Upload } from 'antd'
+import { useEliminarFotoOrden, useFotosOrden, useSubirFotoOrden } from '../api/fotos'
+import { solicitarBlob } from '../api/http'
+import type { FotoOrdenServicioResponse } from '../api/tipos'
 import { fechaHora } from '../utils/formato'
 import { AvisoError } from './AvisoError'
-
-const { Text } = Typography
+import { EtiquetaEstado } from './EtiquetaEstado'
 
 type Props = {
   abierto: boolean
@@ -29,245 +16,197 @@ type Props = {
   onCerrar: () => void
 }
 
+/** Enum EtapaFotoOrdenServicio del backend, en el mismo orden. */
 const ETAPAS = [
-  { value: 0, label: 'Ingreso', color: 'blue' },
-  { value: 1, label: 'Diagnóstico', color: 'orange' },
-  { value: 2, label: 'Reparación', color: 'purple' },
-  { value: 3, label: 'Entrega', color: 'green' },
+  { value: 0, label: 'Ingreso' },
+  { value: 1, label: 'Diagnóstico' },
+  { value: 2, label: 'Reparación' },
+  { value: 3, label: 'Entrega' },
 ]
 
-export function ModalFotosOrden({
-  abierto,
-  ordenServicioId,
-  numeroOrden,
-  soloLectura = false,
-  onCerrar,
-}: Readonly<Props>) {
+const TIPOS_PERMITIDOS = ['image/jpeg', 'image/png', 'image/webp']
+const TAMANO_MAXIMO = 10 * 1024 * 1024
+
+const nombreEtapa = (etapa: number) => ETAPAS.find((opcion) => opcion.value === etapa)?.label ?? 'Etapa'
+
+/**
+ * La foto la sirve la API con el token: se descarga y se muestra desde una URL
+ * local, porque una etiqueta <img> apuntando a la API respondería 401.
+ */
+function FotoProtegida({ foto }: Readonly<{ foto: FotoOrdenServicioResponse }>) {
+  const archivo = useQuery({
+    queryKey: ['foto-orden', foto.id],
+    queryFn: () => solicitarBlob(foto.urlRelativa.replace(/^\/api/, '')),
+    staleTime: Infinity,
+  })
+  const [url, setUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!archivo.data) return
+    const local = URL.createObjectURL(archivo.data)
+    setUrl(local)
+    return () => URL.revokeObjectURL(local)
+  }, [archivo.data])
+
+  if (archivo.isError) return <div className="galeria-imagen">No se pudo cargar</div>
+  return (
+    <div className="galeria-imagen">
+      {url ? <Image src={url} alt={foto.observacion ?? foto.nombreArchivoOriginal} /> : 'Cargando…'}
+    </div>
+  )
+}
+
+export function ModalFotosOrden({ abierto, ordenServicioId, numeroOrden, soloLectura = false, onCerrar }: Readonly<Props>) {
   const fotosQuery = useFotosOrden(abierto ? ordenServicioId : null)
   const subirFoto = useSubirFotoOrden()
   const eliminarFoto = useEliminarFotoOrden()
 
   const [filtroEtapa, setFiltroEtapa] = useState<number | 'todas'>('todas')
-  const [archivoSeleccionado, setArchivoSeleccionado] = useState<File | null>(null)
-  const [etapaSeleccionada, setEtapaSeleccionada] = useState<number>(0)
+  const [archivo, setArchivo] = useState<File | null>(null)
+  const [errorArchivo, setErrorArchivo] = useState<string | null>(null)
+  const [etapa, setEtapa] = useState(0)
   const [observacion, setObservacion] = useState('')
   const [formularioAbierto, setFormularioAbierto] = useState(false)
 
   const fotos = fotosQuery.data ?? []
-  const fotosFiltradas =
-    filtroEtapa === 'todas' ? fotos : fotos.filter((f) => f.etapa === filtroEtapa)
+  const visibles = filtroEtapa === 'todas' ? fotos : fotos.filter((foto) => foto.etapa === filtroEtapa)
 
-  const handleSubir = async () => {
-    if (!archivoSeleccionado) return
-
-    await subirFoto.mutateAsync({
-      ordenServicioId,
-      archivo: archivoSeleccionado,
-      etapa: etapaSeleccionada,
-      observacion: observacion.trim() || undefined,
-    })
-
-    setArchivoSeleccionado(null)
+  const limpiarFormulario = () => {
+    setArchivo(null)
+    setErrorArchivo(null)
     setObservacion('')
     setFormularioAbierto(false)
+    subirFoto.reset()
   }
 
-  const handleEliminar = async (fotoId: string) => {
-    await eliminarFoto.mutateAsync({
-      ordenServicioId,
-      fotoId,
-    })
+  const elegirArchivo = (elegido: File) => {
+    if (!TIPOS_PERMITIDOS.includes(elegido.type)) {
+      setErrorArchivo('Solo se aceptan fotos JPG, PNG o WEBP.')
+      setArchivo(null)
+    } else if (elegido.size > TAMANO_MAXIMO) {
+      setErrorArchivo('La foto pesa más de 10 MB.')
+      setArchivo(null)
+    } else {
+      setErrorArchivo(null)
+      setArchivo(elegido)
+    }
+    // No se sube sola: espera a «Guardar foto».
+    return false
   }
 
-  const etiquetaEtapa = (etapaNum: number) => {
-    const config = ETAPAS.find((e) => e.value === etapaNum)
-    return <Tag color={config?.color ?? 'default'}>{config?.label ?? 'Etapa'}</Tag>
+  const subir = async () => {
+    if (!archivo) return
+    await subirFoto.mutateAsync({ ordenServicioId, archivo, etapa, observacion: observacion.trim() || undefined })
+    limpiarFormulario()
   }
+
+  const opcionesFiltro = [
+    { value: 'todas' as const, label: `Todas (${fotos.length})` },
+    ...ETAPAS.map((opcion) => ({
+      value: opcion.value,
+      label: `${opcion.label} (${fotos.filter((foto) => foto.etapa === opcion.value).length})`,
+    })),
+  ]
 
   return (
     <Modal
-      title={`Fotografías de Orden ${numeroOrden ?? ordenServicioId.slice(0, 8)}`}
+      title={`Fotos de la orden ${numeroOrden ?? ordenServicioId.slice(0, 8).toUpperCase()}`}
       open={abierto}
       onCancel={onCerrar}
-      footer={[
-        <Button key="cerrar" onClick={onCerrar}>
-          Cerrar
-        </Button>,
-      ]}
-      width={860}
+      footer={<Button onClick={onCerrar}>Cerrar</Button>}
+      width={900}
       destroyOnHidden
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {/* Barra superior: filtros y botón de carga */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-          <Radio.Group
-            value={filtroEtapa}
-            onChange={(e) => setFiltroEtapa(e.target.value)}
-            size="small"
-            buttonStyle="solid"
-          >
-            <Radio.Button value="todas">Todas ({fotos.length})</Radio.Button>
-            {ETAPAS.map((e) => {
-              const cant = fotos.filter((f) => f.etapa === e.value).length
-              return (
-                <Radio.Button key={e.value} value={e.value}>
-                  {e.label} ({cant})
-                </Radio.Button>
-              )
-            })}
-          </Radio.Group>
-
-          {!soloLectura && (
-            <Button
-              type={formularioAbierto ? 'default' : 'primary'}
-              onClick={() => setFormularioAbierto((prev) => !prev)}
-            >
-              {formularioAbierto ? 'Cancelar carga' : '📷 Agregar fotografía'}
+      <AvisoError error={fotosQuery.error ?? eliminarFoto.error} />
+      <div className="seccion-titulo">
+        <Segmented<number | 'todas'> options={opcionesFiltro} value={filtroEtapa} onChange={setFiltroEtapa} />
+        {!soloLectura && !formularioAbierto && (
+          <div className="acciones">
+            <Button type="primary" onClick={() => setFormularioAbierto(true)}>
+              Agregar foto
             </Button>
-          )}
-        </div>
-
-        {/* Formulario de subida de foto */}
-        {formularioAbierto && !soloLectura && (
-          <Card
-            size="small"
-            title="Nueva fotografía de evidencia"
-            style={{ background: '#f9fafb', borderColor: '#d1d5db' }}
-          >
-            <Form layout="vertical">
-              <Form.Item label="Archivo de imagen (JPG, PNG, WEBP, máx 10 MB)" required>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(e) => {
-                    const archivo = e.target.files?.[0] ?? null
-                    setArchivoSeleccionado(archivo)
-                  }}
-                />
-              </Form.Item>
-
-              <Form.Item label="Etapa / Momento de la fotografía" required>
-                <Select
-                  value={etapaSeleccionada}
-                  onChange={(val) => setEtapaSeleccionada(val)}
-                  options={ETAPAS.map((e) => ({ value: e.value, label: e.label }))}
-                />
-              </Form.Item>
-
-              <Form.Item label="Observación o nota (opcional)">
-                <Input.TextArea
-                  rows={2}
-                  value={observacion}
-                  onChange={(e) => setObservacion(e.target.value)}
-                  placeholder="Detalle sobre el estado de la pieza o parte fotografiada..."
-                  maxLength={500}
-                />
-              </Form.Item>
-
-              {subirFoto.isError && <AvisoError error={subirFoto.error} />}
-
-              <Space>
-                <Button
-                  type="primary"
-                  onClick={handleSubir}
-                  disabled={!archivoSeleccionado}
-                  loading={subirFoto.isPending}
-                >
-                  Guardar fotografía
-                </Button>
-                <Button onClick={() => setFormularioAbierto(false)}>Cancelar</Button>
-              </Space>
-            </Form>
-          </Card>
-        )}
-
-        {/* Galería de imágenes */}
-        {fotosQuery.isPending && (
-          <div style={{ textAlign: 'center', padding: 40 }}>
-            <Spin description="Cargando fotografías..." />
-          </div>
-        )}
-
-        {fotosQuery.isError && <AvisoError error={fotosQuery.error} />}
-
-        {!fotosQuery.isPending && !fotosQuery.isError && fotosFiltradas.length === 0 && (
-          <Empty
-            description={
-              filtroEtapa === 'todas'
-                ? 'No hay fotografías registradas en esta orden de servicio.'
-                : 'No hay fotografías en la etapa seleccionada.'
-            }
-          />
-        )}
-
-        {!fotosQuery.isPending && fotosFiltradas.length > 0 && (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-              gap: 16,
-              maxHeight: 520,
-              overflowY: 'auto',
-              paddingRight: 4,
-            }}
-          >
-            {fotosFiltradas.map((foto) => (
-              <Card
-                key={foto.id}
-                size="small"
-                hoverable
-                cover={
-                  <div style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000000' }}>
-                    <Image
-                      alt={foto.nombreArchivoOriginal}
-                      src={foto.urlRelativa}
-                      style={{ maxHeight: 180, objectFit: 'contain' }}
-                    />
-                  </div>
-                }
-                actions={
-                  !soloLectura
-                    ? [
-                        <Popconfirm
-                          key="eliminar"
-                          title="¿Eliminar esta fotografía?"
-                          description="Esta acción no se puede deshacer."
-                          onConfirm={() => handleEliminar(foto.id)}
-                          okText="Sí, eliminar"
-                          cancelText="Cancelar"
-                          okButtonProps={{ danger: true }}
-                        >
-                          <Button type="link" danger size="small" loading={eliminarFoto.isPending}>
-                            Eliminar
-                          </Button>
-                        </Popconfirm>,
-                      ]
-                    : undefined
-                }
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  {etiquetaEtapa(foto.etapa)}
-                  <Text type="secondary" style={{ fontSize: 11 }}>
-                    {fechaHora(foto.fechaCreacion)}
-                  </Text>
-                </div>
-
-                {foto.usuarioNombre && (
-                  <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
-                    Registrada por: {foto.usuarioNombre}
-                  </Text>
-                )}
-
-                {foto.observacion && (
-                  <Text style={{ fontSize: 12, display: 'block', fontStyle: 'italic', marginTop: 4 }}>
-                    «{foto.observacion}»
-                  </Text>
-                )}
-              </Card>
-            ))}
           </div>
         )}
       </div>
+
+      {formularioAbierto && !soloLectura && (
+        <div className="panel-formulario" style={{ marginBottom: 20 }}>
+          <AvisoError error={subirFoto.error} />
+          <Form layout="vertical" requiredMark={false}>
+            <div className="formulario-grid">
+              <Form.Item
+                label="Foto"
+                validateStatus={errorArchivo ? 'error' : undefined}
+                help={errorArchivo ?? 'JPG, PNG o WEBP, hasta 10 MB.'}
+              >
+                <Space wrap>
+                  <Upload accept={TIPOS_PERMITIDOS.join(',')} showUploadList={false} beforeUpload={elegirArchivo}>
+                    <Button>{archivo ? 'Cambiar foto' : 'Elegir foto'}</Button>
+                  </Upload>
+                  {archivo && <span className="texto-secundario">{archivo.name}</span>}
+                </Space>
+              </Form.Item>
+              <Form.Item label="Etapa">
+                <Select value={etapa} onChange={setEtapa} options={ETAPAS} />
+              </Form.Item>
+              <Form.Item label="Observación" className="ancho-completo">
+                <Input.TextArea
+                  rows={2}
+                  maxLength={500}
+                  value={observacion}
+                  onChange={(evento) => setObservacion(evento.target.value)}
+                  placeholder="Golpe en el tanque, desgaste de la cadena…"
+                />
+              </Form.Item>
+            </div>
+            <Space>
+              <Button type="primary" onClick={subir} disabled={!archivo} loading={subirFoto.isPending}>
+                Guardar foto
+              </Button>
+              <Button onClick={limpiarFormulario}>Cancelar</Button>
+            </Space>
+          </Form>
+        </div>
+      )}
+
+      {!fotosQuery.isPending && visibles.length === 0 && (
+        <p className="texto-secundario">
+          {filtroEtapa === 'todas' ? 'Todavía no hay fotos de esta orden.' : 'No hay fotos en esta etapa.'}
+        </p>
+      )}
+
+      {visibles.length > 0 && (
+        <Image.PreviewGroup>
+          <div className="galeria">
+            {visibles.map((foto) => (
+              <figure key={foto.id} className="galeria-foto">
+                <FotoProtegida foto={foto} />
+                <figcaption>
+                  <Space size={8} wrap>
+                    <EtiquetaEstado tono="neutro">{nombreEtapa(foto.etapa)}</EtiquetaEstado>
+                    <span className="texto-secundario">{fechaHora(foto.fechaCreacion)}</span>
+                  </Space>
+                  {foto.observacion && <div>{foto.observacion}</div>}
+                  <div className="texto-secundario">{foto.usuarioNombre ?? ''}</div>
+                  {!soloLectura && (
+                    <Popconfirm
+                      title="Quitar la foto"
+                      okText="Quitar"
+                      cancelText="Cancelar"
+                      okButtonProps={{ danger: true }}
+                      onConfirm={() => eliminarFoto.mutateAsync({ ordenServicioId, fotoId: foto.id })}
+                    >
+                      <Button type="link" style={{ paddingInline: 0 }}>
+                        Quitar
+                      </Button>
+                    </Popconfirm>
+                  )}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </Image.PreviewGroup>
+      )}
     </Modal>
   )
 }

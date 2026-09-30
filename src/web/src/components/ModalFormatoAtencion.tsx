@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { Button, Card, Descriptions, Divider, Modal, Spin, Table, Tag, Typography } from 'antd'
+import { Button, Modal, Table, type TableProps } from 'antd'
 import { useFormatoAtencionOrden } from '../api/ordenes'
-import { solicitarTexto } from '../api/http'
+import type { FormatoAtencionItemDto } from '../api/tipos'
 import { AvisoError } from './AvisoError'
-import { fechaHora, importe, soles } from '../utils/formato'
+import { EtiquetaEstado } from './EtiquetaEstado'
+import { entero, fechaHora, importe, nombreDeEnum, soles } from '../utils/formato'
+import { nombresEstado } from '../api/ordenes'
 import { abrirDocumento } from '../utils/impresion'
-
-const { Title, Text } = Typography
+import { htmlFormatoAtencion } from '../utils/formatoAtencion'
 
 type Props = {
   abierto: boolean
@@ -14,203 +15,181 @@ type Props = {
   onCerrar: () => void
 }
 
+const columnas: TableProps<FormatoAtencionItemDto>['columns'] = [
+  {
+    title: 'Concepto',
+    key: 'concepto',
+    render: (_, item) => (
+      <>
+        <div>{item.descripcion}</div>
+        <div className="texto-secundario">
+          {[item.tipoItemNombre, item.afectacionIgv === 'Gravado' ? null : item.afectacionIgv].filter(Boolean).join(' · ')}
+        </div>
+      </>
+    ),
+  },
+  { title: 'Cant.', dataIndex: 'cantidad', align: 'right', className: 'num' },
+  { title: 'P. unit.', dataIndex: 'precioUnitario', align: 'right', className: 'num', render: (valor: number) => importe(valor) },
+  { title: 'Total', dataIndex: 'total', align: 'right', className: 'num', render: (valor: number) => importe(valor) },
+]
+
+/** Una fila de la tabla simple, solo si hay dato. */
+const fila = (etiqueta: string, valor: string | number | null | undefined) =>
+  valor === null || valor === undefined || valor === '' ? null : (
+    <tr key={etiqueta}>
+      <td>{etiqueta}</td>
+      <td>{valor}</td>
+    </tr>
+  )
+
+/** Vista previa del formato de atención; la hoja para imprimir se arma con los mismos datos. */
 export function ModalFormatoAtencion({ abierto, ordenServicioId, onCerrar }: Readonly<Props>) {
   const query = useFormatoAtencionOrden(abierto ? ordenServicioId : null)
   const datos = query.data
   const [errorImpresion, setErrorImpresion] = useState<unknown>(null)
 
-  // La vista de impresión exige el token: abrir la URL directo en otra pestaña
-  // respondía 401, porque el navegador no manda el encabezado Authorization.
+  // La hoja se arma en la web con el estilo de la marca, igual que la ficha
+  // del comprobante: no hace falta volver a pedir nada a la API.
   const handleImprimir = () => {
+    if (!datos) return
     setErrorImpresion(null)
-    abrirDocumento(() => solicitarTexto(`/ordenes-servicio/${ordenServicioId}/formato-atencion/imprimir`)).catch(
-      setErrorImpresion,
-    )
+    abrirDocumento(async () => htmlFormatoAtencion(datos)).catch(setErrorImpresion)
   }
+
+  const unidadMedida = datos?.unidad.tipoMedidor === 'Horas' ? 'h' : 'km'
 
   return (
     <Modal
-      title={
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginRight: 32 }}>
-          <span>Formato Oficial de Atención</span>
-          {datos && <Tag color="blue">{datos.orden.numeroOrden}</Tag>}
-        </div>
-      }
+      title={datos ? `Formato de atención · ${datos.orden.numeroOrden}` : 'Formato de atención'}
       open={abierto}
       onCancel={onCerrar}
       footer={[
-        <Button key="imprimir" type="primary" onClick={handleImprimir} disabled={!datos}>
-          🖨️ Imprimir / Guardar PDF
-        </Button>,
         <Button key="cerrar" onClick={onCerrar}>
           Cerrar
         </Button>,
+        <Button key="imprimir" type="primary" onClick={handleImprimir} disabled={!datos}>
+          Imprimir o guardar PDF
+        </Button>,
       ]}
-      width={840}
+      width={860}
       destroyOnHidden
     >
-      {query.isPending && (
-        <div style={{ textAlign: 'center', padding: 40 }}>
-          <Spin description="Cargando formato de atención..." />
-        </div>
-      )}
-
-      {query.isError && <AvisoError error={query.error} />}
-      <AvisoError error={errorImpresion} />
+      <AvisoError error={query.error ?? errorImpresion} />
+      {query.isPending && <p className="texto-secundario">Cargando el formato…</p>}
 
       {datos && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Encabezado Taller */}
-          <div style={{ background: '#f8fafc', padding: 12, borderRadius: 6, border: '1px solid #e2e8f0' }}>
-            <Title level={5} style={{ margin: 0 }}>
-              {datos.empresa.nombreTaller}
-            </Title>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {datos.empresa.razonSocial} {datos.empresa.ruc ? `· RUC: ${datos.empresa.ruc}` : ''}
-              {datos.empresa.direccion ? ` · ${datos.empresa.direccion}` : ''}
-            </Text>
+        <>
+          <div className="bloque-modal">
+            <h2 style={{ fontSize: 21 }}>{datos.empresa.nombreTaller}</h2>
+            <p className="texto-secundario">
+              {[
+                datos.empresa.razonSocial,
+                datos.empresa.ruc ? `RUC ${datos.empresa.ruc}` : null,
+                datos.empresa.direccion,
+                datos.empresa.telefono,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
           </div>
 
-          {/* Datos Cliente y Unidad */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <Card size="small" title="Cliente">
-              <Descriptions size="small" column={1}>
-                <Descriptions.Item label="Nombre">{datos.cliente.nombreCompleto}</Descriptions.Item>
-                {datos.cliente.numeroDocumento && (
-                  <Descriptions.Item label={datos.cliente.tipoDocumento ?? 'Documento'}>
-                    {datos.cliente.numeroDocumento}
-                  </Descriptions.Item>
-                )}
-                {datos.cliente.telefono && (
-                  <Descriptions.Item label="Teléfono">{datos.cliente.telefono}</Descriptions.Item>
-                )}
-                {datos.cliente.direccion && (
-                  <Descriptions.Item label="Dirección">{datos.cliente.direccion}</Descriptions.Item>
-                )}
-              </Descriptions>
-            </Card>
-
-            <Card size="small" title="Unidad">
-              <Descriptions size="small" column={1}>
-                <Descriptions.Item label="Tipo / Marca">
-                  {datos.unidad.tipoUnidad} · {datos.unidad.marca} {datos.unidad.modelo}
-                </Descriptions.Item>
-                {datos.unidad.placa && (
-                  <Descriptions.Item label="Placa">{datos.unidad.placa}</Descriptions.Item>
-                )}
-                {datos.unidad.numeroSerieVIN && (
-                  <Descriptions.Item label="VIN / Serie">{datos.unidad.numeroSerieVIN}</Descriptions.Item>
-                )}
-                {datos.unidad.lecturaIngreso !== null && (
-                  <Descriptions.Item label="Lectura Ingreso">
-                    {datos.unidad.lecturaIngreso} {datos.unidad.tipoMedidor === 'Horas' ? 'hrs' : 'km'}
-                  </Descriptions.Item>
-                )}
-              </Descriptions>
-            </Card>
+          <div className="dos-bloques bloque-modal">
+            <div>
+              <h3>Cliente</h3>
+              <table className="tabla-simple">
+                <tbody>
+                  {fila('Nombre', datos.cliente.nombreCompleto)}
+                  {fila(datos.cliente.tipoDocumento ?? 'Documento', datos.cliente.numeroDocumento)}
+                  {fila('Teléfono', datos.cliente.telefono)}
+                  {fila('Dirección', datos.cliente.direccion)}
+                </tbody>
+              </table>
+            </div>
+            <div>
+              <h3>Unidad</h3>
+              <table className="tabla-simple">
+                <tbody>
+                  {fila('Unidad', `${nombreDeEnum(datos.unidad.tipoUnidad)} · ${datos.unidad.marca} ${datos.unidad.modelo}`)}
+                  {fila('Placa', datos.unidad.placa)}
+                  {fila('VIN o serie', datos.unidad.numeroSerieVIN)}
+                  {fila(
+                    'Medidor al ingresar',
+                    datos.unidad.lecturaIngreso == null ? null : `${entero(datos.unidad.lecturaIngreso)} ${unidadMedida}`,
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          {/* Fechas y Trabajo */}
-          <Card size="small" title="Datos de Atención">
-            <Descriptions size="small" column={2}>
-              <Descriptions.Item label="Fecha Ingreso">
-                {fechaHora(datos.orden.fechaIngreso)}
-              </Descriptions.Item>
-              <Descriptions.Item label="Estado">
-                <Tag color="cyan">{datos.orden.estadoNombre}</Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="Tipo de Atención">
-                {datos.orden.tipoAtencion} ({datos.orden.modalidadAtencion})
-              </Descriptions.Item>
-              <Descriptions.Item label="Técnico Responsable">
-                {datos.trabajo.tecnicoResponsable ?? 'Sin asignar'}
-              </Descriptions.Item>
-            </Descriptions>
+          <div className="bloque-modal">
+            <h3>Atención</h3>
+            <table className="tabla-simple">
+              <tbody>
+                <tr>
+                  <td>Estado</td>
+                  <td>
+                    <EtiquetaEstado tono="neutro">
+                      {nombresEstado[datos.orden.estadoId] ?? nombreDeEnum(datos.orden.estadoNombre)}
+                    </EtiquetaEstado>
+                  </td>
+                </tr>
+                {fila('Ingreso', fechaHora(datos.orden.fechaIngreso))}
+                {fila('Entrega estimada', datos.orden.fechaEstimadaEntrega ? fechaHora(datos.orden.fechaEstimadaEntrega) : null)}
+                {fila('Tipo de atención', `${nombreDeEnum(datos.orden.tipoAtencion)} · ${nombreDeEnum(datos.orden.modalidadAtencion)}`)}
+                {fila('Técnico', datos.trabajo.tecnicoResponsable ?? 'Sin asignar')}
+                {fila('Falla reportada', datos.trabajo.motivoFalla)}
+                {fila('Diagnóstico', datos.trabajo.diagnostico)}
+                {fila('Solución', datos.trabajo.solucion)}
+              </tbody>
+            </table>
+          </div>
 
-            {(datos.trabajo.diagnostico || datos.trabajo.motivoFalla) && (
-              <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px solid #f1f5f9' }}>
-                {datos.trabajo.motivoFalla && (
-                  <div style={{ fontSize: 12, marginBottom: 4 }}>
-                    <strong>Motivo de Ingreso:</strong> {datos.trabajo.motivoFalla}
-                  </div>
-                )}
-                {datos.trabajo.diagnostico && (
-                  <div style={{ fontSize: 12 }}>
-                    <strong>Diagnóstico:</strong> {datos.trabajo.diagnostico}
-                  </div>
-                )}
-              </div>
-            )}
-          </Card>
-
-          {/* Tabla de Trabajos y Repuestos */}
-          <Table
-            size="small"
-            pagination={false}
-            rowKey="id"
-            dataSource={datos.items}
-            columns={[
-              { title: 'Tipo', dataIndex: 'tipoItemNombre', width: 110 },
-              { title: 'Descripción', dataIndex: 'descripcion' },
-              { title: 'Cant.', dataIndex: 'cantidad', align: 'center', width: 70 },
-              {
-                title: 'P. Unit.',
-                dataIndex: 'precioUnitario',
-                align: 'right',
-                width: 100,
-                render: (val: number) => importe(val),
-              },
-              {
-                title: 'Total',
-                dataIndex: 'total',
-                align: 'right',
-                width: 110,
-                render: (val: number) => importe(val),
-              },
-            ]}
-          />
-
-          {/* Totales Financieros */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <div style={{ width: 280, background: '#f8fafc', padding: 12, borderRadius: 6, border: '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <Text type="secondary">Subtotal Gravado:</Text>
-                <Text>{soles(datos.financiero.subtotalGravado)}</Text>
+          <div className="bloque-modal">
+            <h3>Trabajos y repuestos</h3>
+            <Table
+              rowKey="id"
+              size="small"
+              columns={columnas}
+              dataSource={datos.items}
+              pagination={false}
+              locale={{ emptyText: 'Sin trabajos ni repuestos' }}
+            />
+            <div className="totales">
+              <div>
+                <div className="etiqueta">Op. gravadas</div>
+                <div className="valor">{soles(datos.financiero.subtotalGravado)}</div>
               </div>
               {datos.financiero.subtotalExonerado > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <Text type="secondary">Exonerado:</Text>
-                  <Text>{soles(datos.financiero.subtotalExonerado)}</Text>
+                <div>
+                  <div className="etiqueta">Exoneradas</div>
+                  <div className="valor">{soles(datos.financiero.subtotalExonerado)}</div>
                 </div>
               )}
               {datos.financiero.subtotalInafecto > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <Text type="secondary">Inafecto:</Text>
-                  <Text>{soles(datos.financiero.subtotalInafecto)}</Text>
+                <div>
+                  <div className="etiqueta">Inafectas</div>
+                  <div className="valor">{soles(datos.financiero.subtotalInafecto)}</div>
                 </div>
               )}
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <Text type="secondary">IGV ({datos.financiero.porcentajeIgv}%):</Text>
-                <Text>{soles(datos.financiero.montoIgv)}</Text>
+              <div>
+                <div className="etiqueta">IGV ({datos.financiero.porcentajeIgv} %)</div>
+                <div className="valor">{soles(datos.financiero.montoIgv)}</div>
               </div>
-              <Divider style={{ margin: '6px 0' }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontWeight: 700, fontSize: 14 }}>
-                <span>TOTAL:</span>
-                <span>{soles(datos.financiero.total)}</span>
+              <div>
+                <div className="etiqueta">Total</div>
+                <div className="valor total">{soles(datos.financiero.total)}</div>
               </div>
-              {datos.financiero.totalPagado > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#059669', marginBottom: 4 }}>
-                  <span>Pagado / Anticipos:</span>
-                  <span>{soles(datos.financiero.totalPagado)}</span>
-                </div>
-              )}
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#dc2626', fontWeight: 600 }}>
-                <span>Saldo Pendiente:</span>
-                <span>{soles(datos.financiero.saldoPendiente)}</span>
+              <div>
+                <div className="etiqueta">Pagado</div>
+                <div className="valor">{soles(datos.financiero.totalPagado)}</div>
+              </div>
+              <div>
+                <div className="etiqueta">Saldo</div>
+                <div className="valor">{soles(datos.financiero.saldoPendiente)}</div>
               </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </Modal>
   )

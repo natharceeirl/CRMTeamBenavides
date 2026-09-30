@@ -26,7 +26,7 @@ export function useSubirFotoOrden() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    meta: { exito: 'Fotografía agregada a la orden de servicio' },
+    meta: { exito: 'Foto agregada' },
     mutationFn: async ({ ordenServicioId, archivo, etapa, observacion }: SubirFotoParametros) => {
       const formData = new FormData()
       formData.append('archivo', archivo)
@@ -55,7 +55,7 @@ export function useEliminarFotoOrden() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    meta: { exito: 'Fotografía retirada de la orden de servicio' },
+    meta: { exito: 'Foto quitada' },
     mutationFn: async ({ ordenServicioId, fotoId }: EliminarFotoParametros) => {
       return await solicitar<void>(`/ordenes-servicio/${ordenServicioId}/fotos/${fotoId}`, {
         metodo: 'DELETE',

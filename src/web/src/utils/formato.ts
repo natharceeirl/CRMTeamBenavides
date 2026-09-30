@@ -32,6 +32,14 @@ export const fechaHora = (iso: string | null | undefined) => {
   return `${dosDigitos(fecha.getDate())}/${dosDigitos(fecha.getMonth() + 1)} ${dosDigitos(fecha.getHours())}:${dosDigitos(fecha.getMinutes())}`
 }
 
+/** Como `fechaHora` pero con el año, para documentos impresos: «18/09/2026 08:45». */
+export const fechaHoraConAnio = (iso: string | null | undefined) => {
+  if (!iso) return '—'
+  const fecha = new Date(iso)
+  if (Number.isNaN(fecha.getTime())) return '—'
+  return `${dosDigitos(fecha.getDate())}/${dosDigitos(fecha.getMonth() + 1)}/${fecha.getFullYear()} ${dosDigitos(fecha.getHours())}:${dosDigitos(fecha.getMinutes())}`
+}
+
 /**
  * El correlativo de la API (OT-000123). Si solo se tiene el id, o la orden es
  * anterior al correlativo, se usa el inicio del id.
@@ -39,4 +47,21 @@ export const fechaHora = (iso: string | null | undefined) => {
 export const referenciaOrden = (orden: string | { id: string; numeroOrden?: string | null }) => {
   if (typeof orden === 'string') return `#${orden.slice(0, 8).toUpperCase()}`
   return orden.numeroOrden ?? `#${orden.id.slice(0, 8).toUpperCase()}`
+}
+
+/**
+ * Nombre de un enum del backend en texto legible: «MantenimientoPreventivo» →
+ * «Mantenimiento preventivo». Los que llevan tilde van en `conTilde`.
+ */
+const conTilde: Record<string, string> = {
+  MotoAcuatica: 'Moto acuática',
+  Diagnostico: 'Diagnóstico',
+  ReclamoGarantia: 'Reclamo de garantía',
+}
+
+export function nombreDeEnum(valor: string | null | undefined): string {
+  if (!valor) return '—'
+  if (conTilde[valor]) return conTilde[valor]
+  const palabras = valor.replaceAll(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase()
+  return palabras.charAt(0).toUpperCase() + palabras.slice(1)
 }

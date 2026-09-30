@@ -405,6 +405,68 @@ h4 {
   gap: 8px;
 }
 
+/* Formulario dentro de un modal o una sección (subir foto, registrar comprobante) */
+.panel-formulario {
+  padding: 16px;
+  background: var(--color-neutro-100);
+  border: 1px solid var(--color-neutro-300);
+}
+
+/* Dos bloques lado a lado que bajan a una columna en pantallas angostas */
+.dos-bloques {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+@media (max-width: 700px) {
+  .dos-bloques {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.dos-bloques h3,
+.bloque-modal h3 {
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+
+.bloque-modal + .bloque-modal {
+  margin-top: 24px;
+}
+
+/* Galería de fotos de la orden */
+.galeria {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 20px;
+}
+
+.galeria-foto {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.galeria-imagen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: var(--color-superficie);
+  color: var(--color-texto-secundario);
+  font-size: 13px;
+}
+
+.galeria-imagen .ant-image,
+.galeria-imagen .ant-image-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* Formularios */
 .formulario {
   display: flex;

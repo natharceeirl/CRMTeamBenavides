@@ -1,8 +1,8 @@
 import type { ConfiguracionEmpresaResponse, VentaDetalleResponse } from '../api/tipos'
 import { nombresTipoItem } from '../api/tipos'
-import { colores, fuentes } from '../theme/tokens'
+import { documentoImprimible, lineaTotal } from './documento'
 import { escaparHtml } from './impresion'
-import { fechaHora, importe, referenciaOrden, soles } from './formato'
+import { fechaHoraConAnio, importe, referenciaOrden, soles } from './formato'
 
 /**
  * Ficha imprimible del comprobante de una venta. Es un registro interno: el
@@ -34,9 +34,6 @@ export function htmlComprobante(
     })
     .join('')
 
-  const linea = (etiqueta: string, valor: string, clase = '') =>
-    `<div class="linea ${clase}"><span>${escaparHtml(etiqueta)}</span><span>${escaparHtml(valor)}</span></div>`
-
   const porcentajeIgv = comprobante?.porcentajeIgv ?? empresa?.porcentajeIgv ?? 18
   const empresaNombre = empresa?.razonSocial || empresa?.nombreEmpresa || 'Team Benavides'
   const datosEmpresa = [
@@ -46,49 +43,9 @@ export function htmlComprobante(
     empresa?.email,
   ].filter(Boolean)
 
-  return `<!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escaparHtml(titulo)}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
-<style>
-  * { box-sizing: border-box; }
-  body { margin: 0; background: ${colores.fondo}; color: ${colores.texto}; font: 14px/1.5 ${fuentes.texto}; }
-  .hoja { position: relative; max-width: 800px; margin: 24px auto; padding: 40px; background: ${colores.blanco}; }
-  h1, h2 { font-family: ${fuentes.titulos}; margin: 0; letter-spacing: -0.02em; }
-  h1 { font-size: 22px; }
-  h2 { font-size: 20px; text-align: right; }
-  .cabecera { display: flex; justify-content: space-between; gap: 24px; padding-bottom: 16px; border-bottom: 2px solid ${colores.texto}; }
-  .sec { color: ${colores.textoSecundario}; font-size: 12px; }
-  .bloque { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 20px 0; }
-  .etiqueta { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: ${colores.textoSecundario}; }
-  table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: ${colores.textoSecundario}; border-bottom: 2px solid ${colores.divisor}; padding: 8px 6px; }
-  td { padding: 8px 6px; border-bottom: 1px solid ${colores.divisorSuave}; vertical-align: top; }
-  .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  th.num { text-align: right; }
-  .totales { margin-left: auto; width: 300px; margin-top: 16px; }
-  .linea { display: flex; justify-content: space-between; padding: 3px 0; font-variant-numeric: tabular-nums; }
-  .linea.total { border-top: 2px solid ${colores.texto}; margin-top: 6px; padding-top: 8px; font-family: ${fuentes.titulos}; font-size: 18px; font-weight: 700; }
-  .linea.saldo { font-weight: 600; }
-  .nota { margin-top: 28px; font-size: 12px; color: ${colores.textoSecundario}; }
-  .anulado { position: absolute; top: 40%; left: 0; right: 0; text-align: center; font: 700 72px ${fuentes.titulos}; color: ${colores.acento600}; opacity: 0.18; transform: rotate(-18deg); pointer-events: none; }
-  .acciones { max-width: 800px; margin: 24px auto 0; text-align: right; }
-  .acciones button { font: 600 14px ${fuentes.texto}; color: ${colores.blanco}; background: ${colores.acento600}; border: 0; padding: 10px 18px; cursor: pointer; }
-  @media print {
-    body { background: ${colores.blanco}; }
-    .hoja { margin: 0; padding: 0; max-width: none; }
-    .acciones { display: none; }
-  }
-</style>
-</head>
-<body>
-<div class="acciones"><button type="button" onclick="window.print()">Imprimir o guardar PDF</button></div>
-<main class="hoja">
+  return documentoImprimible(
+    titulo,
+    `
   ${anulado ? '<div class="anulado">ANULADO</div>' : ''}
   <div class="cabecera">
     <div>
@@ -97,7 +54,7 @@ export function htmlComprobante(
     </div>
     <div>
       <h2>${escaparHtml(titulo)}</h2>
-      <div class="sec" style="text-align:right">${escaparHtml(fechaHora(comprobante?.fechaCreacion ?? venta.fecha))}</div>
+      <div class="sec derecha">${escaparHtml(fechaHoraConAnio(comprobante?.fechaCreacion ?? venta.fecha))}</div>
     </div>
   </div>
 
@@ -120,18 +77,16 @@ export function htmlComprobante(
   </table>
 
   <div class="totales">
-    ${linea('Op. gravadas', soles(venta.subtotalGravado))}
-    ${venta.subtotalExonerado > 0 ? linea('Op. exoneradas', soles(venta.subtotalExonerado)) : ''}
-    ${venta.subtotalInafecto > 0 ? linea('Op. inafectas', soles(venta.subtotalInafecto)) : ''}
-    ${linea(`IGV (${porcentajeIgv} %)`, soles(venta.montoIgv))}
-    ${linea('Total', soles(venta.total), 'total')}
-    ${linea('Pagado', soles(venta.totalPagado))}
-    ${venta.saldo > 0 ? linea('Saldo pendiente', soles(venta.saldo), 'saldo') : ''}
+    ${lineaTotal('Op. gravadas', soles(venta.subtotalGravado))}
+    ${venta.subtotalExonerado > 0 ? lineaTotal('Op. exoneradas', soles(venta.subtotalExonerado)) : ''}
+    ${venta.subtotalInafecto > 0 ? lineaTotal('Op. inafectas', soles(venta.subtotalInafecto)) : ''}
+    ${lineaTotal(`IGV (${porcentajeIgv} %)`, soles(venta.montoIgv))}
+    ${lineaTotal('Total', soles(venta.total), 'total')}
+    ${lineaTotal('Pagado', soles(venta.totalPagado))}
+    ${venta.saldo > 0 ? lineaTotal('Saldo pendiente', soles(venta.saldo), 'saldo') : ''}
   </div>
 
   ${comprobante?.observaciones ? `<p><span class="etiqueta">Observaciones</span><br>${escaparHtml(comprobante.observaciones)}</p>` : ''}
-  <p class="nota">Registro interno de Team Benavides. No reemplaza al comprobante electrónico.</p>
-</main>
-</body>
-</html>`
+  <p class="nota">Registro interno de Team Benavides. No reemplaza al comprobante electrónico.</p>`,
+  )
 }

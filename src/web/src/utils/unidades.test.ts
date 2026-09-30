@@ -54,3 +54,13 @@ describe('ultimaLecturaRegistrada', () => {
     expect(ultimaLecturaRegistrada(false, null, [])).toBeNull()
   })
 })
+
+describe('nombreDeEnum', () => {
+  it('pasa los nombres del backend a texto legible', async () => {
+    const { nombreDeEnum } = await import('./formato')
+    expect(nombreDeEnum('MantenimientoPreventivo')).toBe('Mantenimiento preventivo')
+    expect(nombreDeEnum('EnTaller')).toBe('En taller')
+    expect(nombreDeEnum('MotoAcuatica')).toBe('Moto acuática')
+    expect(nombreDeEnum(null)).toBe('—')
+  })
+})

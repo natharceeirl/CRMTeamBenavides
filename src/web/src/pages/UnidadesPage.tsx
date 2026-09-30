@@ -135,7 +135,7 @@ export function UnidadesPage() {
         acciones={
           <Space>
             <Button onClick={() => setModalYamaha(true)}>
-              🏍️ Catálogo Yamaha (Mock)
+              Catálogo Yamaha
             </Button>
             {puedeCrear && (
               <Button type="primary" onClick={abrirNueva}>

@@ -1,28 +1,22 @@
 import { useState } from 'react'
-import {
-  Button,
-  Card,
-  Collapse,
-  Descriptions,
-  Empty,
-  Modal,
-  Spin,
-  Table,
-  Tabs,
-  Tag,
-  Timeline,
-  type TableProps,
-} from 'antd'
-import { EyeOutlined, HistoryOutlined } from '@ant-design/icons'
+import { Button, Modal, Table, Tabs, Timeline, type TableProps } from 'antd'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { Indicadores } from '../components/Indicadores'
 import { EstadoOrdenApiTag } from '../components/EstadoOrdenApiTag'
+import { EtiquetaEstado, type TonoEstado } from '../components/EtiquetaEstado'
 import { PanelAprobaciones } from '../components/PanelAprobaciones'
 import { ModalFotosOrden } from '../components/ModalFotosOrden'
 import { ModalFormatoAtencion } from '../components/ModalFormatoAtencion'
 import { useVehiculos } from '../api/vehiculos'
-import { fechaIngresoOrden, nombresEstado, useOrden, useOrdenes, PRESUPUESTO, nombresPresupuesto } from '../api/ordenes'
+import {
+  PRESUPUESTO,
+  fechaIngresoOrden,
+  nombresEstado,
+  nombresPresupuesto,
+  useOrden,
+  useOrdenes,
+} from '../api/ordenes'
 import {
   useHistorialServicioUnidad,
   usePortalComprobantes,
@@ -30,134 +24,187 @@ import {
   type AtencionServicioUnidad,
   type PortalComprobante,
 } from '../api/portal'
-import type { DetalleServicioResponse, OrdenServicioResponse, VehiculoResponse } from '../api/tipos'
-import { entero, fechaHora, referenciaOrden, soles } from '../utils/formato'
+import { nombresTipoItem, type DetalleServicioResponse, type OrdenServicioResponse, type VehiculoResponse } from '../api/tipos'
+import { entero, fechaHora, importe, referenciaOrden, soles } from '../utils/formato'
 import { identificadorUnidad, lecturaIngresoOrden, lecturaMedidor, nombreTipoUnidad } from '../utils/unidades'
 
-const colorPresupuesto: Record<number, string> = {
-  [PRESUPUESTO.pendiente]: 'gold',
-  [PRESUPUESTO.aprobado]: 'green',
-  [PRESUPUESTO.rechazado]: 'red',
+// Lo que espera respuesta del cliente llama la atención.
+const tonoPresupuesto: Record<number, TonoEstado> = {
+  [PRESUPUESTO.pendiente]: 'alerta',
+  [PRESUPUESTO.aprobado]: 'hecho',
+  [PRESUPUESTO.rechazado]: 'suave',
 }
 
+const porFecha = (a: { fechaCambio: string }, b: { fechaCambio: string }) =>
+  new Date(a.fechaCambio).getTime() - new Date(b.fechaCambio).getTime()
+
+const fila = (etiqueta: string, valor: string | number | null | undefined) =>
+  valor === null || valor === undefined || valor === '' ? null : (
+    <tr key={etiqueta}>
+      <td>{etiqueta}</td>
+      <td>{valor}</td>
+    </tr>
+  )
+
+const columnasPresupuesto: TableProps<DetalleServicioResponse>['columns'] = [
+  {
+    title: 'Concepto',
+    key: 'concepto',
+    render: (_, detalle) => (
+      <>
+        <div>{detalle.descripcion}</div>
+        <div className="texto-secundario">
+          {nombresTipoItem[detalle.tipoItem ?? (detalle.esRepuesto ? 0 : 2)] ?? detalle.tipoItemNombre}
+        </div>
+      </>
+    ),
+  },
+  { title: 'Cant.', dataIndex: 'cantidad', align: 'right', className: 'num' },
+  { title: 'P. unit.', dataIndex: 'precioUnitario', align: 'right', className: 'num', render: (valor: number) => importe(valor) },
+  {
+    title: 'Total',
+    key: 'total',
+    align: 'right',
+    className: 'num',
+    render: (_, detalle) => importe(detalle.total ?? detalle.subtotal),
+  },
+]
+
+/** Lo que un cliente hizo en el taller en una unidad: cada atención con sus trabajos. */
+function HistorialDeUnidad({ atenciones }: Readonly<{ atenciones: AtencionServicioUnidad[] }>) {
+  if (atenciones.length === 0) {
+    return <p className="texto-secundario">Esta unidad todavía no tiene servicios en el taller.</p>
+  }
+
+  return (
+    <>
+      {atenciones.map((atencion) => (
+        <section key={atencion.ordenServicioId} className="bloque-modal">
+          <div className="seccion-titulo" style={{ marginBottom: 8 }}>
+            <h3 style={{ margin: 0 }}>
+              {atencion.numeroOrden ?? 'Atención'} · {fechaHora(atencion.fechaIngreso)}
+            </h3>
+            <div className="acciones">
+              <EstadoOrdenApiTag estadoId={atencion.estadoId} />
+              <strong className="num">{soles(atencion.total)}</strong>
+            </div>
+          </div>
+          <table className="tabla-simple">
+            <tbody>
+              {fila('Falla reportada', atencion.motivoFalla)}
+              {fila('Solución', atencion.solucion)}
+              {fila(
+                'Medidor al ingresar',
+                atencion.lecturaMedidorIngreso == null
+                  ? null
+                  : `${entero(atencion.lecturaMedidorIngreso)} ${atencion.tipoMedidor === 'Horas' ? 'h' : 'km'}`,
+              )}
+              {fila('Salida', atencion.fechaSalida ? fechaHora(atencion.fechaSalida) : null)}
+            </tbody>
+          </table>
+          {atencion.items.length > 0 && (
+            <Table
+              rowKey="id"
+              size="small"
+              pagination={false}
+              dataSource={atencion.items}
+              style={{ marginTop: 12 }}
+              columns={[
+                { title: 'Trabajo o repuesto', dataIndex: 'descripcion' },
+                { title: 'Cant.', dataIndex: 'cantidad', align: 'right', className: 'num' },
+                {
+                  title: 'Total',
+                  dataIndex: 'total',
+                  align: 'right',
+                  className: 'num',
+                  render: (valor: number) => importe(valor),
+                },
+              ]}
+            />
+          )}
+        </section>
+      ))}
+    </>
+  )
+}
+
+/**
+ * Portal del cliente en la web: sus órdenes, sus unidades y sus comprobantes.
+ * El backend filtra todo al cliente de la sesión.
+ */
 export function PortalClientePage() {
-  const [tabActiva, setTabActiva] = useState('unidades')
-  const [vehiculoHistorial, setVehiculoHistorial] = useState<VehiculoResponse | null>(null)
-  const [ordenSeleccionadaId, setOrdenSeleccionadaId] = useState<string | null>(null)
-  const [modalFotosId, setModalFotosId] = useState<string | null>(null)
-  const [modalFormatoId, setModalFormatoId] = useState<string | null>(null)
+  const [pestana, setPestana] = useState('ordenes')
+  const [unidadHistorial, setUnidadHistorial] = useState<VehiculoResponse | null>(null)
+  const [ordenVista, setOrdenVista] = useState<string | null>(null)
+  const [modalFotos, setModalFotos] = useState(false)
+  const [modalFormato, setModalFormato] = useState(false)
 
-  const resumenQuery = usePortalResumen()
-  const vehiculosQuery = useVehiculos()
-  const ordenesQuery = useOrdenes()
-  const comprobantesQuery = usePortalComprobantes()
-  const ordenDetalleQuery = useOrden(ordenSeleccionadaId ?? undefined)
-  const historialQuery = useHistorialServicioUnidad(vehiculoHistorial?.id ?? null)
+  const resumen = usePortalResumen()
+  const vehiculos = useVehiculos()
+  const ordenes = useOrdenes()
+  const comprobantes = usePortalComprobantes()
+  const detalle = useOrden(ordenVista ?? undefined)
+  const historial = useHistorialServicioUnidad(unidadHistorial?.id ?? null)
 
-  const resumen = resumenQuery.data
+  const datosResumen = resumen.data
+  const orden = detalle.data
+  const primerNombre = datosResumen?.clienteNombre.split(' ')[0]
 
-  const columnasVehiculos: TableProps<VehiculoResponse>['columns'] = [
-    {
-      title: 'Tipo',
-      key: 'tipo',
-      render: (_, v) => <Tag>{nombreTipoUnidad(v)}</Tag>,
-    },
+  const columnasOrdenes: TableProps<OrdenServicioResponse>['columns'] = [
+    { title: 'Orden', key: 'orden', className: 'num', render: (_, fila) => <strong>{referenciaOrden(fila)}</strong> },
     {
       title: 'Unidad',
       key: 'unidad',
-      render: (_, v) => (
-        <div>
-          <strong>
-            {v.marca} {v.modelo}
-          </strong>{' '}
-          {v.anio ? <span className="texto-secundario">({v.anio})</span> : null}
-          {v.color ? <div className="texto-secundario">Color: {v.color}</div> : null}
-        </div>
-      ),
+      render: (_, fila) => `${fila.vehiculoMarca} ${fila.vehiculoModelo}${fila.vehiculoPlaca ? ` · ${fila.vehiculoPlaca}` : ''}`,
     },
+    { title: 'Ingreso', key: 'ingreso', className: 'num', render: (_, fila) => fechaHora(fechaIngresoOrden(fila)) },
+    { title: 'Entrega estimada', key: 'entrega', className: 'num', render: (_, fila) => fechaHora(fila.fechaEstimadaEntrega) },
+    { title: 'Estado', key: 'estado', render: (_, fila) => <EstadoOrdenApiTag estadoId={fila.estadoId} /> },
     {
-      title: 'Placa / Serie',
-      key: 'identificador',
-      render: (_, v) => (
-        <div>
-          <strong>{identificadorUnidad(v)}</strong>
-          {v.placa && v.numeroSerieVIN ? (
-            <div className="texto-secundario">VIN: {v.numeroSerieVIN}</div>
-          ) : null}
-        </div>
-      ),
+      title: 'Presupuesto',
+      key: 'presupuesto',
+      render: (_, fila) => {
+        const estado = fila.estadoPresupuestoClienteId ?? PRESUPUESTO.pendiente
+        return <EtiquetaEstado tono={tonoPresupuesto[estado]}>{nombresPresupuesto[estado]}</EtiquetaEstado>
+      },
     },
+    { title: 'Total', key: 'total', align: 'right', className: 'num', render: (_, fila) => soles(fila.total ?? 0) },
     {
-      title: 'Lectura actual',
-      key: 'lectura',
-      render: (_, v) => lecturaMedidor(v),
-    },
-    {
-      title: 'Acciones',
-      key: 'acciones',
+      title: '',
+      key: 'ver',
       align: 'right',
-      render: (_, v) => (
-        <Button
-          icon={<HistoryOutlined />}
-          onClick={() => setVehiculoHistorial(v)}
-        >
-          Historial de servicio
+      render: (_, fila) => (
+        <Button type="link" onClick={() => setOrdenVista(fila.id)}>
+          Ver
         </Button>
       ),
     },
   ]
 
-  const columnasOrdenes: TableProps<OrdenServicioResponse>['columns'] = [
-    {
-      title: 'N° Orden',
-      key: 'orden',
-      render: (_, o) => <strong>{referenciaOrden(o)}</strong>,
-    },
+  const columnasUnidades: TableProps<VehiculoResponse>['columns'] = [
     {
       title: 'Unidad',
       key: 'unidad',
-      render: (_, o) => `${o.vehiculoMarca} ${o.vehiculoModelo} · ${o.vehiculoPlaca ?? 'sin placa'}`,
+      render: (_, unidad) => (
+        <>
+          <strong>
+            {unidad.marca} {unidad.modelo}
+          </strong>
+          <div className="texto-secundario">
+            {[nombreTipoUnidad(unidad), unidad.anio, unidad.color].filter(Boolean).join(' · ')}
+          </div>
+        </>
+      ),
     },
+    { title: 'Placa o serie', key: 'identificador', className: 'num', render: (_, unidad) => identificadorUnidad(unidad) },
+    { title: 'Medidor', key: 'lectura', className: 'num', render: (_, unidad) => lecturaMedidor(unidad) },
     {
-      title: 'Ingreso',
-      key: 'ingreso',
-      render: (_, o) => fechaHora(fechaIngresoOrden(o)),
-    },
-    {
-      title: 'Entrega estimada',
-      key: 'entrega',
-      render: (_, o) => fechaHora(o.fechaEstimadaEntrega),
-    },
-    {
-      title: 'Estado taller',
-      key: 'estado',
-      render: (_, o) => <EstadoOrdenApiTag estadoId={o.estadoId} />,
-    },
-    {
-      title: 'Presupuesto',
-      key: 'presupuesto',
-      render: (_, o) => {
-        const est = o.estadoPresupuestoClienteId ?? PRESUPUESTO.pendiente
-        return <Tag color={colorPresupuesto[est]}>{nombresPresupuesto[est]}</Tag>
-      },
-    },
-    {
-      title: 'Total',
-      key: 'total',
-      className: 'num',
-      render: (_, o) => <strong>{soles(o.total ?? 0)}</strong>,
-    },
-    {
-      title: 'Acciones',
-      key: 'acciones',
+      title: '',
+      key: 'historial',
       align: 'right',
-      render: (_, o) => (
-        <Button
-          type="primary"
-          icon={<EyeOutlined />}
-          onClick={() => setOrdenSeleccionadaId(o.id)}
-        >
-          Ver detalle
+      render: (_, unidad) => (
+        <Button type="link" onClick={() => setUnidadHistorial(unidad)}>
+          Historial
         </Button>
       ),
     },
@@ -167,446 +214,251 @@ export function PortalClientePage() {
     {
       title: 'Comprobante',
       key: 'comprobante',
-      render: (_, c) => (
-        <div>
-          <Tag color={c.tipo === 'Factura' ? 'blue' : 'green'}>{c.tipo}</Tag>
-          <strong>
-            {c.serie ?? ''}-{c.numero ?? ''}
-          </strong>
-        </div>
+      render: (_, comprobante) => (
+        <strong>
+          {comprobante.tipo} {[comprobante.serie, comprobante.numero].filter(Boolean).join('-')}
+        </strong>
       ),
     },
+    { title: 'Fecha', dataIndex: 'fecha', className: 'num', render: (fecha: string) => fechaHora(fecha) },
+    { title: 'Orden', dataIndex: 'numeroOrden', render: (numero: string | null) => numero ?? '—' },
+    { title: 'Pago', dataIndex: 'metodoPagoPrincipal', render: (metodo: string | null) => metodo ?? '—' },
+    { title: 'Total', dataIndex: 'total', align: 'right', className: 'num', render: (total: number) => soles(total) },
     {
-      title: 'Fecha emisión',
-      key: 'fecha',
-      render: (_, c) => fechaHora(c.fecha),
-    },
-    {
-      title: 'N° Orden',
-      key: 'orden',
-      render: (_, c) => c.numeroOrden ?? '—',
-    },
-    {
-      title: 'Método de pago',
-      key: 'metodo',
-      render: (_, c) => c.metodoPagoPrincipal ?? '—',
-    },
-    {
-      title: 'Gravado',
-      key: 'gravado',
-      className: 'num',
-      render: (_, c) => soles(c.subtotalGravado ?? 0),
-    },
-    {
-      title: 'IGV',
-      key: 'igv',
-      className: 'num',
-      render: (_, c) => soles(c.montoIgv ?? 0),
-    },
-    {
-      title: 'Total',
-      key: 'total',
-      className: 'num',
-      render: (_, c) => <strong>{soles(c.total ?? 0)}</strong>,
-    },
-    {
-      title: 'Estado',
+      title: '',
       key: 'estado',
-      render: (_, c) => <Tag color={c.estado === 'Emitido' ? 'success' : 'default'}>{c.estado}</Tag>,
+      align: 'right',
+      render: (_, comprobante) => (
+        <EtiquetaEstado tono={comprobante.estado === 'Anulado' ? 'apagado' : 'neutro'}>{comprobante.estado}</EtiquetaEstado>
+      ),
     },
   ]
 
-  const ordenDetalle = ordenDetalleQuery.data
-
   return (
     <>
-      <BarraSuperior
-        antetitulo="Portal del Cliente"
-        titulo={resumen?.clienteNombre ? `Bienvenido, ${resumen.clienteNombre}` : 'Mi Portal'}
-      />
+      <BarraSuperior antetitulo="Mi portal" titulo={primerNombre ? `Hola, ${primerNombre}` : 'Mi portal'} />
 
       <div className="pagina">
-        {resumenQuery.isError && <AvisoError error={resumenQuery.error} />}
-
-        {resumen && (
+        <AvisoError error={resumen.error} />
+        {datosResumen && (
           <Indicadores
             items={[
+              { etiqueta: 'Unidades', valor: entero(datosResumen.cantidadUnidades) },
+              { etiqueta: 'En taller', valor: entero(datosResumen.cantidadOrdenesActivas) },
               {
-                etiqueta: 'Mis Unidades',
-                valor: entero(resumen.cantidadUnidades),
+                etiqueta: 'Por responder',
+                valor: entero(datosResumen.cantidadPresupuestosPendientes),
+                destacado: datosResumen.cantidadPresupuestosPendientes > 0,
               },
               {
-                etiqueta: 'Órdenes Activas',
-                valor: entero(resumen.cantidadOrdenesActivas),
-              },
-              {
-                etiqueta: 'Presupuestos Pendientes',
-                valor: entero(resumen.cantidadPresupuestosPendientes),
-                destacado: resumen.cantidadPresupuestosPendientes > 0,
-              },
-              {
-                etiqueta: 'Saldo Pendiente Total',
-                valor: soles(resumen.saldoPendienteTotal),
+                etiqueta: 'Saldo',
+                valor: soles(datosResumen.saldoPendienteTotal),
                 compacto: true,
-                destacado: resumen.saldoPendienteTotal > 0,
+                destacado: datosResumen.saldoPendienteTotal > 0,
               },
             ]}
           />
         )}
 
         <Tabs
-          activeKey={tabActiva}
-          onChange={setTabActiva}
+          activeKey={pestana}
+          onChange={setPestana}
           items={[
             {
-              key: 'unidades',
-              label: `Mis Unidades (${vehiculosQuery.data?.length ?? 0})`,
+              key: 'ordenes',
+              label: 'Órdenes',
               children: (
-                <Card>
-                  {vehiculosQuery.isError && <AvisoError error={vehiculosQuery.error} />}
+                <>
+                  <AvisoError error={ordenes.error} />
                   <Table
                     rowKey="id"
-                    loading={vehiculosQuery.isLoading}
-                    dataSource={vehiculosQuery.data ?? []}
-                    columns={columnasVehiculos}
-                    locale={{
-                      emptyText: <Empty description="No tienes unidades registradas a tu nombre." />,
-                    }}
+                    columns={columnasOrdenes}
+                    dataSource={ordenes.data ?? []}
+                    pagination={false}
+                    loading={ordenes.isPending}
+                    locale={{ emptyText: 'Todavía no tienes órdenes de servicio' }}
                   />
-                </Card>
+                </>
               ),
             },
             {
-              key: 'ordenes',
-              label: `Mis Órdenes de Servicio (${ordenesQuery.data?.length ?? 0})`,
+              key: 'unidades',
+              label: 'Unidades',
               children: (
-                <Card>
-                  {ordenesQuery.isError && <AvisoError error={ordenesQuery.error} />}
+                <>
+                  <AvisoError error={vehiculos.error} />
                   <Table
                     rowKey="id"
-                    loading={ordenesQuery.isLoading}
-                    dataSource={ordenesQuery.data ?? []}
-                    columns={columnasOrdenes}
-                    locale={{
-                      emptyText: <Empty description="No tienes órdenes de servicio registradas." />,
-                    }}
+                    columns={columnasUnidades}
+                    dataSource={vehiculos.data ?? []}
+                    pagination={false}
+                    loading={vehiculos.isPending}
+                    locale={{ emptyText: 'Todavía no hay unidades a tu nombre' }}
                   />
-                </Card>
+                </>
               ),
             },
             {
               key: 'comprobantes',
-              label: `Comprobantes de Pago (${comprobantesQuery.data?.length ?? 0})`,
+              label: 'Comprobantes',
               children: (
-                <Card>
-                  {comprobantesQuery.isError && <AvisoError error={comprobantesQuery.error} />}
+                <>
+                  <AvisoError error={comprobantes.error} />
                   <Table
                     rowKey="id"
-                    loading={comprobantesQuery.isLoading}
-                    dataSource={comprobantesQuery.data ?? []}
                     columns={columnasComprobantes}
-                    locale={{
-                      emptyText: <Empty description="Aún no tienes comprobantes de pago emitidos." />,
-                    }}
+                    dataSource={comprobantes.data ?? []}
+                    pagination={false}
+                    loading={comprobantes.isPending}
+                    locale={{ emptyText: 'Todavía no tienes comprobantes' }}
                   />
-                </Card>
+                </>
               ),
             },
           ]}
         />
       </div>
 
-      {/* Modal Historial de Servicio de Unidad */}
       <Modal
         title={
-          vehiculoHistorial
-            ? `Historial de servicio · ${vehiculoHistorial.marca} ${vehiculoHistorial.modelo} (${identificadorUnidad(vehiculoHistorial)})`
-            : 'Historial de servicio'
+          unidadHistorial
+            ? `Historial · ${unidadHistorial.marca} ${unidadHistorial.modelo} · ${identificadorUnidad(unidadHistorial)}`
+            : 'Historial'
         }
-        open={vehiculoHistorial !== null}
-        onCancel={() => setVehiculoHistorial(null)}
+        open={unidadHistorial !== null}
+        onCancel={() => setUnidadHistorial(null)}
+        footer={<Button onClick={() => setUnidadHistorial(null)}>Cerrar</Button>}
+        width={820}
+        destroyOnHidden
+      >
+        <AvisoError error={historial.error} />
+        {historial.isPending && <p className="texto-secundario">Cargando el historial…</p>}
+        {historial.data && <HistorialDeUnidad atenciones={historial.data} />}
+      </Modal>
+
+      <Modal
+        title={orden ? `${referenciaOrden(orden)} · ${orden.vehiculoMarca} ${orden.vehiculoModelo}` : 'Orden'}
+        open={ordenVista !== null}
+        onCancel={() => setOrdenVista(null)}
         footer={[
-          <Button key="cerrar" onClick={() => setVehiculoHistorial(null)}>
+          <Button key="fotos" onClick={() => setModalFotos(true)} disabled={!orden}>
+            Fotos
+          </Button>,
+          <Button key="formato" onClick={() => setModalFormato(true)} disabled={!orden}>
+            Formato de atención
+          </Button>,
+          <Button key="cerrar" type="primary" onClick={() => setOrdenVista(null)}>
             Cerrar
           </Button>,
         ]}
-        width={850}
+        width={900}
         destroyOnHidden
       >
-        {historialQuery.isLoading && (
-          <div style={{ textAlign: 'center', padding: '32px 0' }}>
-            <Spin size="large" />
-          </div>
-        )}
-        {historialQuery.isError && <AvisoError error={historialQuery.error} />}
-        {historialQuery.data && (
+        <AvisoError error={detalle.error} />
+        {detalle.isPending && ordenVista && <p className="texto-secundario">Cargando la orden…</p>}
+        {orden && (
           <>
-            {historialQuery.data.length === 0 ? (
-              <Empty description="Esta unidad no registra atenciones o servicios anteriores en el taller." />
-            ) : (
-              <Collapse
-                defaultActiveKey={[historialQuery.data[0]?.ordenServicioId]}
-                items={historialQuery.data.map((atencion: AtencionServicioUnidad) => ({
-                  key: atencion.ordenServicioId,
-                  label: (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingRight: 16 }}>
-                      <span>
-                        <strong>{atencion.numeroOrden ? `Orden ${atencion.numeroOrden}` : 'Atención'}</strong>
-                        {' · '}
-                        <span className="texto-secundario">{fechaHora(atencion.fechaIngreso)}</span>
-                      </span>
-                      <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <Tag color="blue">{atencion.estado}</Tag>
-                        <strong>{soles(atencion.total)}</strong>
-                      </span>
-                    </div>
-                  ),
-                  children: (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                      <Descriptions size="small" column={{ xs: 1, sm: 2 }}>
-                        <Descriptions.Item label="Fecha de ingreso">
-                          {fechaHora(atencion.fechaIngreso)}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Fecha de salida">
-                          {fechaHora(atencion.fechaSalida)}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Lectura medidor al ingreso">
-                          {atencion.lecturaMedidorIngreso != null
-                            ? `${entero(atencion.lecturaMedidorIngreso)} ${atencion.tipoMedidor === 'Horas' ? 'h' : 'km'}`
-                            : '—'}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Falla / Trabajo solicitado">
-                          {atencion.motivoFalla ?? '—'}
-                        </Descriptions.Item>
-                        {atencion.solucion && (
-                          <Descriptions.Item label="Solución / Diagnóstico" span={2}>
-                            {atencion.solucion}
-                          </Descriptions.Item>
-                        )}
-                      </Descriptions>
+            <div className="bloque-modal">
+              <PanelAprobaciones orden={orden} />
+            </div>
 
-                      {atencion.items.length > 0 && (
-                        <div>
-                          <div style={{ fontWeight: 600, marginBottom: 8 }}>Ítems y servicios realizados:</div>
-                          <Table
-                            rowKey="id"
-                            size="small"
-                            pagination={false}
-                            dataSource={atencion.items}
-                            columns={[
-                              {
-                                title: 'Tipo',
-                                dataIndex: 'tipoItemNombre',
-                                key: 'tipo',
-                                render: (tipo) => <Tag>{tipo}</Tag>,
-                              },
-                              {
-                                title: 'Descripción',
-                                dataIndex: 'descripcion',
-                                key: 'desc',
-                              },
-                              {
-                                title: 'Cant.',
-                                dataIndex: 'cantidad',
-                                key: 'cant',
-                                className: 'num',
-                              },
-                              {
-                                title: 'P. Unitario',
-                                dataIndex: 'precioUnitario',
-                                key: 'precio',
-                                className: 'num',
-                                render: (p) => soles(p),
-                              },
-                              {
-                                title: 'Total',
-                                dataIndex: 'total',
-                                key: 'total',
-                                className: 'num',
-                                render: (t) => <strong>{soles(t)}</strong>,
-                              },
-                            ]}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  ),
-                }))}
+            <div className="bloque-modal">
+              <h3>Orden</h3>
+              <table className="tabla-simple">
+                <tbody>
+                  <tr>
+                    <td>Estado</td>
+                    <td>
+                      <EstadoOrdenApiTag estadoId={orden.estadoId} />
+                    </td>
+                  </tr>
+                  {fila('Unidad', `${orden.vehiculoMarca} ${orden.vehiculoModelo} · ${orden.vehiculoPlaca ?? 'sin placa'}`)}
+                  {fila('Técnico', orden.tecnicoNombre ?? 'Por asignar')}
+                  {fila('Ingreso', fechaHora(fechaIngresoOrden(orden)))}
+                  {fila('Entrega estimada', orden.fechaEstimadaEntrega ? fechaHora(orden.fechaEstimadaEntrega) : null)}
+                  {fila('Medidor al ingresar', lecturaIngresoOrden(orden))}
+                  {fila('Falla reportada', orden.motivoFalla)}
+                  {fila('Diagnóstico', orden.diagnostico)}
+                  {fila('Solución', orden.solucion)}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="bloque-modal">
+              <h3>Presupuesto</h3>
+              <Table
+                rowKey="id"
+                size="small"
+                columns={columnasPresupuesto}
+                dataSource={orden.detalles}
+                pagination={false}
+                locale={{ emptyText: 'El taller todavía no registra trabajos ni repuestos' }}
               />
+              <div className="totales">
+                <div>
+                  <div className="etiqueta">Op. gravadas</div>
+                  <div className="valor">{soles(orden.subtotalGravado ?? 0)}</div>
+                </div>
+                <div>
+                  <div className="etiqueta">IGV</div>
+                  <div className="valor">{soles(orden.montoIgv ?? 0)}</div>
+                </div>
+                <div>
+                  <div className="etiqueta">Total</div>
+                  <div className="valor total">{soles(orden.total)}</div>
+                </div>
+                <div>
+                  <div className="etiqueta">Pagado</div>
+                  <div className="valor">{soles(orden.totalPagado ?? 0)}</div>
+                </div>
+                <div>
+                  <div className="etiqueta">Saldo</div>
+                  <div className="valor">{soles(orden.saldo ?? orden.total)}</div>
+                </div>
+              </div>
+            </div>
+
+            {(orden.historial?.length ?? 0) > 0 && (
+              <div className="bloque-modal">
+                <h3>Historial</h3>
+                <Timeline
+                  items={[...(orden.historial ?? [])].sort(porFecha).map((cambio) => {
+                    const cambiaEstado = cambio.estadoAnteriorId !== cambio.estadoNuevoId
+                    return {
+                      key: cambio.id,
+                      color: cambiaEstado ? undefined : 'gray',
+                      content: (
+                        <div>
+                          <strong>
+                            {cambiaEstado
+                              ? (nombresEstado[cambio.estadoNuevoId] ?? cambio.estadoNuevo)
+                              : (cambio.observaciones ?? 'Actualización')}
+                          </strong>
+                          <div className="texto-secundario">{fechaHora(cambio.fechaCambio)}</div>
+                          {cambiaEstado && cambio.observaciones && <div>{cambio.observaciones}</div>}
+                        </div>
+                      ),
+                    }
+                  })}
+                />
+              </div>
             )}
           </>
         )}
       </Modal>
 
-      {/* Modal Detalle de Orden y Aprobación de Presupuesto */}
-      <Modal
-        title={
-          ordenDetalle
-            ? `Detalle de Orden ${referenciaOrden(ordenDetalle)} · ${ordenDetalle.vehiculoMarca} ${ordenDetalle.vehiculoModelo}`
-            : 'Detalle de Orden'
-        }
-        open={ordenSeleccionadaId !== null}
-        onCancel={() => setOrdenSeleccionadaId(null)}
-        footer={[
-          <Button key="fotos" onClick={() => setModalFotosId(ordenSeleccionadaId)}>
-            📷 Ver Fotografías
-          </Button>,
-          <Button key="formato" type="primary" onClick={() => setModalFormatoId(ordenSeleccionadaId)}>
-            🖨️ Formato de Atención
-          </Button>,
-          <Button key="cerrar" onClick={() => setOrdenSeleccionadaId(null)}>
-            Cerrar
-          </Button>,
-        ]}
-        width={950}
-        destroyOnHidden
-      >
-        {ordenDetalleQuery.isLoading && (
-          <div style={{ textAlign: 'center', padding: '32px 0' }}>
-            <Spin size="large" />
-          </div>
-        )}
-        {ordenDetalleQuery.isError && <AvisoError error={ordenDetalleQuery.error} />}
-        {ordenDetalle && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            {/* Panel de Aprobaciones para que el cliente decida */}
-            <PanelAprobaciones orden={ordenDetalle} />
-
-            <Descriptions
-              title="Información General"
-              bordered
-              size="small"
-              column={{ xs: 1, sm: 2, md: 3 }}
-            >
-              <Descriptions.Item label="Unidad">
-                {ordenDetalle.vehiculoMarca} {ordenDetalle.vehiculoModelo} ({ordenDetalle.vehiculoPlaca ?? 'sin placa'})
-              </Descriptions.Item>
-              <Descriptions.Item label="Estado de la Orden">
-                <EstadoOrdenApiTag estadoId={ordenDetalle.estadoId} />
-              </Descriptions.Item>
-              <Descriptions.Item label="Técnico a cargo">
-                {ordenDetalle.tecnicoNombre ?? 'Por asignar'}
-              </Descriptions.Item>
-              <Descriptions.Item label="Fecha de Ingreso">
-                {fechaHora(fechaIngresoOrden(ordenDetalle))}
-              </Descriptions.Item>
-              <Descriptions.Item label="Entrega estimada">
-                {fechaHora(ordenDetalle.fechaEstimadaEntrega)}
-              </Descriptions.Item>
-              <Descriptions.Item label="Medidor de ingreso">
-                {lecturaIngresoOrden(ordenDetalle)}
-              </Descriptions.Item>
-              <Descriptions.Item label="Motivo de Falla" span={3}>
-                {ordenDetalle.motivoFalla ?? '—'}
-              </Descriptions.Item>
-              {ordenDetalle.diagnostico && (
-                <Descriptions.Item label="Diagnóstico del Taller" span={3}>
-                  {ordenDetalle.diagnostico}
-                </Descriptions.Item>
-              )}
-              {ordenDetalle.solucion && (
-                <Descriptions.Item label="Solución Propuesta" span={3}>
-                  {ordenDetalle.solucion}
-                </Descriptions.Item>
-              )}
-            </Descriptions>
-
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ margin: 0 }}>Ítems del Presupuesto</h3>
-                <div style={{ fontSize: 18, fontWeight: 700 }}>
-                  Total Presupuestado: {soles(ordenDetalle.total)}
-                </div>
-              </div>
-
-              <Table<DetalleServicioResponse>
-                rowKey="id"
-                size="middle"
-                pagination={false}
-                dataSource={ordenDetalle.detalles ?? []}
-                columns={[
-                  {
-                    title: 'Concepto / Ítem',
-                    key: 'concepto',
-                    render: (_, d) => (
-                      <div>
-                        <strong>{d.descripcion}</strong>
-                        <div className="texto-secundario">
-                          {d.tipoItemNombre ?? (d.esRepuesto ? 'Repuesto' : 'Servicio')}
-                        </div>
-                      </div>
-                    ),
-                  },
-                  {
-                    title: 'Cantidad',
-                    dataIndex: 'cantidad',
-                    key: 'cantidad',
-                    className: 'num',
-                    render: (c) => entero(c),
-                  },
-                  {
-                    title: 'Precio Unitario',
-                    dataIndex: 'precioUnitario',
-                    key: 'precio',
-                    className: 'num',
-                    render: (p) => soles(p),
-                  },
-                  {
-                    title: 'Subtotal',
-                    dataIndex: 'subtotal',
-                    key: 'subtotal',
-                    className: 'num',
-                    render: (s) => <strong>{soles(s)}</strong>,
-                  },
-                ]}
-                locale={{
-                  emptyText: <Empty description="Esta orden aún no tiene ítems presupuestados." />,
-                }}
-              />
-            </div>
-
-            {ordenDetalle.historial && ordenDetalle.historial.length > 0 && (
-              <div>
-                <h3 style={{ marginBottom: 12 }}>Historial de la Orden</h3>
-                <Timeline
-                  items={ordenDetalle.historial.map((h) => ({
-                    key: h.id,
-                    color: h.estadoAnteriorId !== h.estadoNuevoId ? 'blue' : 'gray',
-                    children: (
-                      <div>
-                        <strong>
-                          {h.estadoAnteriorId !== h.estadoNuevoId
-                            ? (nombresEstado[h.estadoNuevoId] ?? h.estadoNuevo)
-                            : (h.observaciones ?? 'Actualización')}
-                        </strong>
-                        {h.observaciones && h.estadoAnteriorId !== h.estadoNuevoId && (
-                          <div style={{ fontSize: 13, marginTop: 4 }}>{h.observaciones}</div>
-                        )}
-                        <div className="texto-secundario" style={{ fontSize: 12 }}>
-                          {fechaHora(h.fechaCambio)} · {h.usuarioNombre ?? 'Sistema'}
-                        </div>
-                      </div>
-                    ),
-                  }))}
-                />
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
-
-      <ModalFotosOrden
-        abierto={modalFotosId !== null}
-        ordenServicioId={modalFotosId ?? ''}
-        soloLectura={true}
-        onCerrar={() => setModalFotosId(null)}
-      />
-
-      <ModalFormatoAtencion
-        abierto={modalFormatoId !== null}
-        ordenServicioId={modalFormatoId ?? ''}
-        onCerrar={() => setModalFormatoId(null)}
-      />
+      {orden && (
+        <>
+          <ModalFotosOrden
+            abierto={modalFotos}
+            ordenServicioId={orden.id}
+            numeroOrden={orden.numeroOrden}
+            soloLectura
+            onCerrar={() => setModalFotos(false)}
+          />
+          <ModalFormatoAtencion abierto={modalFormato} ordenServicioId={orden.id} onCerrar={() => setModalFormato(false)} />
+        </>
+      )}
     </>
   )
 }

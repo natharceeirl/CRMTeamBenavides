@@ -151,10 +151,10 @@ export async function solicitar<T>(ruta: string, opciones: Opciones = {}): Promi
 }
 
 /**
- * Igual que `solicitar`, pero devuelve el cuerpo como texto: sirve para las
- * vistas de impresión que la API arma en HTML y que exigen el token.
+ * Descarga un archivo protegido (una foto de la orden) con el token puesto.
+ * Una etiqueta <img> apuntando a la API no manda el encabezado Authorization.
  */
-export async function solicitarTexto(ruta: string): Promise<string> {
+export async function solicitarBlob(ruta: string): Promise<Blob> {
   if (sesion && venció(sesion.accessTokenExpiration)) {
     await renovarSesion()
   }
@@ -169,17 +169,10 @@ export async function solicitarTexto(ruta: string): Promise<string> {
     respuesta = await enviar(ruta, {})
   }
 
-  const texto = await respuesta.text()
   if (!respuesta.ok) {
-    let datos: unknown = null
-    try {
-      datos = JSON.parse(texto)
-    } catch {
-      // El error vino como texto plano.
-    }
-    throw new ErrorApi(respuesta.status, mensajeDeError(respuesta.status, datos))
+    throw new ErrorApi(respuesta.status, mensajeDeError(respuesta.status, null))
   }
-  return texto
+  return await respuesta.blob()
 }
 
 export async function solicitarFormData<T>(

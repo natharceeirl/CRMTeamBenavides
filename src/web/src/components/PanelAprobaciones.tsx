@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Input, Modal, Tag } from 'antd'
+import { Button, Input, Modal } from 'antd'
 import {
   GERENCIA,
   PRESUPUESTO,
@@ -14,6 +14,7 @@ import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
 import { fechaHora } from '../utils/formato'
 import { AvisoError } from './AvisoError'
+import { EtiquetaEstado, type TonoEstado } from './EtiquetaEstado'
 
 type Props = {
   orden: OrdenServicioDetalleResponse
@@ -27,17 +28,18 @@ type Accion = {
   motivoObligatorio: boolean
 }
 
-const colorPresupuesto: Record<number, string> = {
-  [PRESUPUESTO.pendiente]: 'default',
-  [PRESUPUESTO.aprobado]: 'success',
-  [PRESUPUESTO.rechazado]: 'error',
+// Lo pendiente pide acción; lo aprobado queda sobrio; lo rechazado, en suave.
+const tonoPresupuesto: Record<number, TonoEstado> = {
+  [PRESUPUESTO.pendiente]: 'alerta',
+  [PRESUPUESTO.aprobado]: 'hecho',
+  [PRESUPUESTO.rechazado]: 'suave',
 }
 
-const colorGerencia: Record<number, string> = {
-  [GERENCIA.noAplica]: 'default',
-  [GERENCIA.pendiente]: 'warning',
-  [GERENCIA.aprobado]: 'success',
-  [GERENCIA.rechazado]: 'error',
+const tonoGerencia: Record<number, TonoEstado> = {
+  [GERENCIA.noAplica]: 'apagado',
+  [GERENCIA.pendiente]: 'alerta',
+  [GERENCIA.aprobado]: 'hecho',
+  [GERENCIA.rechazado]: 'suave',
 }
 
 /**
@@ -97,9 +99,7 @@ export function PanelAprobaciones({ orden }: Readonly<Props>) {
         <div className="aprobacion">
           <div className="aprobacion-cabecera">
             <span>Presupuesto del cliente</span>
-            <Tag color={colorPresupuesto[presupuesto]} style={{ marginInlineEnd: 0 }}>
-              {nombresPresupuesto[presupuesto]}
-            </Tag>
+            <EtiquetaEstado tono={tonoPresupuesto[presupuesto]}>{nombresPresupuesto[presupuesto]}</EtiquetaEstado>
           </div>
           {orden.fechaRespuestaCliente && (
             <div className="texto-secundario">{fechaHora(orden.fechaRespuestaCliente)}</div>
@@ -146,9 +146,7 @@ export function PanelAprobaciones({ orden }: Readonly<Props>) {
         <div className="aprobacion">
           <div className="aprobacion-cabecera">
             <span>Gerencia</span>
-            <Tag color={colorGerencia[aprobacion]} style={{ marginInlineEnd: 0 }}>
-              {nombresGerencia[aprobacion]}
-            </Tag>
+            <EtiquetaEstado tono={tonoGerencia[aprobacion]}>{nombresGerencia[aprobacion]}</EtiquetaEstado>
           </div>
           {orden.fechaAprobacionGerencia && aprobacion !== GERENCIA.noAplica && (
             <div className="texto-secundario">
