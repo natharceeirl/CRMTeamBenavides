@@ -17,23 +17,6 @@ export function AppLayout() {
     navigate('/login', { replace: true })
   }
 
-  // La web es del personal del taller y la tienda. Un cliente usa la app.
-  if (sesion.permisosListos && sesion.esCliente && !sesion.esPersonal) {
-    return (
-      <div className="login">
-        <div className="login-marca">
-          <Logo variante="oscuro" alto={40} />
-        </div>
-        <div className="login-formulario">
-          <h2 className="login-titulo">Tu cuenta es de cliente</h2>
-          <p>Sigue tus unidades, órdenes y comprobantes desde la app de Team Benavides.</p>
-          <button type="button" className="sidebar-salir" onClick={cerrar}>
-            Cerrar sesión
-          </button>
-        </div>
-      </div>
-    )
-  }
 
   const enlacesVisibles = enlaces.filter((enlace) => cumpleAcceso(enlace, sesion))
 

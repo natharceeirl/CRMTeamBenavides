@@ -30,7 +30,12 @@ public static class OrdenServicioEndpoints
             IOrdenServicioService service,
             ApplicationDbContext dbContext) =>
         {
-            var (soloTecnicoId, soloClienteId) = await ResolverAislamientoAsync(user, dbContext);
+            var (soloTecnicoId, soloClienteId, debeDenegarAcceso) = await ResolverAislamientoAsync(user, dbContext);
+            if (debeDenegarAcceso)
+            {
+                return Results.Ok(new List<OrdenServicioResponse>());
+            }
+
             var ordenes = await service.GetAllAsync(
                 vehiculoId,
                 estado,
@@ -52,7 +57,12 @@ public static class OrdenServicioEndpoints
             IOrdenServicioService service,
             ApplicationDbContext dbContext) =>
         {
-            var (soloTecnicoId, soloClienteId) = await ResolverAislamientoAsync(user, dbContext);
+            var (soloTecnicoId, soloClienteId, debeDenegarAcceso) = await ResolverAislamientoAsync(user, dbContext);
+            if (debeDenegarAcceso)
+            {
+                return Results.NotFound();
+            }
+
             var result = await service.GetByIdAsync(id, soloTecnicoId, soloClienteId);
             return result.Status switch
             {
@@ -70,7 +80,12 @@ public static class OrdenServicioEndpoints
             IOrdenServicioService service,
             ApplicationDbContext dbContext) =>
         {
-            var (soloTecnicoId, soloClienteId) = await ResolverAislamientoAsync(user, dbContext);
+            var (soloTecnicoId, soloClienteId, debeDenegarAcceso) = await ResolverAislamientoAsync(user, dbContext);
+            if (debeDenegarAcceso)
+            {
+                return Results.NotFound();
+            }
+
             var result = await service.GetHistorialAsync(id, soloTecnicoId, soloClienteId);
             return result.Status switch
             {
@@ -123,7 +138,7 @@ public static class OrdenServicioEndpoints
             IOrdenServicioService service,
             ApplicationDbContext dbContext) =>
         {
-            var (soloTecnicoId, _) = await ResolverAislamientoAsync(user, dbContext);
+            var (soloTecnicoId, _, _) = await ResolverAislamientoAsync(user, dbContext);
             var usuarioId = ObtenerUsuarioId(user);
             var result = await service.ActualizarAsync(id, request, soloTecnicoId, usuarioId);
             return result.Status switch
@@ -145,7 +160,7 @@ public static class OrdenServicioEndpoints
             IOrdenServicioService service,
             ApplicationDbContext dbContext) =>
         {
-            var (soloTecnicoId, _) = await ResolverAislamientoAsync(user, dbContext);
+            var (soloTecnicoId, _, _) = await ResolverAislamientoAsync(user, dbContext);
             var usuarioId = ObtenerUsuarioId(user);
             var result = await service.RegistrarDiagnosticoAsync(id, request, soloTecnicoId, usuarioId);
             return result.Status switch
@@ -167,7 +182,7 @@ public static class OrdenServicioEndpoints
             IOrdenServicioService service,
             ApplicationDbContext dbContext) =>
         {
-            var (soloTecnicoId, _) = await ResolverAislamientoAsync(user, dbContext);
+            var (soloTecnicoId, _, _) = await ResolverAislamientoAsync(user, dbContext);
             var usuarioId = ObtenerUsuarioId(user);
             var result = await service.RegistrarDiagnosticoAsync(id, request, soloTecnicoId, usuarioId);
             return result.Status switch
@@ -189,7 +204,7 @@ public static class OrdenServicioEndpoints
             IOrdenServicioService service,
             ApplicationDbContext dbContext) =>
         {
-            var (soloTecnicoId, _) = await ResolverAislamientoAsync(user, dbContext);
+            var (soloTecnicoId, _, _) = await ResolverAislamientoAsync(user, dbContext);
             var puedeModificarPrecios = await PuedeModificarPreciosAsync(user, dbContext);
             var result = await service.AgregarDetalleAsync(id, request, puedeModificarPrecios, soloTecnicoId);
             return result.Status switch
@@ -300,7 +315,12 @@ public static class OrdenServicioEndpoints
             IOrdenServicioService service,
             ApplicationDbContext dbContext) =>
         {
-            var (_, soloClienteId) = await ResolverAislamientoAsync(user, dbContext);
+            var (_, soloClienteId, debeDenegarAcceso) = await ResolverAislamientoAsync(user, dbContext);
+            if (debeDenegarAcceso)
+            {
+                return Results.Json(new { error = "Usuario cliente sin cliente activo asociado." }, statusCode: StatusCodes.Status403Forbidden);
+            }
+
             var usuarioId = ObtenerUsuarioId(user);
             var result = await service.ResponderPresupuestoClienteAsync(id, request, soloClienteId, usuarioId);
             return result.Status switch
@@ -369,10 +389,25 @@ public static class OrdenServicioEndpoints
         .RequireAuthorization(PermisosDefinidos.VentasCrear)
         .WithName("RegistrarPagoOrdenServicio");
 
-        group.MapGet("/{id:guid}/pagos", async (Guid id, IPagoService pagoService) =>
+        group.MapGet("/{id:guid}/pagos", async (
+            Guid id,
+            ClaimsPrincipal user,
+            IPagoService pagoService,
+            ApplicationDbContext dbContext) =>
         {
-            var pagos = await pagoService.GetPagosByOrdenServicioIdAsync(id);
-            return Results.Ok(pagos);
+            var (_, soloClienteId, debeDenegarAcceso) = await ResolverAislamientoAsync(user, dbContext);
+            if (debeDenegarAcceso)
+            {
+                return Results.NotFound();
+            }
+
+            var result = await pagoService.GetPagosByOrdenServicioIdAsync(id, soloClienteId);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                _ => Results.Problem()
+            };
         })
         .RequireAuthorization(PoliticaVerOrdenes)
         .WithName("GetPagosOrdenServicio");
@@ -380,37 +415,16 @@ public static class OrdenServicioEndpoints
 
     private static Guid? ObtenerUsuarioId(ClaimsPrincipal user)
     {
-        var subClaim = user.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
-            ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return Guid.TryParse(subClaim, out var usuarioId) ? usuarioId : null;
+        return UserIsolationHelper.ObtenerUsuarioId(user);
     }
 
-    private static async Task<(Guid? soloTecnicoId, Guid? soloClienteId)> ResolverAislamientoAsync(
+    private static async Task<(Guid? soloTecnicoId, Guid? soloClienteId, bool debeDenegarAcceso)> ResolverAislamientoAsync(
         ClaimsPrincipal user, ApplicationDbContext dbContext)
     {
-        var usuarioId = ObtenerUsuarioId(user);
-        if (!usuarioId.HasValue) return (null, null);
-
-        if (user.IsInRole(RolesDefinidos.GerenciaAdmin) || user.IsInRole(RolesDefinidos.Recepcion))
-        {
-            return (null, null);
-        }
-
-        if (user.IsInRole(RolesDefinidos.Tecnico))
-        {
-            return (usuarioId.Value, null);
-        }
-
-        if (user.IsInRole(RolesDefinidos.Cliente))
-        {
-            var clienteId = await dbContext.Clientes
-                .Where(c => c.UsuarioId == usuarioId.Value && c.Activo)
-                .Select(c => (Guid?)c.Id)
-                .FirstOrDefaultAsync();
-            return (null, clienteId);
-        }
-
-        return (null, null);
+        var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+        var soloTecnicoId = isolation.EsTecnico ? isolation.UsuarioId : null;
+        var soloClienteId = isolation.SoloClienteId;
+        return (soloTecnicoId, soloClienteId, isolation.DebeDenegarAcceso);
     }
 
     private static async Task<bool> PuedeModificarPreciosAsync(

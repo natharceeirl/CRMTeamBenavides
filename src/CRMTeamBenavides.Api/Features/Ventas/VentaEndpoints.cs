@@ -40,8 +40,13 @@ public static class VentaEndpoints
             IVentaService service,
             ApplicationDbContext dbContext) =>
         {
-            var soloClienteId = await ResolverAislamientoClienteVentaAsync(user, dbContext);
-            var ventas = await service.GetAllAsync(clienteId, estado, ordenServicioId, fechaDesde, fechaHasta, soloClienteId);
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+            if (isolation.DebeDenegarAcceso)
+            {
+                return Results.Ok(new List<VentaResponse>());
+            }
+
+            var ventas = await service.GetAllAsync(clienteId, estado, ordenServicioId, fechaDesde, fechaHasta, isolation.SoloClienteId);
             return Results.Ok(ventas);
         })
         .RequireAuthorization(PoliticaVerVentas)
@@ -53,8 +58,13 @@ public static class VentaEndpoints
             IVentaService service,
             ApplicationDbContext dbContext) =>
         {
-            var soloClienteId = await ResolverAislamientoClienteVentaAsync(user, dbContext);
-            var result = await service.GetByIdAsync(id, soloClienteId);
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+            if (isolation.DebeDenegarAcceso)
+            {
+                return Results.NotFound();
+            }
+
+            var result = await service.GetByIdAsync(id, isolation.SoloClienteId);
             return result.Status switch
             {
                 ServiceResultStatus.Success => Results.Ok(result.Data),
@@ -71,11 +81,16 @@ public static class VentaEndpoints
             IVentaService service,
             ApplicationDbContext dbContext) =>
         {
-            var soloClienteId = await ResolverAislamientoClienteVentaAsync(user, dbContext);
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+            if (isolation.DebeDenegarAcceso)
+            {
+                return Results.BadRequest(new { error = "Usuario cliente sin cliente activo asociado." });
+            }
+
             var puedeModificarPrecios = await PuedeModificarPreciosAsync(user, dbContext);
             var puedeAplicarDescuentos = await PuedeAplicarDescuentosAsync(user, dbContext);
 
-            var result = await service.CreateAsync(request, puedeModificarPrecios, puedeAplicarDescuentos, soloClienteId);
+            var result = await service.CreateAsync(request, puedeModificarPrecios, puedeAplicarDescuentos, isolation.SoloClienteId);
             return result.Status switch
             {
                 ServiceResultStatus.Success => Results.Created($"/api/ventas/{result.Data!.Id}", result.Data),
@@ -92,8 +107,13 @@ public static class VentaEndpoints
             IVentaService service,
             ApplicationDbContext dbContext) =>
         {
-            var soloClienteId = await ResolverAislamientoClienteVentaAsync(user, dbContext);
-            var result = await service.ConfirmarCotizacionAsync(id, soloClienteId);
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+            if (isolation.DebeDenegarAcceso)
+            {
+                return Results.NotFound();
+            }
+
+            var result = await service.ConfirmarCotizacionAsync(id, isolation.SoloClienteId);
             return result.Status switch
             {
                 ServiceResultStatus.Success => Results.Ok(result.Data),
@@ -141,10 +161,25 @@ public static class VentaEndpoints
         .RequireAuthorization(PermisosDefinidos.VentasCrear)
         .WithName("RegistrarPagoVenta");
 
-        group.MapGet("/{id:guid}/pagos", async (Guid id, IPagoService pagoService) =>
+        group.MapGet("/{id:guid}/pagos", async (
+            Guid id,
+            ClaimsPrincipal user,
+            IPagoService pagoService,
+            ApplicationDbContext dbContext) =>
         {
-            var pagos = await pagoService.GetPagosByVentaIdAsync(id);
-            return Results.Ok(pagos);
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+            if (isolation.DebeDenegarAcceso)
+            {
+                return Results.NotFound();
+            }
+
+            var result = await pagoService.GetPagosByVentaIdAsync(id, isolation.SoloClienteId);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                _ => Results.Problem()
+            };
         })
         .RequireAuthorization(PoliticaVerVentas)
         .WithName("GetPagosVenta");
@@ -152,9 +187,19 @@ public static class VentaEndpoints
         // -------------------------------------------------------------------
         // Comprobantes
         // -------------------------------------------------------------------
-        group.MapGet("/{id:guid}/comprobante", async (Guid id, IVentaService service) =>
+        group.MapGet("/{id:guid}/comprobante", async (
+            Guid id,
+            ClaimsPrincipal user,
+            IVentaService service,
+            ApplicationDbContext dbContext) =>
         {
-            var result = await service.GetComprobanteAsync(id);
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+            if (isolation.DebeDenegarAcceso)
+            {
+                return Results.NotFound();
+            }
+
+            var result = await service.GetComprobanteAsync(id, isolation.SoloClienteId);
             return result.Status switch
             {
                 ServiceResultStatus.Success => Results.Ok(result.Data),
@@ -203,29 +248,6 @@ public static class VentaEndpoints
         return Guid.TryParse(idStr, out var id) ? id : null;
     }
 
-    private static async Task<Guid?> ResolverAislamientoClienteVentaAsync(
-        ClaimsPrincipal user, ApplicationDbContext dbContext)
-    {
-        if (user.IsInRole(RolesDefinidos.GerenciaAdmin) ||
-            user.IsInRole(RolesDefinidos.Recepcion) ||
-            user.IsInRole(RolesDefinidos.Vendedor))
-        {
-            return null;
-        }
-
-        var usuarioId = ObtenerUsuarioId(user);
-        if (!usuarioId.HasValue) return null;
-
-        if (user.IsInRole(RolesDefinidos.Cliente))
-        {
-            return await dbContext.Clientes
-                .Where(c => c.UsuarioId == usuarioId.Value && c.Activo)
-                .Select(c => (Guid?)c.Id)
-                .FirstOrDefaultAsync();
-        }
-
-        return null;
-    }
 
     private static async Task<bool> PuedeModificarPreciosAsync(
         ClaimsPrincipal user, ApplicationDbContext dbContext)

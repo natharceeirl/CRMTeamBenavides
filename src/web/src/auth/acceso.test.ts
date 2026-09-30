@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ACCESO_ORDENES, PERMISOS, cumpleAcceso, enlaces, rutaInicial } from './acceso'
+import { ACCESO_ORDENES, ACCESO_PORTAL, PERMISOS, cumpleAcceso, enlaces, rutaInicial } from './acceso'
 
 /** Sesión mínima con los permisos que da el backend a cada rol (RolSeeder). */
 function sesionCon(roles: string[], permisos: string[]) {
@@ -56,6 +56,14 @@ describe('cumpleAcceso', () => {
     expect(cumpleAcceso(configuracion, vendedor)).toBe(false)
     expect(cumpleAcceso(configuracion, tecnico)).toBe(false)
   })
+
+  it('cliente solo puede entrar al portal y no a pantallas de taller', () => {
+    const cliente = sesionCon(['Cliente'], [PERMISOS.portalAcceso, PERMISOS.clientesVer, PERMISOS.unidadesVer, PERMISOS.ordenesVerAsignadas])
+    expect(cumpleAcceso(ACCESO_PORTAL, cliente)).toBe(true)
+    expect(cumpleAcceso(ACCESO_ORDENES, cliente)).toBe(false)
+    expect(cumpleAcceso({ permiso: PERMISOS.clientesVer }, cliente)).toBe(false)
+    expect(cumpleAcceso({ permiso: PERMISOS.unidadesVer }, cliente)).toBe(false)
+  })
 })
 
 describe('rutaInicial', () => {
@@ -67,7 +75,12 @@ describe('rutaInicial', () => {
     expect(rutaInicial(vendedor)).toBe('/')
   })
 
+  it('manda al cliente a su portal cuando tiene portal.acceso', () => {
+    expect(rutaInicial(sesionCon(['Cliente'], [PERMISOS.portalAcceso]))).toBe('/portal')
+  })
+
   it('devuelve null si no puede entrar a nada', () => {
-    expect(rutaInicial(sesionCon(['Cliente'], [PERMISOS.portalAcceso]))).toBeNull()
+    expect(rutaInicial(sesionCon(['Cliente'], []))).toBeNull()
+    expect(rutaInicial(sesionCon([], []))).toBeNull()
   })
 })

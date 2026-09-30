@@ -740,13 +740,18 @@ public class VentaService : IVentaService
         }
     }
 
-    public async Task<ServiceResult<ComprobanteResponse>> GetComprobanteAsync(Guid ventaId)
+    public async Task<ServiceResult<ComprobanteResponse>> GetComprobanteAsync(Guid ventaId, Guid? soloClienteId = null)
     {
         var venta = await _context.Ventas
             .Include(v => v.Comprobante)
             .FirstOrDefaultAsync(v => v.Id == ventaId && v.Activo);
 
         if (venta is null)
+        {
+            return ServiceResult<ComprobanteResponse>.NotFound();
+        }
+
+        if (soloClienteId.HasValue && venta.ClienteId != soloClienteId.Value)
         {
             return ServiceResult<ComprobanteResponse>.NotFound();
         }

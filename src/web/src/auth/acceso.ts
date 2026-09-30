@@ -68,8 +68,25 @@ type SesionAcceso = {
   tieneAlgunPermiso: (permisos: string[]) => boolean
 }
 
+const ROLES_PERSONAL = ['Gerencia/Admin', 'Admin', 'Recepcion', 'Recepción', 'Tecnico', 'Técnico', 'Vendedor']
+
+export function esSoloCliente(sesion: SesionAcceso): boolean {
+  return sesion.roles.includes('Cliente') && !sesion.roles.some((rol) => ROLES_PERSONAL.includes(rol))
+}
+
 export function cumpleAcceso(acceso: Acceso, sesion: SesionAcceso): boolean {
   if (sesion.esGerencia) return true
+
+  // Un cliente solo puede ingresar al Portal del Cliente; nunca a pantallas operativas o administrativas del taller
+  if (esSoloCliente(sesion)) {
+    return acceso.permiso === PERMISOS.portalAcceso || (acceso.permisos?.includes(PERMISOS.portalAcceso) ?? false)
+  }
+
+  // Las pantallas de portal no se muestran en el menú del personal operativo si no tienen portal.acceso
+  if (acceso.permiso === PERMISOS.portalAcceso) {
+    return sesion.tienePermiso(PERMISOS.portalAcceso)
+  }
+
   if (acceso.roles && !acceso.roles.some((rol) => sesion.roles.includes(rol))) return false
   if (acceso.permiso && !sesion.tienePermiso(acceso.permiso)) return false
   if (acceso.permisos && !sesion.tieneAlgunPermiso(acceso.permisos)) return false
@@ -80,6 +97,10 @@ export type EnlaceMenu = Acceso & {
   ruta: string
   texto: string
   exacto?: boolean
+}
+
+export const ACCESO_PORTAL: Acceso = {
+  permiso: PERMISOS.portalAcceso,
 }
 
 export const ACCESO_ORDENES: Acceso = {
@@ -93,6 +114,7 @@ export const ACCESO_CHATBOT: Acceso = {
 
 /** El menú, en orden. La primera pantalla permitida es la de inicio del usuario. */
 export const enlaces: EnlaceMenu[] = [
+  { ruta: '/portal', texto: 'Mi Portal', exacto: true, permiso: PERMISOS.portalAcceso },
   { ruta: '/', texto: 'Tablero', exacto: true, permiso: PERMISOS.reportesVerOperativos },
   { ruta: '/ordenes', texto: 'Órdenes', ...ACCESO_ORDENES },
   { ruta: '/clientes', texto: 'Clientes', permiso: PERMISOS.clientesVer },
@@ -107,5 +129,9 @@ export const enlaces: EnlaceMenu[] = [
 
 /** Primera pantalla del menú a la que puede entrar, o null si no tiene ninguna. */
 export function rutaInicial(sesion: SesionAcceso): string | null {
-  return enlaces.find((enlace) => cumpleAcceso(enlace, sesion))?.ruta ?? null
+  if (esSoloCliente(sesion)) {
+    return sesion.tienePermiso(PERMISOS.portalAcceso) ? '/portal' : null
+  }
+  const enlacesPersonal = enlaces.filter((e) => e.ruta !== '/portal')
+  return enlacesPersonal.find((enlace) => cumpleAcceso(enlace, sesion))?.ruta ?? null
 }

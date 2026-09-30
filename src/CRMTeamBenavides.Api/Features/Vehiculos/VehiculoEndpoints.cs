@@ -1,9 +1,7 @@
-using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace CRMTeamBenavides.Api.Features.Vehiculos;
 
@@ -15,8 +13,13 @@ public static class VehiculoEndpoints
 
         group.MapGet("/", async (Guid? clienteId, ClaimsPrincipal user, IVehiculoService service, ApplicationDbContext dbContext) =>
         {
-            var soloClienteId = await ResolverClienteRestringidoIdAsync(user, dbContext);
-            var vehiculos = await service.GetAllAsync(clienteId, soloClienteId);
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+            if (isolation.DebeDenegarAcceso)
+            {
+                return Results.Ok(new List<VehiculoResponse>());
+            }
+
+            var vehiculos = await service.GetAllAsync(clienteId, isolation.SoloClienteId);
             return Results.Ok(vehiculos);
         })
         .RequireAuthorization(PermisosDefinidos.UnidadesVer)
@@ -24,12 +27,40 @@ public static class VehiculoEndpoints
 
         group.MapGet("/{id:guid}", async (Guid id, ClaimsPrincipal user, IVehiculoService service, ApplicationDbContext dbContext) =>
         {
-            var soloClienteId = await ResolverClienteRestringidoIdAsync(user, dbContext);
-            var result = await service.GetByIdAsync(id, soloClienteId);
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+            if (isolation.DebeDenegarAcceso)
+            {
+                return Results.NotFound();
+            }
+
+            var result = await service.GetByIdAsync(id, isolation.SoloClienteId);
             return result.IsSuccess ? Results.Ok(result.Data) : Results.NotFound();
         })
         .RequireAuthorization(PermisosDefinidos.UnidadesVer)
         .WithName("GetVehiculoById");
+
+        group.MapGet("/{id:guid}/historial-servicio", async (
+            Guid id,
+            ClaimsPrincipal user,
+            IPortalService portalService,
+            ApplicationDbContext dbContext) =>
+        {
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+            if (isolation.DebeDenegarAcceso)
+            {
+                return Results.NotFound();
+            }
+
+            var result = await portalService.GetHistorialServicioUnidadAsync(id, isolation.SoloClienteId);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                _ => Results.Problem()
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.UnidadesVer)
+        .WithName("GetHistorialServicioUnidad");
 
         group.MapPost("/", async (CreateVehiculoRequest request, IVehiculoService service) =>
         {
@@ -70,30 +101,5 @@ public static class VehiculoEndpoints
         })
         .RequireAuthorization(PermisosDefinidos.UnidadesEliminar)
         .WithName("DeleteVehiculo");
-    }
-
-    private static async Task<Guid?> ResolverClienteRestringidoIdAsync(ClaimsPrincipal user, ApplicationDbContext dbContext)
-    {
-        var esCliente = user.IsInRole(RolesDefinidos.Cliente)
-            && !user.IsInRole(RolesDefinidos.GerenciaAdmin)
-            && !user.IsInRole(RolesDefinidos.Recepcion);
-
-        if (!esCliente)
-        {
-            return null;
-        }
-
-        var subClaim = user.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
-            ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-        if (Guid.TryParse(subClaim, out var usuarioId))
-        {
-            return await dbContext.Clientes
-                .Where(c => c.UsuarioId == usuarioId && c.Activo)
-                .Select(c => (Guid?)c.Id)
-                .FirstOrDefaultAsync();
-        }
-
-        return null;
     }
 }

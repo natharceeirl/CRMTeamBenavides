@@ -46,8 +46,14 @@ const colorGerencia: Record<number, string> = {
  * cliente) y la de Gerencia solo quien tiene `ordenes.aprobar_gerencia`.
  */
 export function PanelAprobaciones({ orden }: Readonly<Props>) {
-  const { tienePermiso, tieneAlgunPermiso } = useSesion()
-  const puedeRegistrarRespuesta = tieneAlgunPermiso([PERMISOS.ordenesEditar, PERMISOS.ventasCrear])
+  const sesion = useSesion()
+  const { tienePermiso, tieneAlgunPermiso, esCliente, esPersonal } = sesion
+  const esSoloCliente = esCliente && !esPersonal
+  const puedeRegistrarRespuesta = tieneAlgunPermiso([
+    PERMISOS.ordenesEditar,
+    PERMISOS.ventasCrear,
+    PERMISOS.portalAcceso,
+  ])
   const puedeDecidirGerencia = tienePermiso(PERMISOS.ordenesAprobarGerencia)
   const cerrada = esEstadoTerminal(orden.estadoId)
 
@@ -105,16 +111,17 @@ export function PanelAprobaciones({ orden }: Readonly<Props>) {
             <div className="aprobacion-acciones">
               {presupuesto !== PRESUPUESTO.aprobado && (
                 <Button
+                  type={esSoloCliente ? 'primary' : 'default'}
                   onClick={() =>
                     abrir({
                       destino: 'cliente',
                       estado: PRESUPUESTO.aprobado,
-                      titulo: 'El cliente aprobó el presupuesto',
+                      titulo: esSoloCliente ? 'Aprobar presupuesto' : 'El cliente aprobó el presupuesto',
                       motivoObligatorio: false,
                     })
                   }
                 >
-                  El cliente aprobó
+                  {esSoloCliente ? 'Aprobar presupuesto' : 'El cliente aprobó'}
                 </Button>
               )}
               {presupuesto !== PRESUPUESTO.rechazado && (
@@ -124,12 +131,12 @@ export function PanelAprobaciones({ orden }: Readonly<Props>) {
                     abrir({
                       destino: 'cliente',
                       estado: PRESUPUESTO.rechazado,
-                      titulo: 'El cliente rechazó el presupuesto',
+                      titulo: esSoloCliente ? 'Rechazar presupuesto' : 'El cliente rechazó el presupuesto',
                       motivoObligatorio: true,
                     })
                   }
                 >
-                  El cliente rechazó
+                  {esSoloCliente ? 'Rechazar presupuesto' : 'El cliente rechazó'}
                 </Button>
               )}
             </div>

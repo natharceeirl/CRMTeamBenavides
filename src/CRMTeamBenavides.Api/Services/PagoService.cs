@@ -200,9 +200,22 @@ public class PagoService : IPagoService
             pago.Activo));
     }
 
-    public async Task<List<PagoResponse>> GetPagosByVentaIdAsync(Guid ventaId)
+    public async Task<ServiceResult<List<PagoResponse>>> GetPagosByVentaIdAsync(Guid ventaId, Guid? soloClienteId = null)
     {
-        return await _context.Pagos
+        var venta = await _context.Ventas
+            .FirstOrDefaultAsync(v => v.Id == ventaId && v.Activo);
+
+        if (venta is null)
+        {
+            return ServiceResult<List<PagoResponse>>.NotFound();
+        }
+
+        if (soloClienteId.HasValue && venta.ClienteId != soloClienteId.Value)
+        {
+            return ServiceResult<List<PagoResponse>>.NotFound();
+        }
+
+        var pagos = await _context.Pagos
             .Include(p => p.MetodoPago)
             .Include(p => p.Usuario)
             .Where(p => p.VentaId == ventaId && p.Activo)
@@ -223,11 +236,28 @@ public class PagoService : IPagoService
                 p.Observaciones,
                 p.Activo))
             .ToListAsync();
+
+        return ServiceResult<List<PagoResponse>>.Success(pagos);
     }
 
-    public async Task<List<PagoResponse>> GetPagosByOrdenServicioIdAsync(Guid ordenServicioId)
+    public async Task<ServiceResult<List<PagoResponse>>> GetPagosByOrdenServicioIdAsync(Guid ordenServicioId, Guid? soloClienteId = null)
     {
-        return await _context.Pagos
+        var orden = await _context.OrdenesServicio
+            .Include(o => o.Vehiculo)
+            .FirstOrDefaultAsync(o => o.Id == ordenServicioId && o.Activo);
+
+        if (orden is null)
+        {
+            return ServiceResult<List<PagoResponse>>.NotFound();
+        }
+
+        var clienteAsociadoId = orden.ClienteId != Guid.Empty ? orden.ClienteId : orden.Vehiculo?.ClienteId;
+        if (soloClienteId.HasValue && clienteAsociadoId != soloClienteId.Value)
+        {
+            return ServiceResult<List<PagoResponse>>.NotFound();
+        }
+
+        var pagos = await _context.Pagos
             .Include(p => p.MetodoPago)
             .Include(p => p.Usuario)
             .Where(p => p.OrdenServicioId == ordenServicioId && p.Activo)
@@ -248,5 +278,7 @@ public class PagoService : IPagoService
                 p.Observaciones,
                 p.Activo))
             .ToListAsync();
+
+        return ServiceResult<List<PagoResponse>>.Success(pagos);
     }
 }

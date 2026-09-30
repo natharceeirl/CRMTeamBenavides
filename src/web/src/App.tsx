@@ -1,11 +1,12 @@
 import { Navigate, Route, Routes } from 'react-router'
 import { RutaProtegida } from './auth/RutaProtegida'
 import { RutaConPermiso } from './auth/RutaConPermiso'
-import { ACCESO_CHATBOT, ACCESO_ORDENES, PERMISOS } from './auth/acceso'
+import { ACCESO_CHATBOT, ACCESO_ORDENES, ACCESO_PORTAL, PERMISOS } from './auth/acceso'
 import { AppLayout } from './layout/AppLayout'
 import { LoginPage } from './pages/LoginPage'
 import { InicioPage } from './pages/InicioPage'
 import { SinAccesoPage } from './pages/SinAccesoPage'
+import { PortalClientePage } from './pages/PortalClientePage'
 import { OrdenesPage } from './pages/OrdenesPage'
 import { NuevaOrdenPage } from './pages/NuevaOrdenPage'
 import { OrdenDetallePage } from './pages/OrdenDetallePage'
@@ -27,6 +28,9 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route index element={<InicioPage />} />
           <Route path="sin-acceso" element={<SinAccesoPage />} />
+          <Route element={<RutaConPermiso {...ACCESO_PORTAL} />}>
+            <Route path="portal" element={<PortalClientePage />} />
+          </Route>
           <Route element={<RutaConPermiso {...ACCESO_ORDENES} />}>
             <Route path="ordenes" element={<OrdenesPage />} />
             <Route path="ordenes/:id" element={<OrdenDetallePage />} />

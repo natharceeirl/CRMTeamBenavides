@@ -15,8 +15,13 @@ public static class ClienteEndpoints
 
         group.MapGet("/", async (ClaimsPrincipal user, IClienteService service, ApplicationDbContext dbContext) =>
         {
-            var soloClienteId = await ResolverClienteRestringidoIdAsync(user, dbContext);
-            var clientes = await service.GetAllAsync(soloClienteId);
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+            if (isolation.DebeDenegarAcceso)
+            {
+                return Results.Ok(new List<ClienteResponse>());
+            }
+
+            var clientes = await service.GetAllAsync(isolation.SoloClienteId);
             return Results.Ok(clientes);
         })
         .RequireAuthorization(PermisosDefinidos.ClientesVer)
@@ -24,8 +29,13 @@ public static class ClienteEndpoints
 
         group.MapGet("/{id:guid}", async (Guid id, ClaimsPrincipal user, IClienteService service, ApplicationDbContext dbContext) =>
         {
-            var soloClienteId = await ResolverClienteRestringidoIdAsync(user, dbContext);
-            var result = await service.GetByIdAsync(id, soloClienteId);
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+            if (isolation.DebeDenegarAcceso)
+            {
+                return Results.NotFound();
+            }
+
+            var result = await service.GetByIdAsync(id, isolation.SoloClienteId);
             return result.IsSuccess ? Results.Ok(result.Data) : Results.NotFound();
         })
         .RequireAuthorization(PermisosDefinidos.ClientesVer)
@@ -70,30 +80,5 @@ public static class ClienteEndpoints
         })
         .RequireAuthorization(PermisosDefinidos.ClientesEliminar)
         .WithName("DeleteCliente");
-    }
-
-    private static async Task<Guid?> ResolverClienteRestringidoIdAsync(ClaimsPrincipal user, ApplicationDbContext dbContext)
-    {
-        var esCliente = user.IsInRole(RolesDefinidos.Cliente)
-            && !user.IsInRole(RolesDefinidos.GerenciaAdmin)
-            && !user.IsInRole(RolesDefinidos.Recepcion);
-
-        if (!esCliente)
-        {
-            return null;
-        }
-
-        var subClaim = user.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
-            ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-        if (Guid.TryParse(subClaim, out var usuarioId))
-        {
-            return await dbContext.Clientes
-                .Where(c => c.UsuarioId == usuarioId && c.Activo)
-                .Select(c => (Guid?)c.Id)
-                .FirstOrDefaultAsync();
-        }
-
-        return null;
     }
 }

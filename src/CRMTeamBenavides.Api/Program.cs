@@ -17,6 +17,7 @@ using CRMTeamBenavides.Api.Features.Vehiculos;
 using CRMTeamBenavides.Api.Features.Chatbot;
 using CRMTeamBenavides.Api.Features.Dashboard;
 using CRMTeamBenavides.Api.Features.Reportes;
+using CRMTeamBenavides.Api.Features.Portal;
 using CRMTeamBenavides.Api.Features.Ventas;
 using CRMTeamBenavides.Api.Features.Yamaha;
 using CRMTeamBenavides.Api.Services;
@@ -157,6 +158,7 @@ builder.Services.AddScoped<IChatbotService, ChatbotService>();
 builder.Services.AddScoped<IConfiguracionService, ConfiguracionService>();
 builder.Services.AddScoped<IServicioService, ServicioService>();
 builder.Services.AddScoped<ICajaChicaService, CajaChicaService>();
+builder.Services.AddScoped<IPortalService, PortalService>();
 
 // ---------------------------------------------------------------------------
 // Yamaha API — infraestructura del conector
@@ -239,5 +241,6 @@ app.MapConfiguracionEndpoints();
 app.MapServicioEndpoints();
 app.MapCajaChicaEndpoints();
 app.MapAuditoriaEndpoints();
+app.MapPortalEndpoints();
 
 app.Run();
