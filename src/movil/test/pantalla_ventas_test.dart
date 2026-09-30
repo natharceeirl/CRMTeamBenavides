@@ -12,6 +12,8 @@ VentaApi venta({
   String cliente = 'Luis Quispe',
   double total = 250,
   int items = 2,
+  double saldo = 0,
+  String estadoPago = EstadoPago.pagado,
 }) =>
     VentaApi(
       id: id,
@@ -23,6 +25,9 @@ VentaApi venta({
       total: total,
       cantidadItems: items,
       activo: true,
+      saldo: saldo,
+      totalPagado: total - saldo,
+      estadoPago: estadoPago,
     );
 
 Future<void> montar(WidgetTester tester, List<VentaApi> ventas) async {
@@ -36,6 +41,61 @@ Future<void> montar(WidgetTester tester, List<VentaApi> ventas) async {
 }
 
 void main() {
+  testWidgets('una venta confirmada con saldo muestra cuánto se debe', (tester) async {
+    await montar(tester, [
+      venta(
+        id: '22222222-0000-0000-0000-000000000009',
+        estadoId: EstadoVenta.confirmada,
+        total: 49.56,
+        saldo: 29.56,
+        estadoPago: EstadoPago.parcial,
+      ),
+    ]);
+
+    expect(find.text('Parcial'), findsOneWidget);
+    expect(find.text('Debe S/ 29.56'), findsOneWidget);
+  });
+
+  testWidgets('una cotización no se cobra: sin estado de pago ni saldo', (tester) async {
+    await montar(tester, [
+      venta(
+        id: '22222222-0000-0000-0000-000000000010',
+        estadoId: EstadoVenta.cotizacion,
+        saldo: 250,
+        estadoPago: EstadoPago.pendiente,
+      ),
+    ]);
+
+    expect(find.text('Pendiente'), findsNothing);
+    expect(find.textContaining('Debe'), findsNothing);
+  });
+
+  test('lee los pagos, el saldo y el importe con IGV del detalle', () {
+    final detalle = VentaDetalleApi.desdeJson({
+      'id': '22222222-0000-0000-0000-000000000011',
+      'clienteNombre': 'Luis Quispe',
+      'estadoId': EstadoVenta.confirmada,
+      'fecha': '2026-09-30T17:41:00Z',
+      'total': 49.56,
+      'montoIgv': 7.56,
+      'totalPagado': 20,
+      'saldo': 29.56,
+      'estadoPago': 'Parcial',
+      'detalles': [
+        {'id': 'd1', 'productoCodigo': null, 'productoNombre': 'Mano de obra', 'cantidad': 1, 'precioUnitario': 42, 'subtotal': 42, 'total': 49.56},
+      ],
+      'pagos': [
+        {'id': 'p1', 'monto': 20, 'metodoPagoNombre': 'Efectivo', 'fecha': '2026-09-30T17:40:00Z', 'esAnticipo': true},
+      ],
+    });
+
+    expect(detalle.venta.saldo, 29.56);
+    expect(detalle.venta.estadoPago, EstadoPago.parcial);
+    expect(detalle.detalles.single.productoCodigo, '');
+    expect(detalle.detalles.single.importe, 49.56);
+    expect(detalle.pagos.single.esAnticipo, isTrue);
+  });
+
   testWidgets('lista las ventas con su cliente, estado y total', (tester) async {
     await montar(tester, [
       venta(

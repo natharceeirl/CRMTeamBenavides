@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/permisos.dart';
 import '../auth/sesion.dart';
 import '../formato.dart';
 import '../tema.dart';
@@ -12,6 +13,7 @@ class PantallaTablero extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final resumen = ref.watch(resumenProvider);
+    final veCaja = ref.watch(sesionProvider).tienePermiso(Permisos.cajaConsultar);
 
     return resumen.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -20,7 +22,10 @@ class PantallaTablero extends ConsumerWidget {
         alReintentar: () => ref.invalidate(resumenProvider),
       ),
       data: (datos) => RefreshIndicator(
-        onRefresh: () async => ref.invalidate(resumenProvider),
+        onRefresh: () async {
+          ref.invalidate(resumenProvider);
+          if (veCaja) ref.invalidate(cajaActualProvider);
+        },
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -47,6 +52,10 @@ class PantallaTablero extends ConsumerWidget {
                 ),
               ],
             ),
+            if (veCaja) ...[
+              const SizedBox(height: 12),
+              const Row(children: [_IndicadorCaja()]),
+            ],
             const SizedBox(height: 24),
             const Text(
               'Resumen general',
@@ -75,6 +84,24 @@ class PantallaTablero extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+/// Saldo de la caja chica abierta. Aparte del resumen: si la caja falla, el
+/// tablero se sigue viendo.
+class _IndicadorCaja extends ConsumerWidget {
+  const _IndicadorCaja();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final caja = ref.watch(cajaActualProvider);
+
+    final valor = caja.when(
+      loading: () => '…',
+      error: (_, _) => 'Sin datos',
+      data: (datos) => datos.abierta ? soles(datos.saldo ?? 0) : 'Cerrada',
+    );
+    return _Indicador(etiqueta: 'Caja chica', valor: valor, compacto: true);
   }
 }
 

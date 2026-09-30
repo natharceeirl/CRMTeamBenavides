@@ -3,12 +3,15 @@ import { DeleteOutlined, PlusOutlined } from '@ant-design/icons'
 import { useClientes } from '../api/clientes'
 import { useProductos } from '../api/inventario'
 import { useCrearVenta } from '../api/ventas'
+import type { VentaDetalleResponse } from '../api/tipos'
 import { AvisoError } from './AvisoError'
 import { soles } from '../utils/formato'
 
 type Props = {
   abierto: boolean
   onCerrar: () => void
+  /** Recibe la venta creada, para abrirla y cobrarla. */
+  onCreada?: (venta: VentaDetalleResponse) => void
 }
 
 type Linea = {
@@ -22,7 +25,7 @@ type Campos = {
   detalles: Linea[]
 }
 
-export function ModalVenta({ abierto, onCerrar }: Readonly<Props>) {
+export function ModalVenta({ abierto, onCerrar, onCreada }: Readonly<Props>) {
   const [formulario] = Form.useForm<Campos>()
   const clientes = useClientes()
   const productos = useProductos()
@@ -30,7 +33,7 @@ export function ModalVenta({ abierto, onCerrar }: Readonly<Props>) {
 
   const lineas = Form.useWatch('detalles', formulario) ?? []
 
-  // Total solo informativo: el precio de verdad lo pone el backend desde el catálogo.
+  // Solo informativo: el precio de verdad y el IGV los pone el backend.
   const totalEstimado = lineas.reduce((suma, linea) => {
     const producto = (productos.data ?? []).find((item) => item.id === linea?.productoId)
     return suma + (producto ? producto.precioVenta * (linea?.cantidad ?? 0) : 0)
@@ -42,7 +45,7 @@ export function ModalVenta({ abierto, onCerrar }: Readonly<Props>) {
   }
 
   const enviar = async (campos: Campos) => {
-    await crear.mutateAsync({
+    const venta = await crear.mutateAsync({
       clienteId: campos.clienteId,
       ordenServicioId: null,
       esCotizacion: campos.esCotizacion,
@@ -53,6 +56,7 @@ export function ModalVenta({ abierto, onCerrar }: Readonly<Props>) {
     })
 
     cerrar()
+    onCreada?.(venta)
   }
 
   return (
@@ -145,7 +149,7 @@ export function ModalVenta({ abierto, onCerrar }: Readonly<Props>) {
 
         <div className="totales" style={{ marginTop: 16 }}>
           <div>
-            <div className="etiqueta">Total estimado</div>
+            <div className="etiqueta">Subtotal estimado, sin IGV</div>
             <div className="valor total">{soles(totalEstimado)}</div>
           </div>
         </div>

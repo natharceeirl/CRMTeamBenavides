@@ -96,7 +96,7 @@ class _PantallaOrdenesState extends ConsumerState<PantallaOrdenes> {
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                _EtiquetaEstado(estadoId: orden.estadoId),
+                                EtiquetaEstadoOrden(estadoId: orden.estadoId),
                                 const SizedBox(width: 8),
                                 Text(
                                   fechaHora(orden.fechaIngreso ?? orden.fechaApertura),
@@ -125,8 +125,8 @@ class _PantallaOrdenesState extends ConsumerState<PantallaOrdenes> {
   }
 }
 
-class _EtiquetaEstado extends StatelessWidget {
-  const _EtiquetaEstado({required this.estadoId});
+class EtiquetaEstadoOrden extends StatelessWidget {
+  const EtiquetaEstadoOrden({required this.estadoId, super.key});
 
   final int estadoId;
 

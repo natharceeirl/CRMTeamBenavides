@@ -113,6 +113,13 @@ h4 {
   padding: 0 24px;
 }
 
+.sidebar-tipo-cambio {
+  margin-top: 10px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--color-fondo) 72%, transparent);
+}
+
 .sidebar-nav {
   display: flex;
   flex-direction: column;

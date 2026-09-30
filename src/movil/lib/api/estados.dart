@@ -197,3 +197,73 @@ String nombreEstadoVenta(int estadoId) =>
 
 /// Una venta anulada ya no cuenta para caja ni para stock.
 bool esVentaVigente(int estadoId) => estadoId != EstadoVenta.anulada;
+
+/// Situación de un paso en el avance que ve el cliente.
+enum SituacionPaso { hecho, actual, pendiente }
+
+class PasoAvance {
+  const PasoAvance({
+    required this.titulo,
+    required this.situacion,
+    this.fecha,
+    this.estimada = false,
+  });
+
+  final String titulo;
+  final SituacionPaso situacion;
+  final DateTime? fecha;
+
+  /// La fecha es la entrega estimada, todavía no pasó.
+  final bool estimada;
+}
+
+/// Los estados de la orden contados como los entiende el cliente, en orden.
+const _pasosDelCliente = <int, String>{
+  EstadoOrden.abierta: 'Recibida',
+  EstadoOrden.diagnostico: 'Diagnóstico',
+  EstadoOrden.aprobada: 'Presupuesto aprobado',
+  EstadoOrden.enProceso: 'En reparación',
+  EstadoOrden.lista: 'Lista para recoger',
+  EstadoOrden.entregada: 'Entregada',
+};
+
+/// Avance de la orden para el cliente: cada paso con la última vez que la
+/// orden llegó a él. Si vuelve de «Lista» a «En proceso» (reingreso), «Lista»
+/// queda pendiente otra vez. La entrega estimada va en «Lista para recoger».
+List<PasoAvance> pasosDeAvance({
+  required int estadoId,
+  required List<({int estado, DateTime fecha})> cambios,
+  DateTime? fechaIngreso,
+  DateTime? fechaEstimadaEntrega,
+}) {
+  DateTime? ultimaVez(int estado) {
+    DateTime? fecha;
+    for (final cambio in cambios) {
+      if (cambio.estado == estado && (fecha == null || cambio.fecha.isAfter(fecha))) {
+        fecha = cambio.fecha;
+      }
+    }
+    return fecha;
+  }
+
+  return [
+    for (final paso in _pasosDelCliente.entries)
+      () {
+        final situacion = paso.key < estadoId
+            ? SituacionPaso.hecho
+            : paso.key == estadoId
+                ? SituacionPaso.actual
+                : SituacionPaso.pendiente;
+        final llego = situacion != SituacionPaso.pendiente;
+        final fecha = llego
+            ? (paso.key == EstadoOrden.abierta ? (fechaIngreso ?? ultimaVez(paso.key)) : ultimaVez(paso.key))
+            : (paso.key == EstadoOrden.lista ? fechaEstimadaEntrega : null);
+        return PasoAvance(
+          titulo: paso.value,
+          situacion: situacion,
+          fecha: fecha,
+          estimada: !llego && fecha != null,
+        );
+      }(),
+  ];
+}

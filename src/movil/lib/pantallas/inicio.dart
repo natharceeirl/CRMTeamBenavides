@@ -10,6 +10,7 @@ import 'clientes.dart';
 import 'comunes.dart';
 import 'tienda.dart';
 import 'ordenes.dart';
+import 'portal_cliente.dart';
 import 'tablero.dart';
 import 'unidades.dart';
 
@@ -33,6 +34,37 @@ class _Seccion {
 /// Solo las pestañas que el usuario puede ver. Así ninguna pide datos que la
 /// API le negaría con 403: el técnico, por ejemplo, no ve el tablero ni clientes.
 List<_Seccion> _seccionesPara(EstadoSesion sesion) {
+  // El cliente tiene su propia app: inicio con lo suyo, sus órdenes y sus
+  // comprobantes (docs/referencias/app-cliente.html).
+  if (sesion.soloCliente) {
+    return [
+      if (sesion.tienePermiso(Permisos.portalAcceso))
+        const _Seccion(
+          etiqueta: 'Inicio',
+          titulo: 'Inicio',
+          icono: Icons.home_outlined,
+          iconoActivo: Icons.home,
+          pantalla: PantallaInicioCliente(),
+        ),
+      if (sesion.tieneAlgunPermiso(Permisos.verOrdenes))
+        const _Seccion(
+          etiqueta: 'Órdenes',
+          titulo: 'Mis órdenes',
+          icono: Icons.build_outlined,
+          iconoActivo: Icons.build,
+          pantalla: PantallaOrdenes(),
+        ),
+      if (sesion.tienePermiso(Permisos.portalAcceso))
+        const _Seccion(
+          etiqueta: 'Documentos',
+          titulo: 'Documentos',
+          icono: Icons.receipt_long_outlined,
+          iconoActivo: Icons.receipt_long,
+          pantalla: PantallaDocumentos(),
+        ),
+    ];
+  }
+
   final soloAsignadas = !sesion.tienePermiso(Permisos.ordenesVerTodas);
 
   return [
@@ -52,8 +84,7 @@ List<_Seccion> _seccionesPara(EstadoSesion sesion) {
         iconoActivo: Icons.build,
         pantalla: const PantallaOrdenes(),
       ),
-    if (!sesion.soloCliente &&
-        sesion.tieneAlgunPermiso([Permisos.inventarioVer, Permisos.ventasVer]))
+    if (sesion.tieneAlgunPermiso([Permisos.inventarioVer, Permisos.ventasVer]))
       const _Seccion(
         etiqueta: 'Tienda',
         titulo: 'Tienda',
@@ -61,7 +92,7 @@ List<_Seccion> _seccionesPara(EstadoSesion sesion) {
         iconoActivo: Icons.storefront,
         pantalla: PantallaTienda(),
       ),
-    if (!sesion.soloCliente && sesion.tienePermiso(Permisos.clientesVer))
+    if (sesion.tienePermiso(Permisos.clientesVer))
       const _Seccion(
         etiqueta: 'Clientes',
         titulo: 'Clientes',
@@ -72,7 +103,7 @@ List<_Seccion> _seccionesPara(EstadoSesion sesion) {
     if (sesion.tienePermiso(Permisos.unidadesVer))
       _Seccion(
         etiqueta: 'Unidades',
-        titulo: sesion.soloCliente ? 'Mis unidades' : 'Unidades',
+        titulo: 'Unidades',
         icono: Icons.two_wheeler_outlined,
         iconoActivo: Icons.two_wheeler,
         pantalla: const PantallaUnidades(),

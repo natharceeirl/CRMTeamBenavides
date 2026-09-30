@@ -47,6 +47,8 @@ export const PERMISOS = {
   cajaConsultar: 'caja.consultar',
   cajaRegistrarIngreso: 'caja.registrar_ingreso',
   cajaRegistrarEgreso: 'caja.registrar_egreso',
+  cajaAperturar: 'caja.aperturar',
+  cajaCerrar: 'caja.cerrar',
   reportesVerOperativos: 'reportes.ver_operativos',
   reportesVerFinancieros: 'reportes.ver_financieros',
   configuracionEditar: 'configuracion.editar',
@@ -74,18 +76,20 @@ export function esSoloCliente(sesion: SesionAcceso): boolean {
   return sesion.roles.includes('Cliente') && !sesion.roles.some((rol) => ROLES_PERSONAL.includes(rol))
 }
 
+const esPantallaDePortal = (acceso: Acceso) =>
+  acceso.permiso === PERMISOS.portalAcceso || (acceso.permisos?.includes(PERMISOS.portalAcceso) ?? false)
+
 export function cumpleAcceso(acceso: Acceso, sesion: SesionAcceso): boolean {
-  if (sesion.esGerencia) return true
+  // El portal es la vista del cliente. El personal no la usa, ni siquiera
+  // Gerencia, que tiene todos los permisos.
+  if (esPantallaDePortal(acceso)) {
+    return esSoloCliente(sesion) && sesion.tienePermiso(PERMISOS.portalAcceso)
+  }
 
   // Un cliente solo puede ingresar al Portal del Cliente; nunca a pantallas operativas o administrativas del taller
-  if (esSoloCliente(sesion)) {
-    return acceso.permiso === PERMISOS.portalAcceso || (acceso.permisos?.includes(PERMISOS.portalAcceso) ?? false)
-  }
+  if (esSoloCliente(sesion)) return false
 
-  // Las pantallas de portal no se muestran en el menú del personal operativo si no tienen portal.acceso
-  if (acceso.permiso === PERMISOS.portalAcceso) {
-    return sesion.tienePermiso(PERMISOS.portalAcceso)
-  }
+  if (sesion.esGerencia) return true
 
   if (acceso.roles && !acceso.roles.some((rol) => sesion.roles.includes(rol))) return false
   if (acceso.permiso && !sesion.tienePermiso(acceso.permiso)) return false
@@ -121,9 +125,11 @@ export const enlaces: EnlaceMenu[] = [
   { ruta: '/unidades', texto: 'Unidades', permiso: PERMISOS.unidadesVer },
   { ruta: '/repuestos', texto: 'Repuestos', permiso: PERMISOS.inventarioVer },
   { ruta: '/ventas', texto: 'Ventas', permiso: PERMISOS.ventasVer },
+  { ruta: '/caja', texto: 'Caja chica', permiso: PERMISOS.cajaConsultar },
   { ruta: '/reportes', texto: 'Reportes', permiso: PERMISOS.reportesVerOperativos },
   { ruta: '/chatbot', texto: 'Chatbot', ...ACCESO_CHATBOT },
   { ruta: '/usuarios', texto: 'Usuarios', permiso: PERMISOS.usuariosVer },
+  { ruta: '/auditoria', texto: 'Auditoría', permiso: PERMISOS.auditoriaVer },
   { ruta: '/configuracion', texto: 'Configuración', permiso: PERMISOS.configuracionEditar },
 ]
 

@@ -72,6 +72,16 @@ Future<void> montarInicio(
         ventasProvider.overrideWith((ref) => []),
         clientesProvider.overrideWith((ref) => []),
         vehiculosProvider(null).overrideWith((ref) => []),
+        portalResumenProvider.overrideWith(
+          (ref) => const PortalResumenApi(
+            clienteNombre: 'Luis Quispe',
+            unidades: 0,
+            ordenesActivas: 0,
+            presupuestosPendientes: 0,
+            saldoPendiente: 0,
+          ),
+        ),
+        portalComprobantesProvider.overrideWith((ref) => []),
       ],
       child: const MaterialApp(home: PantallaInicio()),
     ),
@@ -136,13 +146,15 @@ void main() {
         findsOneWidget);
   });
 
-  testWidgets('el cliente solo ve sus órdenes y sus unidades', (tester) async {
+  testWidgets('el cliente tiene su app: inicio, sus órdenes y sus documentos', (tester) async {
     await montarInicio(tester, sesion: SesionCliente.new);
 
     final barra = find.byType(NavigationBar);
-    expect(tester.widget<NavigationBar>(barra).destinations, hasLength(2));
-    expect(find.descendant(of: barra, matching: find.text('Órdenes')), findsOneWidget);
-    expect(find.descendant(of: barra, matching: find.text('Unidades')), findsOneWidget);
+    expect(tester.widget<NavigationBar>(barra).destinations, hasLength(3));
+    for (final destino in ['Inicio', 'Órdenes', 'Documentos']) {
+      expect(find.descendant(of: barra, matching: find.text(destino)), findsOneWidget);
+    }
+    expect(find.text('Hola, Luis'), findsOneWidget);
     expect(find.descendant(of: barra, matching: find.text('Clientes')), findsNothing);
     expect(find.descendant(of: barra, matching: find.text('Tienda')), findsNothing);
   });

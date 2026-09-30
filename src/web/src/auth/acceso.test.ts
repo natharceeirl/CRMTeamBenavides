@@ -57,6 +57,20 @@ describe('cumpleAcceso', () => {
     expect(cumpleAcceso(configuracion, tecnico)).toBe(false)
   })
 
+  it('la caja chica se ve con caja.consultar', () => {
+    const caja = enlaces.find((enlace) => enlace.ruta === '/caja')!
+    expect(cumpleAcceso(caja, sesionCon(['Gerencia/Admin'], []))).toBe(true)
+    expect(cumpleAcceso(caja, sesionCon(['Recepcion'], [PERMISOS.cajaConsultar]))).toBe(true)
+    expect(cumpleAcceso(caja, tecnico)).toBe(false)
+  })
+
+  it('el portal es solo del cliente: Gerencia no lo ve aunque tenga todos los permisos', () => {
+    expect(cumpleAcceso(ACCESO_PORTAL, sesionCon(['Gerencia/Admin'], []))).toBe(false)
+    expect(cumpleAcceso(ACCESO_PORTAL, vendedor)).toBe(false)
+    const portal = enlaces.find((enlace) => enlace.ruta === '/portal')!
+    expect(cumpleAcceso(portal, sesionCon(['Gerencia/Admin'], []))).toBe(false)
+  })
+
   it('cliente solo puede entrar al portal y no a pantallas de taller', () => {
     const cliente = sesionCon(['Cliente'], [PERMISOS.portalAcceso, PERMISOS.clientesVer, PERMISOS.unidadesVer, PERMISOS.ordenesVerAsignadas])
     expect(cumpleAcceso(ACCESO_PORTAL, cliente)).toBe(true)

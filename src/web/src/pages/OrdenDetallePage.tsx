@@ -13,6 +13,11 @@ import { PanelAprobaciones } from '../components/PanelAprobaciones'
 import { ModalFotosOrden } from '../components/ModalFotosOrden'
 import { ModalFormatoAtencion } from '../components/ModalFormatoAtencion'
 import { ModalYamahaMock } from '../components/ModalYamahaMock'
+import { ModalRegistrarPago } from '../components/ModalRegistrarPago'
+import { ModalDetalleVenta } from '../components/ModalDetalleVenta'
+import { ResumenCobro } from '../components/ResumenCobro'
+import { tieneSaldo, useRegistrarPagoOrden } from '../api/pagos'
+import { useCrearVenta } from '../api/ventas'
 import {
   ESTADO,
   MODALIDADES_ATENCION,
@@ -56,6 +61,9 @@ export function OrdenDetallePage() {
   const puedeQuitarItems = tienePermiso(PERMISOS.ordenesEditar)
   const puedeEditarOrden = tienePermiso(PERMISOS.ordenesEditar)
   const puedeAsignar = tienePermiso(PERMISOS.ordenesAsignarTecnico)
+  const puedeCobrar = tienePermiso(PERMISOS.ventasCrear)
+  // El técnico no ve pagos: la sección es de quien vende o consulta ventas.
+  const veCobro = sesion.tieneAlgunPermiso([PERMISOS.ventasVer, PERMISOS.ventasCrear])
   // El backend trata como técnico a quien lo es sin ser también Gerencia o Recepción.
   const soloTecnico = sesion.esTecnico && !sesion.esGerencia && !sesion.esRecepcion
 
@@ -76,6 +84,11 @@ export function OrdenDetallePage() {
   const [modalFotos, setModalFotos] = useState(false)
   const [modalFormato, setModalFormato] = useState(false)
   const [modalYamaha, setModalYamaha] = useState(false)
+  const [modalAdelanto, setModalAdelanto] = useState(false)
+  const [ventaAbierta, setVentaAbierta] = useState<string | null>(null)
+
+  const registrarAdelanto = useRegistrarPagoOrden()
+  const liquidar = useCrearVenta()
 
   if (orden.isPending) {
     return (
@@ -111,6 +124,27 @@ export function OrdenDetallePage() {
   const historial = [...(datos.historial ?? [])].sort(porFecha)
   const anulando = estadoDestino === ESTADO.cancelada
   const bloqueoAprobacion = motivoBloqueoAprobacion(datos)
+
+  // Cobro: los adelantos se registran en la orden; al liquidarla nace la venta,
+  // que se queda con esos adelantos y recibe el saldo y el comprobante.
+  const sinVenta = !datos.ventaId
+  const puedeAdelantar =
+    puedeCobrar && sinVenta && datos.estadoId !== ESTADO.cancelada && tieneSaldo({ total: datos.total, saldo: datos.saldo ?? datos.total })
+  const puedeLiquidar =
+    puedeCobrar &&
+    sinVenta &&
+    (datos.estadoId === ESTADO.lista || datos.estadoId === ESTADO.entregada) &&
+    datos.detalles.length > 0
+
+  const liquidarOrden = async () => {
+    const venta = await liquidar.mutateAsync({
+      clienteId: datos.clienteId,
+      ordenServicioId: datos.id,
+      detalles: null,
+      esCotizacion: false,
+    })
+    setVentaAbierta(venta.id)
+  }
 
   // Pocas columnas para que la tabla quepa junto a la columna lateral en una
   // laptop de 1366 px: tipo, código y afectación van bajo el concepto, y el
@@ -261,7 +295,7 @@ export function OrdenDetallePage() {
       </header>
 
       <div className="pagina">
-        <AvisoError error={eliminarDetalle.error ?? guardarDiagnostico.error} />
+        <AvisoError error={eliminarDetalle.error ?? guardarDiagnostico.error ?? liquidar.error} />
 
         <Indicadores
           tamano="mediano"
@@ -332,6 +366,48 @@ export function OrdenDetallePage() {
               <p className="texto-secundario" style={{ marginTop: 16 }}>
                 La orden está en «{nombresEstado[datos.estadoId]}» y ya no admite cambios en los ítems.
               </p>
+            )}
+
+            {veCobro && (
+              <>
+                <div className="seccion-titulo" style={{ marginTop: 36 }}>
+                  <h2>Cobro</h2>
+                  <div className="acciones">
+                    {puedeAdelantar && <Button onClick={() => setModalAdelanto(true)}>Registrar adelanto</Button>}
+                    {puedeLiquidar && (
+                      <Popconfirm
+                        title="Liquidar la orden"
+                        description="Se genera la venta con los ítems y los adelantos de la orden. Los repuestos no se vuelven a descontar del stock."
+                        okText="Liquidar"
+                        cancelText="Cancelar"
+                        onConfirm={liquidarOrden}
+                      >
+                        <Button type="primary" loading={liquidar.isPending}>
+                          Liquidar y generar comprobante
+                        </Button>
+                      </Popconfirm>
+                    )}
+                    {datos.ventaId && (
+                      <Button onClick={() => setVentaAbierta(datos.ventaId ?? null)}>Ver venta y comprobante</Button>
+                    )}
+                  </div>
+                </div>
+                <ResumenCobro
+                  total={datos.total}
+                  totalPagado={datos.totalPagado ?? 0}
+                  saldo={datos.saldo ?? datos.total}
+                  estadoPago={datos.estadoPago}
+                  pagos={datos.pagos ?? []}
+                />
+                {datos.comprobanteSerieNumero && (
+                  <p style={{ marginTop: 12 }}>Comprobante: {datos.comprobanteSerieNumero}</p>
+                )}
+                {!datos.ventaId && puedeCobrar && !puedeLiquidar && datos.estadoId !== ESTADO.cancelada && (
+                  <p className="texto-secundario" style={{ marginTop: 12 }}>
+                    La orden se liquida cuando está «Lista» o «Entregada». Mientras tanto se pueden registrar adelantos.
+                  </p>
+                )}
+              </>
             )}
           </section>
 
@@ -536,6 +612,22 @@ export function OrdenDetallePage() {
           Queda en el historial de la orden con tu usuario y la hora.
         </p>
       </Modal>
+
+      <ModalRegistrarPago
+        abierto={modalAdelanto}
+        titulo="Registrar adelanto"
+        saldo={datos.saldo ?? datos.total}
+        esAnticipo
+        guardando={registrarAdelanto.isPending}
+        error={registrarAdelanto.error}
+        onRegistrar={(pago) => registrarAdelanto.mutateAsync({ ordenId: datos.id, datos: pago })}
+        onCerrar={() => {
+          registrarAdelanto.reset()
+          setModalAdelanto(false)
+        }}
+      />
+
+      <ModalDetalleVenta abierto={ventaAbierta !== null} ventaId={ventaAbierta} onCerrar={() => setVentaAbierta(null)} />
 
       <ModalFotosOrden
         abierto={modalFotos}

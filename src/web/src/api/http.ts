@@ -92,10 +92,13 @@ async function interpretar<T>(respuesta: Response): Promise<T> {
 }
 
 function mensajeDeError(estado: number, datos: unknown): string {
-  if (datos && typeof datos === 'object' && 'error' in datos) {
-    const detalle = (datos as { error?: unknown }).error
-    if (typeof detalle === 'string' && detalle.length > 0) {
-      return detalle
+  // La mayoría de endpoints responde { error }; caja chica y configuración, { mensaje }.
+  if (datos && typeof datos === 'object') {
+    for (const clave of ['error', 'mensaje'] as const) {
+      const detalle = (datos as Record<string, unknown>)[clave]
+      if (typeof detalle === 'string' && detalle.length > 0) {
+        return detalle
+      }
     }
   }
 
@@ -145,6 +148,38 @@ export async function solicitar<T>(ruta: string, opciones: Opciones = {}): Promi
   }
 
   return await interpretar<T>(await enviar(ruta, opciones))
+}
+
+/**
+ * Igual que `solicitar`, pero devuelve el cuerpo como texto: sirve para las
+ * vistas de impresión que la API arma en HTML y que exigen el token.
+ */
+export async function solicitarTexto(ruta: string): Promise<string> {
+  if (sesion && venció(sesion.accessTokenExpiration)) {
+    await renovarSesion()
+  }
+
+  let respuesta = await enviar(ruta, {})
+  if (respuesta.status === 401 && sesion) {
+    const renovada = await renovarSesion()
+    if (!renovada) {
+      guardarSesion(null)
+      throw new ErrorApi(401, 'La sesión expiró. Vuelve a iniciar sesión.')
+    }
+    respuesta = await enviar(ruta, {})
+  }
+
+  const texto = await respuesta.text()
+  if (!respuesta.ok) {
+    let datos: unknown = null
+    try {
+      datos = JSON.parse(texto)
+    } catch {
+      // El error vino como texto plano.
+    }
+    throw new ErrorApi(respuesta.status, mensajeDeError(respuesta.status, datos))
+  }
+  return texto
 }
 
 export async function solicitarFormData<T>(

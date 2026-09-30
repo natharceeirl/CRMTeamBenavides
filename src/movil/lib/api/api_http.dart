@@ -267,6 +267,26 @@ class ApiHttp {
     return VentaDetalleApi.desdeJson(datos);
   }
 
+  Future<PortalResumenApi> portalResumen() async {
+    final datos = await _pedir<Map<String, dynamic>>('/api/portal/resumen');
+    return PortalResumenApi.desdeJson(datos);
+  }
+
+  Future<List<ComprobantePortalApi>> portalComprobantes() async {
+    final datos = await _lista('/api/portal/comprobantes');
+    return datos.map(ComprobantePortalApi.desdeJson).toList();
+  }
+
+  Future<List<AtencionServicioApi>> historialServicio(String vehiculoId) async {
+    final datos = await _lista('/api/vehiculos/$vehiculoId/historial-servicio');
+    return datos.map(AtencionServicioApi.desdeJson).toList();
+  }
+
+  Future<CajaActualApi> cajaActual() async {
+    final datos = await _pedir<Map<String, dynamic>>('/api/caja-chica/actual');
+    return CajaActualApi.desdeJson(datos);
+  }
+
   Future<ResumenDashboardApi> resumenDashboard() async {
     final datos = await _pedir<Map<String, dynamic>>('/api/dashboard/resumen');
     return ResumenDashboardApi.desdeJson(datos);

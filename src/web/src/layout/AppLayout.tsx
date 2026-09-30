@@ -5,12 +5,17 @@ import { ChatbotWidget } from '../components/ChatbotWidget'
 import { ModalCambiarPassword } from '../components/ModalCambiarPassword'
 import { useSesion } from '../auth/sesion'
 import { cumpleAcceso, enlaces } from '../auth/acceso'
+import { useTipoCambio } from '../api/configuracion'
+import { resumenTipoCambio } from '../utils/tipoCambio'
 
 export function AppLayout() {
   const sesion = useSesion()
   const { usuario, roles, salir } = sesion
   const navigate = useNavigate()
   const [cambiarPassword, setCambiarPassword] = useState(false)
+  // El tipo de cambio es del personal: el cliente en su portal no lo necesita.
+  const tipoCambio = useTipoCambio(sesion.esPersonal)
+  const textoTipoCambio = sesion.esPersonal ? resumenTipoCambio(tipoCambio.data) : null
 
   const cerrar = () => {
     salir()
@@ -25,6 +30,11 @@ export function AppLayout() {
       <aside className="sidebar">
         <div className="sidebar-logo">
           <Logo variante="oscuro" alto={26} />
+          {textoTipoCambio && (
+            <div className="sidebar-tipo-cambio" title="Tipo de cambio de venta registrado en Configuración">
+              {textoTipoCambio}
+            </div>
+          )}
         </div>
         <nav className="sidebar-nav" aria-label="Menú principal">
           {enlacesVisibles.map((enlace) => (

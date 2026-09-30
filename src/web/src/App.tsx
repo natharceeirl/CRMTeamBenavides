@@ -18,6 +18,8 @@ import { VentasPage } from './pages/VentasPage'
 import { ReportesPage } from './pages/ReportesPage'
 import { UsuariosPage } from './pages/UsuariosPage'
 import { ChatbotPage } from './pages/ChatbotPage'
+import { AuditoriaPage } from './pages/AuditoriaPage'
+import { CajaPage } from './pages/CajaPage'
 import { ConfiguracionPage } from './pages/ConfiguracionPage'
 
 export default function App() {
@@ -59,6 +61,12 @@ export default function App() {
           </Route>
           <Route element={<RutaConPermiso permiso={PERMISOS.usuariosVer} />}>
             <Route path="usuarios" element={<UsuariosPage />} />
+          </Route>
+          <Route element={<RutaConPermiso permiso={PERMISOS.cajaConsultar} />}>
+            <Route path="caja" element={<CajaPage />} />
+          </Route>
+          <Route element={<RutaConPermiso permiso={PERMISOS.auditoriaVer} />}>
+            <Route path="auditoria" element={<AuditoriaPage />} />
           </Route>
           <Route element={<RutaConPermiso permiso={PERMISOS.configuracionEditar} />}>
             <Route path="configuracion" element={<ConfiguracionPage />} />

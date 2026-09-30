@@ -153,6 +153,23 @@ final resumenProvider = FutureProvider.autoDispose<ResumenDashboardApi>(
   (ref) => ref.watch(apiProvider).resumenDashboard(),
 );
 
+final portalResumenProvider = FutureProvider.autoDispose<PortalResumenApi>(
+  (ref) => ref.watch(apiProvider).portalResumen(),
+);
+
+final portalComprobantesProvider = FutureProvider.autoDispose<List<ComprobantePortalApi>>(
+  (ref) => ref.watch(apiProvider).portalComprobantes(),
+);
+
+final historialServicioProvider =
+    FutureProvider.autoDispose.family<List<AtencionServicioApi>, String>(
+  (ref, vehiculoId) => ref.watch(apiProvider).historialServicio(vehiculoId),
+);
+
+final cajaActualProvider = FutureProvider.autoDispose<CajaActualApi>(
+  (ref) => ref.watch(apiProvider).cajaActual(),
+);
+
 final faqsProvider = FutureProvider.autoDispose<List<FaqApi>>(
   (ref) => ref.watch(apiProvider).faqs(),
 );

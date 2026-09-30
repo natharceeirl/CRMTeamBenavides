@@ -269,6 +269,9 @@ class OrdenServicioApi {
     this.fechaAprobacionGerencia,
     this.usuarioAprobacionGerencia,
     this.observacionesGerencia,
+    this.totalPagado = 0,
+    this.saldo,
+    this.estadoPago = EstadoPago.pendiente,
   });
 
   factory OrdenServicioApi.desdeJson(Map<String, dynamic> json) => OrdenServicioApi(
@@ -311,6 +314,9 @@ class OrdenServicioApi {
         fechaAprobacionGerencia: _fecha(json['fechaAprobacionGerencia']),
         usuarioAprobacionGerencia: json['usuarioAprobacionGerenciaNombre'] as String?,
         observacionesGerencia: json['observacionesAprobacionGerencia'] as String?,
+        totalPagado: (json['totalPagado'] as num? ?? 0).toDouble(),
+        saldo: (json['saldo'] as num?)?.toDouble(),
+        estadoPago: json['estadoPago'] as String? ?? EstadoPago.pendiente,
       );
 
   final String id;
@@ -352,6 +358,13 @@ class OrdenServicioApi {
   final DateTime? fechaAprobacionGerencia;
   final String? usuarioAprobacionGerencia;
   final String? observacionesGerencia;
+
+  /// Adelantos y pagos, también los de la venta que liquidó la orden.
+  final double totalPagado;
+
+  /// Null en respuestas que no lo traen: se toma como el total.
+  final double? saldo;
+  final String estadoPago;
 
   String get unidad => '$vehiculoMarca $vehiculoModelo';
 
@@ -775,6 +788,11 @@ class VentaApi {
     required this.cantidadItems,
     required this.activo,
     this.ordenServicioId,
+    this.subtotalGravado = 0,
+    this.montoIgv = 0,
+    this.totalPagado = 0,
+    this.saldo = 0,
+    this.estadoPago = EstadoPago.pendiente,
   });
 
   factory VentaApi.desdeJson(Map<String, dynamic> json) => VentaApi(
@@ -788,6 +806,11 @@ class VentaApi {
         total: (json['total'] as num? ?? 0).toDouble(),
         cantidadItems: json['cantidadItems'] as int? ?? 0,
         activo: json['activo'] as bool? ?? true,
+        subtotalGravado: (json['subtotalGravado'] as num? ?? 0).toDouble(),
+        montoIgv: (json['montoIgv'] as num? ?? 0).toDouble(),
+        totalPagado: (json['totalPagado'] as num? ?? 0).toDouble(),
+        saldo: (json['saldo'] as num? ?? 0).toDouble(),
+        estadoPago: json['estadoPago'] as String? ?? EstadoPago.pendiente,
       );
 
   final String id;
@@ -800,6 +823,16 @@ class VentaApi {
   final double total;
   final int cantidadItems;
   final bool activo;
+  final double subtotalGravado;
+  final double montoIgv;
+
+  /// Lo pagado y el saldo los calcula el backend, con los adelantos de la
+  /// orden si la venta la liquidó.
+  final double totalPagado;
+  final double saldo;
+
+  /// Pendiente, Parcial o Pagado.
+  final String estadoPago;
 
   /// La API no da correlativo todavía: se usa el inicio del id, como en órdenes.
   String get referencia => '#${id.substring(0, 8).toUpperCase()}';
@@ -815,15 +848,18 @@ class DetalleVentaApi {
     required this.cantidad,
     required this.precioUnitario,
     required this.subtotal,
+    this.total,
   });
 
   factory DetalleVentaApi.desdeJson(Map<String, dynamic> json) => DetalleVentaApi(
         id: json['id'] as String,
+        // Los servicios y la mano de obra de una orden no tienen código.
         productoCodigo: json['productoCodigo'] as String? ?? '',
         productoNombre: json['productoNombre'] as String? ?? '',
         cantidad: json['cantidad'] as int? ?? 0,
         precioUnitario: (json['precioUnitario'] as num? ?? 0).toDouble(),
         subtotal: (json['subtotal'] as num? ?? 0).toDouble(),
+        total: (json['total'] as num?)?.toDouble(),
       );
 
   final String id;
@@ -832,6 +868,47 @@ class DetalleVentaApi {
   final int cantidad;
   final double precioUnitario;
   final double subtotal;
+
+  /// Con IGV. Las ventas anteriores al IGV no lo traen.
+  final double? total;
+
+  double get importe => total ?? subtotal;
+}
+
+/// Estado de pago que calcula el backend a partir de lo pagado y el saldo.
+class EstadoPago {
+  const EstadoPago._();
+
+  static const pendiente = 'Pendiente';
+  static const parcial = 'Parcial';
+  static const pagado = 'Pagado';
+}
+
+class PagoApi {
+  const PagoApi({
+    required this.id,
+    required this.monto,
+    required this.metodoPagoNombre,
+    required this.fecha,
+    required this.esAnticipo,
+    this.referencia,
+  });
+
+  factory PagoApi.desdeJson(Map<String, dynamic> json) => PagoApi(
+        id: json['id'] as String,
+        monto: (json['monto'] as num? ?? 0).toDouble(),
+        metodoPagoNombre: json['metodoPagoNombre'] as String? ?? '',
+        fecha: DateTime.parse(json['fecha'] as String),
+        esAnticipo: json['esAnticipo'] as bool? ?? false,
+        referencia: json['referencia'] as String?,
+      );
+
+  final String id;
+  final double monto;
+  final String metodoPagoNombre;
+  final DateTime fecha;
+  final bool esAnticipo;
+  final String? referencia;
 }
 
 class ComprobanteApi {
@@ -871,6 +948,7 @@ class VentaDetalleApi {
     this.clienteDocumento,
     this.clienteTelefono,
     this.comprobante,
+    this.pagos = const [],
   });
 
   factory VentaDetalleApi.desdeJson(Map<String, dynamic> json) {
@@ -889,6 +967,9 @@ class VentaDetalleApi {
           .toList(),
       comprobante:
           comprobante == null ? null : ComprobanteApi.desdeJson(comprobante),
+      pagos: (json['pagos'] as List<dynamic>? ?? const [])
+          .map((pago) => PagoApi.desdeJson(pago as Map<String, dynamic>))
+          .toList(),
     );
   }
 
@@ -897,4 +978,127 @@ class VentaDetalleApi {
   final String? clienteTelefono;
   final List<DetalleVentaApi> detalles;
   final ComprobanteApi? comprobante;
+  final List<PagoApi> pagos;
+}
+
+/// GET /api/caja-chica/actual: si hay una caja abierta y su saldo.
+class CajaActualApi {
+  const CajaActualApi({required this.abierta, this.saldo, this.fechaApertura});
+
+  factory CajaActualApi.desdeJson(Map<String, dynamic> json) {
+    final caja = json['caja'] as Map<String, dynamic>?;
+    return CajaActualApi(
+      abierta: (json['tieneCajaAbierta'] as bool? ?? false) && caja != null,
+      saldo: (caja?['saldoCalculado'] as num?)?.toDouble(),
+      fechaApertura: caja == null ? null : DateTime.parse(caja['fechaApertura'] as String),
+    );
+  }
+
+  final bool abierta;
+  final double? saldo;
+  final DateTime? fechaApertura;
+}
+
+/// GET /api/portal/resumen: lo que el cliente ve al entrar.
+class PortalResumenApi {
+  const PortalResumenApi({
+    required this.clienteNombre,
+    required this.unidades,
+    required this.ordenesActivas,
+    required this.presupuestosPendientes,
+    required this.saldoPendiente,
+  });
+
+  factory PortalResumenApi.desdeJson(Map<String, dynamic> json) => PortalResumenApi(
+        clienteNombre: json['clienteNombre'] as String? ?? '',
+        unidades: json['cantidadUnidades'] as int? ?? 0,
+        ordenesActivas: json['cantidadOrdenesActivas'] as int? ?? 0,
+        presupuestosPendientes: json['cantidadPresupuestosPendientes'] as int? ?? 0,
+        saldoPendiente: (json['saldoPendienteTotal'] as num? ?? 0).toDouble(),
+      );
+
+  final String clienteNombre;
+  final int unidades;
+  final int ordenesActivas;
+  final int presupuestosPendientes;
+  final double saldoPendiente;
+}
+
+/// GET /api/portal/comprobantes: los comprobantes del cliente.
+class ComprobantePortalApi {
+  const ComprobantePortalApi({
+    required this.id,
+    required this.tipo,
+    required this.fecha,
+    required this.total,
+    required this.estado,
+    this.serie,
+    this.numero,
+    this.numeroOrden,
+    this.metodoPago,
+  });
+
+  factory ComprobantePortalApi.desdeJson(Map<String, dynamic> json) => ComprobantePortalApi(
+        id: json['id'] as String,
+        tipo: json['tipo'] as String? ?? '',
+        serie: json['serie'] as String?,
+        numero: json['numero'] as String?,
+        fecha: DateTime.parse(json['fecha'] as String),
+        total: (json['total'] as num? ?? 0).toDouble(),
+        estado: json['estado'] as String? ?? '',
+        numeroOrden: json['numeroOrden'] as String?,
+        metodoPago: json['metodoPagoPrincipal'] as String?,
+      );
+
+  final String id;
+  final String tipo;
+  final String? serie;
+  final String? numero;
+  final DateTime fecha;
+  final double total;
+  final String estado;
+  final String? numeroOrden;
+  final String? metodoPago;
+
+  /// «Boleta B001-000001», o solo el tipo si no tiene serie ni número.
+  String get referencia {
+    final partes = [serie, numero].whereType<String>().where((p) => p.isNotEmpty);
+    return partes.isEmpty ? tipo : '$tipo ${partes.join('-')}';
+  }
+
+  bool get anulado => estado == 'Anulado';
+}
+
+/// GET /api/vehiculos/{id}/historial-servicio: una atención pasada de la unidad.
+class AtencionServicioApi {
+  const AtencionServicioApi({
+    required this.ordenId,
+    required this.fechaIngreso,
+    required this.estadoId,
+    required this.total,
+    required this.trabajos,
+    this.numeroOrden,
+    this.motivoFalla,
+  });
+
+  factory AtencionServicioApi.desdeJson(Map<String, dynamic> json) => AtencionServicioApi(
+        ordenId: json['ordenServicioId'] as String,
+        numeroOrden: json['numeroOrden'] as String?,
+        fechaIngreso: DateTime.parse(json['fechaIngreso'] as String),
+        estadoId: json['estadoId'] as int? ?? 0,
+        motivoFalla: json['motivoFalla'] as String?,
+        total: (json['total'] as num? ?? 0).toDouble(),
+        trabajos: (json['items'] as List<dynamic>? ?? const [])
+            .map((item) => (item as Map<String, dynamic>)['descripcion'] as String? ?? '')
+            .where((descripcion) => descripcion.isNotEmpty)
+            .toList(),
+      );
+
+  final String ordenId;
+  final String? numeroOrden;
+  final DateTime fechaIngreso;
+  final int estadoId;
+  final String? motivoFalla;
+  final double total;
+  final List<String> trabajos;
 }

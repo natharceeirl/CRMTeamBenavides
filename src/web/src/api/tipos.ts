@@ -195,14 +195,28 @@ export type ActualizarServicioRequest = {
 export type ConfiguracionEmpresaResponse = {
   id: string
   nombreEmpresa: string
+  razonSocial: string | null
   ruc: string | null
+  direccion: string | null
+  telefono: string | null
+  email: string | null
   porcentajeIgv: number
+  monedaBase: string
+  tipoCambioVigente: number | null
+  fechaActualizacionTipoCambio: string | null
 }
 
+/** Lo que no se manda (o va en null) queda como estaba. */
 export type ActualizarConfiguracionEmpresaRequest = {
-  nombreEmpresa: string
-  ruc: string | null
-  porcentajeIgv: number
+  nombreEmpresa?: string | null
+  razonSocial?: string | null
+  ruc?: string | null
+  direccion?: string | null
+  telefono?: string | null
+  email?: string | null
+  porcentajeIgv?: number | null
+  monedaBase?: string | null
+  tipoCambioVigente?: number | null
 }
 
 export type DetalleServicioResponse = {
@@ -279,6 +293,11 @@ export type OrdenServicioResponse = {
   total?: number
   ventaId?: string | null
   comprobanteSerieNumero?: string | null
+  /** Suma de adelantos y pagos, también los de la venta que liquidó la orden. */
+  totalPagado?: number
+  saldo?: number
+  /** Pendiente, Parcial o Pagado: lo calcula el backend. */
+  estadoPago?: string
   /** Enum EstadoPresupuestoCliente: 0 pendiente, 1 aprobado, 2 rechazado. */
   estadoPresupuestoClienteId?: number
   estadoPresupuestoCliente?: string
@@ -317,6 +336,7 @@ export type OrdenServicioDetalleResponse = OrdenServicioResponse & {
   numeroSerieVIN?: string | null
   numeroMotor?: string | null
   historial?: HistorialEstadoOrdenResponse[]
+  pagos?: PagoResponse[] | null
 }
 
 export type AperturaOrdenRequest = {
@@ -465,46 +485,74 @@ export type MovimientoInventarioResponse = {
   costoUnitario?: number | null
 }
 
-export type VentaResponse = {
-  id: string
-  clienteId: string
-  clienteNombre: string
-  ordenServicioId: string | null
-  estado: string
-  estadoId: number
-  fecha: string
-  total: number
-  cantidadItems: number
-  activo: boolean
+/** Montos que el backend calcula en ventas, órdenes y comprobantes. */
+type DesgloseIgv = {
+  subtotalGravado: number
+  subtotalExonerado: number
+  subtotalInafecto: number
+  montoIgv: number
 }
+
+/** Pagado, saldo y estado (Pendiente, Parcial o Pagado) de una venta. */
+type SituacionPago = {
+  totalPagado: number
+  saldo: number
+  estadoPago: string
+}
+
+export type VentaResponse = DesgloseIgv &
+  SituacionPago & {
+    id: string
+    clienteId: string
+    clienteNombre: string
+    ordenServicioId: string | null
+    estado: string
+    estadoId: number
+    fecha: string
+    total: number
+    cantidadItems: number
+    activo: boolean
+  }
 
 export type DetalleVentaResponse = {
   id: string
-  productoId: string
-  productoCodigo: string
+  /** Null en los servicios y la mano de obra que vienen de una orden. */
+  productoId: string | null
+  productoCodigo: string | null
   productoNombre: string
   cantidad: number
   precioUnitario: number
   subtotal: number
+  tipoItem?: number
+  tipoItemNombre?: string | null
+  servicioId?: string | null
+  tipoAfectacionIgv?: number
+  tipoAfectacionIgvNombre?: string | null
+  subtotalGravado?: number
+  porcentajeIgvAplicado?: number
+  montoIgv?: number
+  total?: number
 }
 
-export type VentaDetalleResponse = {
-  id: string
-  clienteId: string
-  clienteNombre: string
-  clienteDocumento: string | null
-  clienteTelefono: string | null
-  ordenServicioId: string | null
-  estado: string
-  estadoId: number
-  fecha: string
-  total: number
-  detalles: DetalleVentaResponse[]
-  activo: boolean
-  comprobante?: ComprobanteResponse | null
-}
+export type VentaDetalleResponse = DesgloseIgv &
+  SituacionPago & {
+    id: string
+    clienteId: string
+    clienteNombre: string
+    clienteDocumento: string | null
+    clienteTelefono: string | null
+    ordenServicioId: string | null
+    estado: string
+    estadoId: number
+    fecha: string
+    total: number
+    detalles: DetalleVentaResponse[]
+    activo: boolean
+    comprobante?: ComprobanteResponse | null
+    pagos?: PagoResponse[] | null
+  }
 
-export type ComprobanteResponse = {
+export type ComprobanteResponse = DesgloseIgv & {
   id: string
   ventaId: string
   tipo: string
@@ -513,20 +561,66 @@ export type ComprobanteResponse = {
   estado: string
   fechaCreacion: string
   activo: boolean
+  porcentajeIgv: number
+  total: number
+  metodoPagoPrincipal: string | null
+  observaciones: string | null
+  ordenServicioId: string | null
 }
 
 export type RegistrarComprobanteRequest = {
   tipo: string
   serie?: string | null
   numero?: string | null
+  /** Si no se indica, el backend toma el método del pago más grande. */
+  metodoPagoPrincipal?: string | null
+  observaciones?: string | null
 }
 
-/** Con esCotizacion en false la venta nace confirmada y descuenta stock. */
+/**
+ * Con esCotizacion en false la venta nace confirmada y descuenta stock. Con
+ * ordenServicioId y sin detalles liquida la orden: toma sus ítems, no vuelve a
+ * descontar stock y se queda con los adelantos ya pagados.
+ */
 export type CrearVentaRequest = {
   clienteId: string
   ordenServicioId: string | null
-  detalles: { productoId: string; cantidad: number }[]
+  detalles: { productoId: string; cantidad: number }[] | null
   esCotizacion: boolean
+}
+
+/** GET /api/metodos-pago */
+export type MetodoPagoResponse = {
+  id: string
+  codigo: string
+  nombre: string
+  activo: boolean
+}
+
+/** POST /api/ventas/{id}/pagos y /api/ordenes-servicio/{id}/pagos */
+export type RegistrarPagoRequest = {
+  monto: number
+  metodoPagoId: string
+  referencia: string | null
+  esAnticipo: boolean
+  observaciones: string | null
+}
+
+export type PagoResponse = {
+  id: string
+  monto: number
+  metodoPagoId: string
+  metodoPagoNombre: string
+  metodoPagoCodigo: string
+  fecha: string
+  referencia: string | null
+  esAnticipo: boolean
+  ventaId: string | null
+  ordenServicioId: string | null
+  usuarioId: string | null
+  usuarioNombre: string | null
+  observaciones: string | null
+  activo: boolean
 }
 
 export type DashboardResumenResponse = {
@@ -825,3 +919,116 @@ export type YamahaConsultaMockResponse = {
   fechaConsultaUtc: string
 }
 
+
+/** Enums EstadoCajaChica y TipoMovimientoCaja del backend. */
+export const ESTADO_CAJA = { abierta: 0, cerrada: 1 } as const
+export const TIPO_MOVIMIENTO_CAJA = { ingreso: 0, egreso: 1 } as const
+
+export type MovimientoCajaResponse = {
+  id: string
+  cajaChicaId: string
+  tipo: number
+  tipoDescripcion: string
+  monto: number
+  concepto: string
+  referencia: string | null
+  fecha: string
+  usuarioId: string | null
+  usuarioNombre: string | null
+}
+
+type DatosCaja = {
+  id: string
+  montoApertura: number
+  montoCierre: number | null
+  saldoCalculado: number
+  fechaApertura: string
+  fechaCierre: string | null
+  estado: number
+  estadoDescripcion: string
+  observacionesApertura: string | null
+  observacionesCierre: string | null
+  usuarioAperturaId: string | null
+  usuarioAperturaNombre: string | null
+  usuarioCierreId: string | null
+  usuarioCierreNombre: string | null
+  totalIngresos: number
+  totalEgresos: number
+}
+
+/** GET /api/caja-chica/historial */
+export type CajaChicaResponse = DatosCaja & {
+  cantidadMovimientos: number
+  fechaCreacion: string
+}
+
+export type CajaChicaDetalleResponse = DatosCaja & {
+  movimientos: MovimientoCajaResponse[]
+}
+
+/** GET /api/caja-chica/actual */
+export type EstadoCajaActualResponse = {
+  tieneCajaAbierta: boolean
+  caja: CajaChicaDetalleResponse | null
+}
+
+export type AperturaCajaRequest = {
+  montoApertura: number
+  observaciones: string | null
+}
+
+export type CierreCajaRequest = {
+  observaciones: string | null
+}
+
+/** POST /api/caja-chica/ingresos y /egresos: el tipo lo pone la ruta. */
+export type RegistrarMovimientoCajaRequest = {
+  tipo: number
+  monto: number
+  concepto: string
+  referencia: string | null
+}
+
+/** GET /api/configuracion/tipo-cambio: el vigente es el valor de venta. */
+export type TipoCambioResponse = {
+  configurado: boolean
+  tipoCambio: number | null
+  valorVenta: number | null
+  valorCompra: number | null
+  monedaBase: string
+  monedaExtranjera: string
+  fechaActualizacion: string | null
+  ultimoUsuarioNombre: string | null
+}
+
+/** PUT /api/configuracion/tipo-cambio: dólar a soles por defecto. */
+export type RegistrarTipoCambioRequest = {
+  valorCompra: number
+  valorVenta: number
+  observaciones: string | null
+}
+
+export type HistorialTipoCambioResponse = {
+  id: string
+  monedaOrigen: string
+  monedaDestino: string
+  valorCompra: number
+  valorVenta: number
+  fechaVigencia: string
+  observaciones: string | null
+  usuarioId: string | null
+  usuarioNombre: string | null
+  fechaCreacion: string
+}
+
+/** GET /api/auditoria: el detalle viene como JSON en texto. */
+export type EventoAuditoriaResponse = {
+  id: string
+  usuarioId: string | null
+  usuarioNombre: string | null
+  fecha: string
+  accion: string
+  entidad: string
+  entidadId: string
+  detalle: string | null
+}

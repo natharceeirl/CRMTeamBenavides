@@ -4,6 +4,7 @@ import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { ModalVenta } from '../components/ModalVenta'
 import { ModalDetalleVenta } from '../components/ModalDetalleVenta'
+import { EstadoPagoTag } from '../components/EstadoPagoTag'
 import {
   ESTADO_VENTA,
   nombresEstadoVenta,
@@ -91,6 +92,21 @@ export function VentasPage() {
       render: (total: number) => soles(total),
     },
     {
+      title: 'Saldo',
+      key: 'saldo',
+      align: 'right',
+      // Solo una venta confirmada se cobra: la cotización y la anulada no deben nada.
+      render: (_, venta) =>
+        venta.estadoId === ESTADO_VENTA.confirmada ? (
+          <Space size={8}>
+            <span className="num">{soles(venta.saldo ?? 0)}</span>
+            <EstadoPagoTag estado={venta.estadoPago} />
+          </Space>
+        ) : (
+          <span className="texto-secundario">—</span>
+        ),
+    },
+    {
       title: '',
       key: 'acciones',
       align: 'right',
@@ -165,11 +181,18 @@ export function VentasPage() {
             locale={{ emptyText: 'Todavía no hay ventas ni cotizaciones' }}
           />
           <p className="texto-secundario" style={{ marginTop: 16 }}>
-            El registro administrativo de comprobantes está disponible desde el detalle de cada venta confirmada.
+            Los pagos y el comprobante se registran desde el detalle de cada venta confirmada.
           </p>
         </section>
       </div>
-      <ModalVenta abierto={modalNueva} onCerrar={() => setModalNueva(false)} />
+      <ModalVenta
+        abierto={modalNueva}
+        onCerrar={() => setModalNueva(false)}
+        // Una venta directa nace confirmada: se abre para cobrarla y registrar el comprobante.
+        onCreada={(venta) => {
+          if (venta.estadoId === ESTADO_VENTA.confirmada) setVentaVista(venta.id)
+        }}
+      />
       <ModalDetalleVenta
         abierto={ventaVista !== null}
         ventaId={ventaVista}

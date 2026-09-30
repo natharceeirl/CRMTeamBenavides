@@ -202,10 +202,13 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
           final aprobadaBloqueada = bloqueoAprobacion != null &&
               posibles.contains(EstadoOrden.aprobada);
 
+          final esCliente = sesion.soloCliente;
+
           return ListView(
             padding: const EdgeInsets.only(bottom: 32),
             children: [
               _FichaOrden(datos: datos),
+              if (esCliente) _AvanceOrden(datos: datos),
               _Aprobaciones(
                 orden: datosOrden,
                 ocupado: _guardando,
@@ -250,56 +253,59 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                   ),
                 ),
               const _Titulo('Diagnóstico'),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TextField(
-                      controller: _diagnostico,
-                      maxLines: 4,
-                      enabled: puedeDiagnosticar && !_guardando,
-                      decoration: const InputDecoration(
-                        hintText: 'Qué encontraste en la unidad',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _solucion,
-                      maxLines: 3,
-                      enabled: puedeDiagnosticar && !_guardando,
-                      decoration: const InputDecoration(
-                        hintText: 'Solución propuesta o aplicada',
-                      ),
-                    ),
-                    if (puedeDiagnosticar) ...[
-                      const SizedBox(height: 12),
-                      FilledButton(
-                        onPressed: _guardando ? null : _guardarDiagnostico,
-                        child: _guardando
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text('Guardar diagnóstico'),
-                      ),
-                    ],
-                    if (esEstadoTerminal(datosOrden.estadoId))
-                      const Padding(
-                        padding: EdgeInsets.only(top: 8),
-                        child: Text(
-                          'La orden ya está cerrada y no admite cambios.',
-                          style: TextStyle(color: Marca.textoSecundario),
+              if (esCliente)
+                _DiagnosticoCliente(orden: datosOrden)
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextField(
+                        controller: _diagnostico,
+                        maxLines: 4,
+                        enabled: puedeDiagnosticar && !_guardando,
+                        decoration: const InputDecoration(
+                          hintText: 'Qué encontraste en la unidad',
                         ),
                       ),
-                  ],
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _solucion,
+                        maxLines: 3,
+                        enabled: puedeDiagnosticar && !_guardando,
+                        decoration: const InputDecoration(
+                          hintText: 'Solución propuesta o aplicada',
+                        ),
+                      ),
+                      if (puedeDiagnosticar) ...[
+                        const SizedBox(height: 12),
+                        FilledButton(
+                          onPressed: _guardando ? null : _guardarDiagnostico,
+                          child: _guardando
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text('Guardar diagnóstico'),
+                        ),
+                      ],
+                      if (esEstadoTerminal(datosOrden.estadoId))
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: Text(
+                            'La orden ya está cerrada y no admite cambios.',
+                            style: TextStyle(color: Marca.textoSecundario),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-              const _Titulo('Trabajos y repuestos'),
+              _Titulo(esCliente ? 'Presupuesto' : 'Trabajos y repuestos'),
               if (datos.detalles.isEmpty)
                 const ListaVacia(mensaje: 'Todavía no hay trabajos ni repuestos.')
               else
@@ -359,6 +365,32 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                         ),
                       ],
                     ),
+                    // Lo pagado lo ve el cliente y quien vende; el técnico no.
+                    if (datos.total > 0 &&
+                        (esCliente || sesion.tieneAlgunPermiso(const [Permisos.ventasVer, Permisos.ventasCrear]))) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Pagado', style: TextStyle(color: Marca.textoSecundario)),
+                          Text(soles(datosOrden.totalPagado)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Saldo', style: TextStyle(fontWeight: FontWeight.w600)),
+                          Text(
+                            soles(datosOrden.saldo ?? datos.total),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: (datosOrden.saldo ?? datos.total) > 0 ? Marca.acento : null,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -382,15 +414,126 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                     style: TextStyle(color: Marca.textoSecundario),
                   ),
                 ),
-              const _Titulo('Historial'),
-              if (datos.historial.isEmpty)
-                const ListaVacia(mensaje: 'Sin cambios de estado registrados.')
-              else
-                ...datos.historial.map((cambio) => _CambioDeEstado(cambio: cambio)),
+              // El cliente sigue el avance arriba; el historial detallado es del personal.
+              if (!esCliente) ...[
+                const _Titulo('Historial'),
+                if (datos.historial.isEmpty)
+                  const ListaVacia(mensaje: 'Sin cambios de estado registrados.')
+                else
+                  ...datos.historial.map((cambio) => _CambioDeEstado(cambio: cambio)),
+              ],
             ],
           );
         },
       ),
+    );
+  }
+}
+
+/// Avance de la orden como lo ve el cliente: de «Recibida» a «Entregada».
+class _AvanceOrden extends StatelessWidget {
+  const _AvanceOrden({required this.datos});
+
+  final OrdenServicioDetalleApi datos;
+
+  @override
+  Widget build(BuildContext context) {
+    final orden = datos.orden;
+    if (orden.estadoId == EstadoOrden.cancelada) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
+        child: Text('Esta orden fue anulada.', style: TextStyle(color: Marca.acento, fontWeight: FontWeight.w600)),
+      );
+    }
+
+    final pasos = pasosDeAvance(
+      estadoId: orden.estadoId,
+      cambios: [
+        for (final cambio in datos.historial)
+          if (cambio.cambiaEstado) (estado: cambio.estadoNuevoId, fecha: cambio.fechaCambio),
+      ],
+      fechaIngreso: orden.fechaIngreso,
+      fechaEstimadaEntrega: orden.fechaEstimadaEntrega,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _Titulo('Avance'),
+          for (final paso in pasos)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    switch (paso.situacion) {
+                      SituacionPaso.hecho => Icons.check_circle,
+                      SituacionPaso.actual => Icons.radio_button_checked,
+                      SituacionPaso.pendiente => Icons.radio_button_unchecked,
+                    },
+                    size: 20,
+                    color: paso.situacion == SituacionPaso.pendiente ? Marca.borde : Marca.acento,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          paso.titulo,
+                          style: TextStyle(
+                            fontWeight: paso.situacion == SituacionPaso.actual ? FontWeight.w700 : FontWeight.w500,
+                            color: paso.situacion == SituacionPaso.pendiente ? Marca.textoSecundario : Marca.texto,
+                          ),
+                        ),
+                        if (paso.fecha != null)
+                          Text(
+                            paso.estimada ? 'Estimado ${fechaHora(paso.fecha)}' : fechaHora(paso.fecha),
+                            style: const TextStyle(color: Marca.textoSecundario, fontSize: 12),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Lo que encontró el técnico, en lectura: el cliente no edita el diagnóstico.
+class _DiagnosticoCliente extends StatelessWidget {
+  const _DiagnosticoCliente({required this.orden});
+
+  final OrdenServicioApi orden;
+
+  @override
+  Widget build(BuildContext context) {
+    final diagnostico = orden.diagnostico?.trim() ?? '';
+    final solucion = orden.solucion?.trim() ?? '';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: diagnostico.isEmpty && solucion.isEmpty
+          ? const Text(
+              'El técnico todavía no registra el diagnóstico.',
+              style: TextStyle(color: Marca.textoSecundario),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (diagnostico.isNotEmpty) Text(diagnostico),
+                if (solucion.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text('Solución: $solucion', style: const TextStyle(color: Marca.textoSecundario)),
+                ],
+              ],
+            ),
     );
   }
 }

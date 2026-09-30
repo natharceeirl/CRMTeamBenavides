@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import { Button, Card, Descriptions, Divider, Modal, Spin, Table, Tag, Typography } from 'antd'
 import { useFormatoAtencionOrden } from '../api/ordenes'
+import { solicitarTexto } from '../api/http'
 import { AvisoError } from './AvisoError'
 import { fechaHora, importe, soles } from '../utils/formato'
+import { abrirDocumento } from '../utils/impresion'
 
 const { Title, Text } = Typography
 
@@ -14,9 +17,15 @@ type Props = {
 export function ModalFormatoAtencion({ abierto, ordenServicioId, onCerrar }: Readonly<Props>) {
   const query = useFormatoAtencionOrden(abierto ? ordenServicioId : null)
   const datos = query.data
+  const [errorImpresion, setErrorImpresion] = useState<unknown>(null)
 
+  // La vista de impresión exige el token: abrir la URL directo en otra pestaña
+  // respondía 401, porque el navegador no manda el encabezado Authorization.
   const handleImprimir = () => {
-    window.open(`/api/ordenes-servicio/${ordenServicioId}/formato-atencion/imprimir`, '_blank')
+    setErrorImpresion(null)
+    abrirDocumento(() => solicitarTexto(`/ordenes-servicio/${ordenServicioId}/formato-atencion/imprimir`)).catch(
+      setErrorImpresion,
+    )
   }
 
   return (
@@ -42,11 +51,12 @@ export function ModalFormatoAtencion({ abierto, ordenServicioId, onCerrar }: Rea
     >
       {query.isPending && (
         <div style={{ textAlign: 'center', padding: 40 }}>
-          <Spin tip="Cargando formato de atención..." />
+          <Spin description="Cargando formato de atención..." />
         </div>
       )}
 
       {query.isError && <AvisoError error={query.error} />}
+      <AvisoError error={errorImpresion} />
 
       {datos && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

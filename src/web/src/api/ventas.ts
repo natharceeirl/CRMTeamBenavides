@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { solicitar } from './http'
 import { avisoSegun } from './avisos'
 import { clavesInventario } from './inventario'
+import { clavesOrdenes } from './ordenes'
 import type {
   ComprobanteResponse,
   CrearVentaRequest,
@@ -56,7 +57,7 @@ export function rutaVentas(filtros: FiltrosVentas = {}): string {
 export const clavesVentas = {
   todas: ['ventas'] as const,
   lista: (filtros: FiltrosVentas) =>
-    ['ventas', filtros.estado ?? 'todos', filtros.clienteId ?? 'todos'] as const,
+    ['ventas', filtros.estado ?? 'todos', filtros.clienteId ?? 'todos', filtros.ordenServicioId ?? 'todas'] as const,
   una: (id: string) => ['ventas', id] as const,
 }
 
@@ -75,12 +76,16 @@ export function useVenta(id: string | undefined) {
   })
 }
 
-/** Crear, confirmar y anular pueden mover stock: refrescan también inventario. */
+/**
+ * Crear, confirmar y anular pueden mover stock: refrescan también inventario.
+ * Una venta que liquida una orden cambia el saldo y la venta de esa orden.
+ */
 function refrescarVentasEInventario(consultas: ReturnType<typeof useQueryClient>) {
   return Promise.all([
     consultas.invalidateQueries({ queryKey: clavesVentas.todas }),
     consultas.invalidateQueries({ queryKey: clavesInventario.productos }),
     consultas.invalidateQueries({ queryKey: clavesInventario.movimientos }),
+    consultas.invalidateQueries({ queryKey: clavesOrdenes.todas }),
   ])
 }
 
@@ -88,7 +93,12 @@ export function useCrearVenta() {
   const consultas = useQueryClient()
 
   return useMutation({
-    meta: { exito: avisoSegun<CrearVentaRequest>((datos) => (datos.esCotizacion ? 'Cotización creada' : 'Venta registrada')) },
+    meta: {
+      exito: avisoSegun<CrearVentaRequest>((datos) => {
+        if (datos.ordenServicioId) return 'Orden liquidada: venta registrada'
+        return datos.esCotizacion ? 'Cotización creada' : 'Venta registrada'
+      }),
+    },
     mutationFn: (datos: CrearVentaRequest) =>
       solicitar<VentaDetalleResponse>('/ventas', { metodo: 'POST', cuerpo: datos }),
     onSuccess: async () => {
@@ -134,6 +144,7 @@ export function useRegistrarComprobante() {
       await Promise.all([
         consultas.invalidateQueries({ queryKey: clavesVentas.todas }),
         consultas.invalidateQueries({ queryKey: clavesVentas.una(variables.ventaId) }),
+        consultas.invalidateQueries({ queryKey: clavesOrdenes.todas }),
       ])
     },
   })
@@ -150,6 +161,7 @@ export function useAnularComprobante() {
       await Promise.all([
         consultas.invalidateQueries({ queryKey: clavesVentas.todas }),
         consultas.invalidateQueries({ queryKey: clavesVentas.una(ventaId) }),
+        consultas.invalidateQueries({ queryKey: clavesOrdenes.todas }),
       ])
     },
   })

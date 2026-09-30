@@ -24,6 +24,7 @@ class Permisos {
   static const serviciosVer = 'servicios.ver';
   static const inventarioEditar = 'inventario.editar';
   static const ventasVer = 'ventas.ver';
+  static const cajaConsultar = 'caja.consultar';
   static const reportesVerOperativos = 'reportes.ver_operativos';
   static const reportesVerFinancieros = 'reportes.ver_financieros';
 

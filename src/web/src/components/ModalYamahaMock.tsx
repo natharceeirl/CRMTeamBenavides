@@ -113,7 +113,7 @@ export function ModalYamahaMock({ abierto, criterioInicial, onCerrar }: Readonly
         {/* Loading */}
         {query.isFetching && (
           <div style={{ textAlign: 'center', padding: 40 }}>
-            <Spin tip="Consultando catálogo mock..." />
+            <Spin description="Consultando catálogo mock..." />
           </div>
         )}
 

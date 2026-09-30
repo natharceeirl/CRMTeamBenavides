@@ -8,9 +8,9 @@ import '../formato.dart';
 import '../tema.dart';
 import 'comunes.dart';
 
-/// Ventas y cotizaciones. Es de solo lectura: crear, confirmar, anular y
-/// registrar el comprobante se hacen desde la web, que es donde vive la
-/// transacción contra el stock.
+/// Ventas y cotizaciones. Es de solo lectura: crear, confirmar, anular, cobrar
+/// y registrar el comprobante se hacen desde la web, que es donde vive la
+/// transacción contra el stock y la caja. Aquí se consulta cuánto se debe.
 class PantallaVentas extends ConsumerStatefulWidget {
   const PantallaVentas({super.key});
 
@@ -189,10 +189,15 @@ class _FilaVenta extends StatelessWidget {
               style: const TextStyle(color: Marca.textoSecundario),
             ),
             const SizedBox(height: 4),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 EtiquetaEstadoVenta(estadoId: venta.estadoId),
-                const SizedBox(width: 8),
+                // Solo una venta confirmada se cobra.
+                if (venta.estadoId == EstadoVenta.confirmada)
+                  EtiquetaEstadoPago(estado: venta.estadoPago),
                 Text(
                   fechaHora(venta.fecha),
                   style: const TextStyle(
@@ -205,11 +210,51 @@ class _FilaVenta extends StatelessWidget {
           ],
         ),
         isThreeLine: true,
-        trailing: Text(
-          soles(venta.total),
-          style: const TextStyle(fontWeight: FontWeight.w600),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              soles(venta.total),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            if (venta.estadoId == EstadoVenta.confirmada && venta.saldo > 0)
+              Text(
+                'Debe ${soles(venta.saldo)}',
+                style: const TextStyle(color: Marca.acento, fontSize: 12),
+              ),
+          ],
         ),
         onTap: alTocar,
+      ),
+    );
+  }
+}
+
+/// Lo que se debe llama la atención; lo pagado queda sobrio.
+class EtiquetaEstadoPago extends StatelessWidget {
+  const EtiquetaEstadoPago({required this.estado, super.key});
+
+  final String estado;
+
+  @override
+  Widget build(BuildContext context) {
+    final pagado = estado == EstadoPago.pagado;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: pagado ? Marca.texto : Colors.transparent,
+        border: Border.all(color: pagado ? Marca.texto : Marca.acento),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        estado,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: pagado ? Colors.white : Marca.acento,
+        ),
       ),
     );
   }
@@ -322,6 +367,7 @@ class _CuerpoVenta extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final comprobante = datos.comprobante;
+    final venta = datos.venta;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -346,17 +392,87 @@ class _CuerpoVenta extends StatelessWidget {
         else
           for (final linea in datos.detalles) _FilaLinea(linea: linea),
         const Divider(height: 24),
-        Row(
-          children: [
-            const Text('Total', style: TextStyle(fontWeight: FontWeight.w600)),
-            const Spacer(),
-            Text(
-              soles(datos.venta.total),
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-            ),
-          ],
-        ),
+        if (venta.montoIgv > 0) ...[
+          _Monto(etiqueta: 'Op. gravadas', monto: venta.subtotalGravado),
+          _Monto(etiqueta: 'IGV', monto: venta.montoIgv),
+        ],
+        _Monto(etiqueta: 'Total', monto: venta.total, destacado: true),
+        if (venta.estadoId == EstadoVenta.confirmada) ...[
+          const Divider(height: 32),
+          Row(
+            children: [
+              Text('Cobro', style: Theme.of(context).textTheme.titleMedium),
+              const Spacer(),
+              EtiquetaEstadoPago(estado: venta.estadoPago),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _Monto(etiqueta: 'Pagado', monto: venta.totalPagado),
+          _Monto(
+            etiqueta: 'Saldo',
+            monto: venta.saldo,
+            destacado: true,
+            color: venta.saldo > 0 ? Marca.acento : null,
+          ),
+          for (final pago in datos.pagos) _FilaPago(pago: pago),
+        ],
       ],
+    );
+  }
+}
+
+class _Monto extends StatelessWidget {
+  const _Monto({
+    required this.etiqueta,
+    required this.monto,
+    this.destacado = false,
+    this.color,
+  });
+
+  final String etiqueta;
+  final double monto;
+  final bool destacado;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final estilo = TextStyle(
+      fontWeight: destacado ? FontWeight.w700 : FontWeight.w400,
+      fontSize: destacado ? 16 : 14,
+      color: color,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Text(etiqueta, style: destacado ? estilo : const TextStyle(color: Marca.textoSecundario)),
+          const Spacer(),
+          Text(soles(monto), style: estilo),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilaPago extends StatelessWidget {
+  const _FilaPago({required this.pago});
+
+  final PagoApi pago;
+
+  @override
+  Widget build(BuildContext context) {
+    final detalle = [
+      fechaHora(pago.fecha),
+      if (pago.referencia?.isNotEmpty ?? false) pago.referencia!,
+      if (pago.esAnticipo) 'Adelanto',
+    ].join(' · ');
+
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      title: Text(pago.metodoPagoNombre),
+      subtitle: Text(detalle, style: const TextStyle(color: Marca.textoSecundario, fontSize: 12)),
+      trailing: Text(soles(pago.monto), style: const TextStyle(fontWeight: FontWeight.w600)),
     );
   }
 }
@@ -373,11 +489,14 @@ class _FilaLinea extends StatelessWidget {
       dense: true,
       title: Text(linea.productoNombre),
       subtitle: Text(
-        '${linea.productoCodigo} · ${linea.cantidad} × ${soles(linea.precioUnitario)}',
+        [
+          if (linea.productoCodigo.isNotEmpty) linea.productoCodigo,
+          '${linea.cantidad} × ${soles(linea.precioUnitario)}',
+        ].join(' · '),
         style: const TextStyle(color: Marca.textoSecundario, fontSize: 12),
       ),
       trailing: Text(
-        soles(linea.subtotal),
+        soles(linea.importe),
         style: const TextStyle(fontWeight: FontWeight.w600),
       ),
     );

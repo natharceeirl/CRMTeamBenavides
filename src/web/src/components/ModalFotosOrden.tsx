@@ -184,7 +184,7 @@ export function ModalFotosOrden({
         {/* Galería de imágenes */}
         {fotosQuery.isPending && (
           <div style={{ textAlign: 'center', padding: 40 }}>
-            <Spin tip="Cargando fotografías..." />
+            <Spin description="Cargando fotografías..." />
           </div>
         )}
 
