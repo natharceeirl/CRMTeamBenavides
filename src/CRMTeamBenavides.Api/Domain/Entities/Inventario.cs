@@ -74,4 +74,5 @@ public class MovimientoInventario : BaseEntity
     // Trazabilidad: de dónde vino el movimiento, sin crear dependencia circular fuerte
     public Guid? OrdenServicioId { get; set; }
     public Guid? VentaId { get; set; }
+    public Guid? PedidoLimaId { get; set; }
 }

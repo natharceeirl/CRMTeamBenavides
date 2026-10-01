@@ -21,8 +21,11 @@ using CRMTeamBenavides.Api.Features.Portal;
 using CRMTeamBenavides.Api.Features.Ventas;
 using CRMTeamBenavides.Api.Features.Fotos;
 using CRMTeamBenavides.Api.Features.Yamaha;
+using CRMTeamBenavides.Api.Features.Citas;
+using CRMTeamBenavides.Api.Features.PedidosLima;
 using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Api.Services.Almacenamiento;
+using CRMTeamBenavides.Api.Services.Exportacion;
 using CRMTeamBenavides.Api.Services.Yamaha;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Data.Seed;
@@ -166,6 +169,9 @@ builder.Services.Configure<AlmacenamientoOptions>(builder.Configuration.GetSecti
 builder.Services.AddScoped<IAlmacenamientoArchivoService, AlmacenamientoLocalService>();
 builder.Services.AddScoped<IFotoOrdenServicioService, FotoOrdenServicioService>();
 builder.Services.AddScoped<IYamahaService, YamahaMockService>();
+builder.Services.AddScoped<IExportacionExcelService, ExportacionExcelService>();
+builder.Services.AddScoped<ICitaService, CitaService>();
+builder.Services.AddScoped<IPedidoLimaService, PedidoLimaService>();
 
 // ---------------------------------------------------------------------------
 // Yamaha API — infraestructura del conector
@@ -251,5 +257,7 @@ app.MapAuditoriaEndpoints();
 app.MapPortalEndpoints();
 app.MapFotoEndpoints();
 app.MapYamahaEndpoints();
+app.MapCitaEndpoints();
+app.MapPedidoLimaEndpoints();
 
 app.Run();

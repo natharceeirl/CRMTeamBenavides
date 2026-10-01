@@ -68,7 +68,16 @@ public static class RolSeeder
             [PermisosDefinidos.ReportesVerFinancieros] = "Visualizar reportes de rentabilidad, ganancias y finanzas",
             [PermisosDefinidos.ConfiguracionEditar] = "Modificar parámetros generales, empresa e IGV",
             [PermisosDefinidos.AuditoriaVer] = "Consultar bitácora de auditoría del sistema",
-            [PermisosDefinidos.PortalAcceso] = "Acceso a la plataforma y app de clientes"
+            [PermisosDefinidos.PortalAcceso] = "Acceso a la plataforma y app de clientes",
+            [PermisosDefinidos.CitasVer] = "Consultar citas y agenda del taller",
+            [PermisosDefinidos.CitasCrear] = "Programar y registrar citas en la agenda",
+            [PermisosDefinidos.CitasEditar] = "Modificar y reprogramar citas",
+            [PermisosDefinidos.CitasCancelar] = "Cancelar citas programadas",
+            [PermisosDefinidos.PedidosLimaVer] = "Consultar pedidos especiales traídos de Lima",
+            [PermisosDefinidos.PedidosLimaCrear] = "Registrar nuevos pedidos de repuestos a Lima",
+            [PermisosDefinidos.PedidosLimaEditar] = "Actualizar estado, seguimiento y datos de pedidos Lima",
+            [PermisosDefinidos.PedidosLimaDespachar] = "Despachar o entregar repuestos de pedidos Lima con afectación de stock",
+            [PermisosDefinidos.PedidosLimaCancelar] = "Cancelar pedidos de repuestos de Lima"
         };
 
         var nuevosPermisos = new List<Permiso>();
@@ -179,7 +188,10 @@ public static class RolSeeder
                 PermisosDefinidos.VentasVer, PermisosDefinidos.VentasCrear,
                 PermisosDefinidos.CajaConsultar, PermisosDefinidos.CajaRegistrarIngreso, PermisosDefinidos.CajaRegistrarEgreso,
                 PermisosDefinidos.CajaAperturar, PermisosDefinidos.CajaCerrar,
-                PermisosDefinidos.ReportesVerOperativos
+                PermisosDefinidos.ReportesVerOperativos,
+                PermisosDefinidos.CitasVer, PermisosDefinidos.CitasCrear, PermisosDefinidos.CitasEditar, PermisosDefinidos.CitasCancelar,
+                PermisosDefinidos.PedidosLimaVer, PermisosDefinidos.PedidosLimaCrear, PermisosDefinidos.PedidosLimaEditar,
+                PermisosDefinidos.PedidosLimaDespachar, PermisosDefinidos.PedidosLimaCancelar
             },
 
             // Técnico: Sólo sus OS asignadas, diagnóstico, agregar repuestos/mano de obra, y transiciones operativas.
@@ -192,7 +204,8 @@ public static class RolSeeder
                 PermisosDefinidos.OrdenesCambiarEstado,
                 PermisosDefinidos.UnidadesVer,
                 PermisosDefinidos.InventarioVer,
-                PermisosDefinidos.ServiciosVer
+                PermisosDefinidos.ServiciosVer,
+                PermisosDefinidos.CitasVer
             },
 
             // Vendedor: Gestiona ventas y mostrador.
@@ -204,7 +217,9 @@ public static class RolSeeder
                 PermisosDefinidos.InventarioVer,
                 PermisosDefinidos.ServiciosVer,
                 PermisosDefinidos.CajaConsultar, PermisosDefinidos.CajaRegistrarIngreso,
-                PermisosDefinidos.ReportesVerOperativos
+                PermisosDefinidos.ReportesVerOperativos,
+                PermisosDefinidos.CitasVer,
+                PermisosDefinidos.PedidosLimaVer, PermisosDefinidos.PedidosLimaCrear, PermisosDefinidos.PedidosLimaEditar
             },
 
             // Cliente: Sólo accede a sus propios datos a través del portal
@@ -213,7 +228,11 @@ public static class RolSeeder
                 PermisosDefinidos.PortalAcceso,
                 PermisosDefinidos.ClientesVer,
                 PermisosDefinidos.UnidadesVer,
-                PermisosDefinidos.OrdenesVerAsignadas
+                PermisosDefinidos.OrdenesVerAsignadas,
+                PermisosDefinidos.CitasVer,
+                PermisosDefinidos.CitasCrear,
+                PermisosDefinidos.CitasCancelar,
+                PermisosDefinidos.PedidosLimaVer
             }
         };
 

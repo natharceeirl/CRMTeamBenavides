@@ -72,6 +72,19 @@ public static class PermisosDefinidos
     // Portal Cliente
     public const string PortalAcceso = "portal.acceso";
 
+    // Citas / Agenda del Taller
+    public const string CitasVer = "citas.ver";
+    public const string CitasCrear = "citas.crear";
+    public const string CitasEditar = "citas.editar";
+    public const string CitasCancelar = "citas.cancelar";
+
+    // Pedidos Lima
+    public const string PedidosLimaVer = "pedidos_lima.ver";
+    public const string PedidosLimaCrear = "pedidos_lima.crear";
+    public const string PedidosLimaEditar = "pedidos_lima.editar";
+    public const string PedidosLimaDespachar = "pedidos_lima.despachar";
+    public const string PedidosLimaCancelar = "pedidos_lima.cancelar";
+
     public static readonly IReadOnlyList<string> Todos = new[]
     {
         UsuariosVer, UsuariosCrear, UsuariosEditar, UsuariosEliminar, UsuariosResetPassword,
@@ -87,7 +100,9 @@ public static class PermisosDefinidos
         CajaConsultar, CajaRegistrarIngreso, CajaRegistrarEgreso, CajaAperturar, CajaCerrar,
         ReportesVerOperativos, ReportesVerFinancieros,
         ConfiguracionEditar, AuditoriaVer,
-        PortalAcceso
+        PortalAcceso,
+        CitasVer, CitasCrear, CitasEditar, CitasCancelar,
+        PedidosLimaVer, PedidosLimaCrear, PedidosLimaEditar, PedidosLimaDespachar, PedidosLimaCancelar
     };
 }
 

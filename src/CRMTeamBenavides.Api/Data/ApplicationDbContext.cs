@@ -26,6 +26,15 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
     public DbSet<Servicio> Servicios => Set<Servicio>();
     public DbSet<FotoOrdenServicio> FotosOrdenServicio => Set<FotoOrdenServicio>();
 
+    // Agenda / Citas
+    public DbSet<Cita> Citas => Set<Cita>();
+    public DbSet<HistorialEstadoCita> HistorialEstadosCita => Set<HistorialEstadoCita>();
+
+    // Pedidos Lima
+    public DbSet<PedidoLima> PedidosLima => Set<PedidoLima>();
+    public DbSet<DetallePedidoLima> DetallesPedidoLima => Set<DetallePedidoLima>();
+    public DbSet<HistorialEstadoPedidoLima> HistorialEstadosPedidoLima => Set<HistorialEstadoPedidoLima>();
+
     // Configuración
     public DbSet<ConfiguracionEmpresa> ConfiguracionesEmpresa => Set<ConfiguracionEmpresa>();
     public DbSet<HistorialTipoCambio> HistorialTiposCambio => Set<HistorialTipoCambio>();
@@ -143,8 +152,17 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
         // --- Propiedades calculadas ---
         modelBuilder.Entity<DetalleServicio>().Ignore(d => d.Subtotal);
         modelBuilder.Entity<DetalleVenta>().Ignore(d => d.Subtotal);
+        modelBuilder.Entity<DetallePedidoLima>().Ignore(d => d.Subtotal);
 
         modelBuilder.HasSequence<long>("OrdenServicioNumeroSeq")
+            .StartsAt(1)
+            .IncrementsBy(1);
+
+        modelBuilder.HasSequence<long>("CitaNumeroSeq")
+            .StartsAt(1)
+            .IncrementsBy(1);
+
+        modelBuilder.HasSequence<long>("PedidoLimaNumeroSeq")
             .StartsAt(1)
             .IncrementsBy(1);
 
@@ -417,6 +435,118 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
             entity.Property(f => f.Observacion).HasMaxLength(1000);
 
             entity.HasIndex(f => f.OrdenServicioId);
+        });
+
+        // --- Citas / Agenda del Taller ---
+        modelBuilder.Entity<Cita>(entity =>
+        {
+            entity.ToTable("Citas");
+
+            entity.HasOne(c => c.Cliente)
+                .WithMany()
+                .HasForeignKey(c => c.ClienteId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(c => c.Vehiculo)
+                .WithMany()
+                .HasForeignKey(c => c.VehiculoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(c => c.OrdenServicio)
+                .WithMany()
+                .HasForeignKey(c => c.OrdenServicioId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasMany(c => c.HistorialEstados)
+                .WithOne(h => h.Cita)
+                .HasForeignKey(h => h.CitaId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(c => c.NumeroCita).IsUnique();
+            entity.HasIndex(c => c.ClienteId);
+            entity.HasIndex(c => c.VehiculoId);
+            entity.HasIndex(c => c.FechaHoraProgramada);
+            entity.HasIndex(c => c.Estado);
+        });
+
+        modelBuilder.Entity<HistorialEstadoCita>(entity =>
+        {
+            entity.ToTable("HistorialEstadosCita");
+
+            entity.HasOne(h => h.Usuario)
+                .WithMany()
+                .HasForeignKey(h => h.UsuarioId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(h => h.CitaId);
+            entity.HasIndex(h => h.Fecha);
+        });
+
+        // --- Pedidos Especiales de Lima ---
+        modelBuilder.Entity<PedidoLima>(entity =>
+        {
+            entity.ToTable("PedidosLima");
+
+            entity.Property(p => p.SubtotalGravado).HasPrecision(12, 2);
+            entity.Property(p => p.SubtotalExonerado).HasPrecision(12, 2);
+            entity.Property(p => p.SubtotalInafecto).HasPrecision(12, 2);
+            entity.Property(p => p.PorcentajeIgv).HasPrecision(5, 2);
+            entity.Property(p => p.MontoIgv).HasPrecision(12, 2);
+            entity.Property(p => p.Total).HasPrecision(12, 2);
+
+            entity.HasOne(p => p.Cliente)
+                .WithMany()
+                .HasForeignKey(p => p.ClienteId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(p => p.Detalles)
+                .WithOne(d => d.PedidoLima)
+                .HasForeignKey(d => d.PedidoLimaId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(p => p.HistorialEstados)
+                .WithOne(h => h.PedidoLima)
+                .HasForeignKey(h => h.PedidoLimaId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(p => p.NumeroPedido).IsUnique();
+            entity.HasIndex(p => p.ClienteId);
+            entity.HasIndex(p => p.Fecha);
+            entity.HasIndex(p => p.Estado);
+            entity.HasIndex(p => p.NumeroGuia);
+        });
+
+        modelBuilder.Entity<DetallePedidoLima>(entity =>
+        {
+            entity.ToTable("DetallesPedidoLima");
+
+            entity.Property(d => d.PrecioUnitario).HasPrecision(12, 2);
+            entity.Property(d => d.CostoUnitarioHistorico).HasPrecision(12, 2);
+            entity.Property(d => d.SubtotalGravado).HasPrecision(12, 2);
+            entity.Property(d => d.PorcentajeIgvAplicado).HasPrecision(5, 2);
+            entity.Property(d => d.MontoIgv).HasPrecision(12, 2);
+            entity.Property(d => d.Total).HasPrecision(12, 2);
+
+            entity.HasOne(d => d.Producto)
+                .WithMany()
+                .HasForeignKey(d => d.ProductoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(d => d.PedidoLimaId);
+            entity.HasIndex(d => d.ProductoId);
+        });
+
+        modelBuilder.Entity<HistorialEstadoPedidoLima>(entity =>
+        {
+            entity.ToTable("HistorialEstadosPedidoLima");
+
+            entity.HasOne(h => h.Usuario)
+                .WithMany()
+                .HasForeignKey(h => h.UsuarioId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(h => h.PedidoLimaId);
+            entity.HasIndex(h => h.Fecha);
         });
     }
 }
