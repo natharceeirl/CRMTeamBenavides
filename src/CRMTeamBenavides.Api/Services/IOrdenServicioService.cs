@@ -68,6 +68,11 @@ public interface IOrdenServicioService
         Guid? soloClienteId = null,
         Guid? usuarioId = null);
 
+    Task<ServiceResult<OrdenServicioResponse>> SolicitarAprobacionGerenciaAsync(
+        Guid id,
+        SolicitarAprobacionGerenciaRequest request,
+        Guid? usuarioId = null);
+
     Task<ServiceResult<OrdenServicioResponse>> AprobacionGerenciaAsync(
         Guid id,
         AprobacionGerenciaRequest request,

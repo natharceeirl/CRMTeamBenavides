@@ -8,10 +8,12 @@ namespace CRMTeamBenavides.Api.Services;
 public class PagoService : IPagoService
 {
     private readonly ApplicationDbContext _context;
+    private readonly IAuditoriaService _auditoriaService;
 
-    public PagoService(ApplicationDbContext context)
+    public PagoService(ApplicationDbContext context, IAuditoriaService auditoriaService)
     {
         _context = context;
+        _auditoriaService = auditoriaService;
     }
 
     public async Task<List<MetodoPagoResponse>> GetMetodosPagoAsync()
@@ -85,6 +87,21 @@ public class PagoService : IPagoService
 
         _context.Pagos.Add(pago);
         await _context.SaveChangesAsync();
+
+        await _auditoriaService.RegistrarEventoAsync(
+            usuarioId,
+            "Crear",
+            "Pago",
+            pago.Id.ToString(),
+            new
+            {
+                pago.Monto,
+                pago.MetodoPagoId,
+                MetodoPago = metodo.Nombre,
+                pago.VentaId,
+                pago.EsAnticipo,
+                pago.Referencia
+            });
 
         string? usuarioNombre = null;
         if (usuarioId.HasValue)
@@ -173,6 +190,21 @@ public class PagoService : IPagoService
 
         _context.Pagos.Add(pago);
         await _context.SaveChangesAsync();
+
+        await _auditoriaService.RegistrarEventoAsync(
+            usuarioId,
+            "Crear",
+            "Pago",
+            pago.Id.ToString(),
+            new
+            {
+                pago.Monto,
+                pago.MetodoPagoId,
+                MetodoPago = metodo.Nombre,
+                pago.OrdenServicioId,
+                pago.EsAnticipo,
+                pago.Referencia
+            });
 
         string? usuarioNombre = null;
         if (usuarioId.HasValue)

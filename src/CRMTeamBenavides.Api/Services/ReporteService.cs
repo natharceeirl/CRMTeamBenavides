@@ -157,4 +157,159 @@ public class ReporteService : IReporteService
                 p.PrecioVenta))
             .ToListAsync();
     }
+
+    // ------------------------------------------------------------------
+    // REPORTE 4: Rentabilidad y Costos Históricos (D9)
+    // ------------------------------------------------------------------
+    public async Task<RentabilidadReporteResponse> GetRentabilidadAsync(
+        DateTime? fechaDesde,
+        DateTime? fechaHasta,
+        Guid? productoId)
+    {
+        var query = _context.Ventas
+            .Include(v => v.Cliente)
+            .Include(v => v.Comprobante)
+            .Include(v => v.OrdenServicio)
+            .Include(v => v.Detalles.Where(d => d.Activo))
+                .ThenInclude(d => d.Producto)
+            .Include(v => v.Detalles.Where(d => d.Activo))
+                .ThenInclude(d => d.Servicio)
+            .Where(v => v.Activo && v.Estado == EstadoVenta.Confirmada);
+
+        if (fechaDesde.HasValue)
+        {
+            var desde = DateTime.SpecifyKind(fechaDesde.Value.Date, DateTimeKind.Utc);
+            query = query.Where(v => v.Fecha >= desde);
+        }
+
+        if (fechaHasta.HasValue)
+        {
+            var hastaExclusivo = DateTime.SpecifyKind(fechaHasta.Value.Date.AddDays(1), DateTimeKind.Utc);
+            query = query.Where(v => v.Fecha < hastaExclusivo);
+        }
+
+        var ventas = await query.OrderByDescending(v => v.Fecha).ToListAsync();
+
+        if (productoId.HasValue)
+        {
+            ventas = ventas.Where(v => v.Detalles.Any(d => d.ProductoId == productoId.Value)).ToList();
+        }
+
+        var todasLineas = ventas
+            .SelectMany(v => v.Detalles
+                .Where(d => !productoId.HasValue || d.ProductoId == productoId.Value)
+                .Select(d => new
+                {
+                    Venta = v,
+                    Detalle = d,
+                    IngresoNeto = Math.Round(d.Cantidad * d.PrecioUnitario, 2),
+                    CostoHistorico = Math.Round(d.Cantidad * d.CostoUnitarioHistorico, 2)
+                }))
+            .ToList();
+
+        // 1. Resumen Global
+        var ingresosTotalesSinIgv = Math.Round(todasLineas.Sum(l => l.IngresoNeto), 2);
+        var costoTotalHistorico = Math.Round(todasLineas.Sum(l => l.CostoHistorico), 2);
+        var utilidadBrutaTotal = Math.Round(ingresosTotalesSinIgv - costoTotalHistorico, 2);
+        var margenGlobal = ingresosTotalesSinIgv > 0
+            ? Math.Round((utilidadBrutaTotal / ingresosTotalesSinIgv) * 100m, 2)
+            : 0m;
+
+        var resumen = new RentabilidadResumenResponse(
+            ingresosTotalesSinIgv,
+            costoTotalHistorico,
+            utilidadBrutaTotal,
+            margenGlobal);
+
+        // 2. Desglose por Tipo de Ítem (Repuesto, Servicio, ManoDeObra, Terceros)
+        var tiposEnum = new[]
+        {
+            TipoItemServicio.Repuesto,
+            TipoItemServicio.Servicio,
+            TipoItemServicio.ManoDeObra,
+            TipoItemServicio.Terceros
+        };
+
+        var lineasPorTipo = todasLineas.GroupBy(l => l.Detalle.TipoItem).ToDictionary(g => g.Key, g => g.ToList());
+
+        var desglosePorTipo = tiposEnum.Select(tipo =>
+        {
+            if (lineasPorTipo.TryGetValue(tipo, out var lineas))
+            {
+                var ing = Math.Round(lineas.Sum(l => l.IngresoNeto), 2);
+                var cos = Math.Round(lineas.Sum(l => l.CostoHistorico), 2);
+                var uti = Math.Round(ing - cos, 2);
+                var mar = ing > 0 ? Math.Round((uti / ing) * 100m, 2) : 0m;
+                return new RentabilidadPorTipoItemResponse(
+                    tipo.ToString(),
+                    lineas.Sum(l => l.Detalle.Cantidad),
+                    ing,
+                    cos,
+                    uti,
+                    mar);
+            }
+
+            return new RentabilidadPorTipoItemResponse(tipo.ToString(), 0, 0m, 0m, 0m, 0m);
+        }).ToList();
+
+        // 3. Detalle por Operación (Ventas / OS)
+        var detalleOperaciones = ventas.Select(v =>
+        {
+            var lineasVenta = todasLineas.Where(l => l.Venta.Id == v.Id).ToList();
+            var ing = Math.Round(lineasVenta.Sum(l => l.IngresoNeto), 2);
+            var cos = Math.Round(lineasVenta.Sum(l => l.CostoHistorico), 2);
+            var uti = Math.Round(ing - cos, 2);
+            var mar = ing > 0 ? Math.Round((uti / ing) * 100m, 2) : 0m;
+
+            string docTipo = v.OrdenServicioId.HasValue ? "OrdenServicio" : "Venta";
+            string docNum = v.Comprobante != null
+                ? $"{v.Comprobante.Serie}-{v.Comprobante.Numero}"
+                : (v.OrdenServicio?.NumeroOrden ?? $"VTA-{v.Id.ToString()[..8].ToUpperInvariant()}");
+
+            return new RentabilidadOperacionDetalleResponse(
+                docTipo,
+                docNum,
+                v.Id,
+                v.Fecha,
+                v.Cliente.NombreCompleto,
+                ing,
+                cos,
+                uti,
+                mar);
+        }).Where(op => op.IngresoNeto > 0 || op.CostoHistoricoRegistrado > 0).ToList();
+
+        // 4. Ranking de Repuestos
+        var repuestosLineas = todasLineas
+            .Where(l => l.Detalle.TipoItem == TipoItemServicio.Repuesto && l.Detalle.ProductoId.HasValue)
+            .GroupBy(l => l.Detalle.ProductoId!.Value);
+
+        var rankingRepuestos = repuestosLineas.Select(g =>
+        {
+            var primera = g.First();
+            var ing = Math.Round(g.Sum(l => l.IngresoNeto), 2);
+            var cos = Math.Round(g.Sum(l => l.CostoHistorico), 2);
+            var uti = Math.Round(ing - cos, 2);
+            var mar = ing > 0 ? Math.Round((uti / ing) * 100m, 2) : 0m;
+
+            return new RentabilidadRepuestoRankingResponse(
+                g.Key,
+                primera.Detalle.Producto?.Codigo ?? string.Empty,
+                primera.Detalle.Producto?.Nombre ?? primera.Detalle.Servicio?.Nombre ?? "Repuesto",
+                g.Sum(l => l.Detalle.Cantidad),
+                ing,
+                cos,
+                uti,
+                mar);
+        })
+        .OrderByDescending(r => r.UtilidadBruta)
+        .ToList();
+
+        return new RentabilidadReporteResponse(
+            fechaDesde,
+            fechaHasta,
+            resumen,
+            desglosePorTipo,
+            detalleOperaciones,
+            rankingRepuestos);
+    }
 }

@@ -21,11 +21,14 @@ public static class AuditoriaEndpoints
     {
         var group = app.MapGroup("/api/auditoria").RequireAuthorization(PermisosDefinidos.AuditoriaVer);
 
-        group.MapGet("/", async (
+        var handleGetEventos = async (
             string? entidad,
+            string? entidadId,
             string? accion,
+            Guid? usuarioId,
             DateTime? fechaDesde,
             DateTime? fechaHasta,
+            int? limit,
             int? limite,
             ApplicationDbContext context,
             CancellationToken ct) =>
@@ -35,8 +38,14 @@ public static class AuditoriaEndpoints
             if (!string.IsNullOrWhiteSpace(entidad))
                 query = query.Where(e => e.Entidad == entidad.Trim());
 
+            if (!string.IsNullOrWhiteSpace(entidadId))
+                query = query.Where(e => e.EntidadId == entidadId.Trim());
+
             if (!string.IsNullOrWhiteSpace(accion))
                 query = query.Where(e => e.Accion == accion.Trim());
+
+            if (usuarioId.HasValue)
+                query = query.Where(e => e.UsuarioId == usuarioId.Value);
 
             if (fechaDesde.HasValue)
                 query = query.Where(e => e.Fecha >= fechaDesde.Value);
@@ -44,7 +53,7 @@ public static class AuditoriaEndpoints
             if (fechaHasta.HasValue)
                 query = query.Where(e => e.Fecha <= fechaHasta.Value);
 
-            var take = Math.Clamp(limite ?? 50, 1, 200);
+            var take = Math.Clamp(limit ?? limite ?? 50, 1, 200);
 
             var eventos = await query
                 .OrderByDescending(e => e.Fecha)
@@ -69,7 +78,12 @@ public static class AuditoriaEndpoints
             )).ToList();
 
             return Results.Ok(response);
-        })
-        .WithName("GetEventosAuditoria");
+        };
+
+        group.MapGet("/", handleGetEventos)
+            .WithName("GetEventosAuditoria");
+
+        group.MapGet("/eventos", handleGetEventos)
+            .WithName("GetEventosAuditoriaEventos");
     }
 }

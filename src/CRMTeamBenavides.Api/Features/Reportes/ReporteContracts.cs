@@ -47,3 +47,48 @@ public record StockBajoResponse(
     int StockMinimo,
     int Diferencia,
     decimal PrecioVenta);
+
+// --- Rentabilidad / Costos Históricos (D9) ---
+
+public record RentabilidadResumenResponse(
+    decimal IngresosTotalesSinIgv,
+    decimal CostoTotalHistorico,
+    decimal UtilidadBrutaTotal,
+    decimal MargenPorcentualGlobal);
+
+public record RentabilidadPorTipoItemResponse(
+    string TipoItem,
+    int CantidadItems,
+    decimal IngresoNeto,
+    decimal CostoHistoricoRegistrado,
+    decimal UtilidadBruta,
+    decimal MargenPorcentual);
+
+public record RentabilidadOperacionDetalleResponse(
+    string DocumentoTipo,
+    string NumeroDocumento,
+    Guid OperacionId,
+    DateTime Fecha,
+    string ClienteNombre,
+    decimal IngresoNeto,
+    decimal CostoHistoricoRegistrado,
+    decimal UtilidadBruta,
+    decimal MargenPorcentual);
+
+public record RentabilidadRepuestoRankingResponse(
+    Guid ProductoId,
+    string Codigo,
+    string Descripcion,
+    int UnidadesVendidas,
+    decimal IngresoNeto,
+    decimal CostoHistorico,
+    decimal UtilidadBruta,
+    decimal MargenPorcentual);
+
+public record RentabilidadReporteResponse(
+    DateTime? FechaDesde,
+    DateTime? FechaHasta,
+    RentabilidadResumenResponse Resumen,
+    List<RentabilidadPorTipoItemResponse> DesglosePorTipo,
+    List<RentabilidadOperacionDetalleResponse> DetalleOperaciones,
+    List<RentabilidadRepuestoRankingResponse> RankingRepuestos);

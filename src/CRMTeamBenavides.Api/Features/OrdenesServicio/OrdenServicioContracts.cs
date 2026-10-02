@@ -63,6 +63,9 @@ public record ResponderPresupuestoClienteRequest(
     EstadoPresupuestoCliente Estado,
     string? Observaciones = null);
 
+public record SolicitarAprobacionGerenciaRequest(
+    string Observaciones);
+
 public record AprobacionGerenciaRequest(
     EstadoAprobacionGerencia Estado,
     string? Observaciones = null);

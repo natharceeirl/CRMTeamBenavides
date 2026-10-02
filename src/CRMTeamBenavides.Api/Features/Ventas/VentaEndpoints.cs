@@ -125,9 +125,10 @@ public static class VentaEndpoints
         .RequireAuthorization(PermisosDefinidos.VentasCrear)
         .WithName("ConfirmarCotizacion");
 
-        group.MapPut("/{id:guid}/anular", async (Guid id, IVentaService service) =>
+        group.MapPut("/{id:guid}/anular", async (Guid id, ClaimsPrincipal user, IVentaService service) =>
         {
-            var result = await service.AnularAsync(id);
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.AnularAsync(id, usuarioId);
             return result.Status switch
             {
                 ServiceResultStatus.Success => Results.Ok(result.Data),
@@ -210,9 +211,10 @@ public static class VentaEndpoints
         .RequireAuthorization(PoliticaVerVentas)
         .WithName("GetComprobanteVenta");
 
-        group.MapPost("/{id:guid}/comprobante", async (Guid id, RegistrarComprobanteRequest request, IVentaService service) =>
+        group.MapPost("/{id:guid}/comprobante", async (Guid id, RegistrarComprobanteRequest request, ClaimsPrincipal user, IVentaService service) =>
         {
-            var result = await service.RegistrarComprobanteAsync(id, request);
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.RegistrarComprobanteAsync(id, request, usuarioId);
             return result.Status switch
             {
                 ServiceResultStatus.Success => Results.Created($"/api/ventas/{id}/comprobante", result.Data),
@@ -224,9 +226,10 @@ public static class VentaEndpoints
         .RequireAuthorization(PermisosDefinidos.VentasCrear)
         .WithName("RegistrarComprobanteVenta");
 
-        group.MapPut("/{id:guid}/comprobante/anular", async (Guid id, IVentaService service) =>
+        group.MapPut("/{id:guid}/comprobante/anular", async (Guid id, ClaimsPrincipal user, IVentaService service) =>
         {
-            var result = await service.AnularComprobanteAsync(id);
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.AnularComprobanteAsync(id, usuarioId);
             return result.Status switch
             {
                 ServiceResultStatus.Success => Results.Ok(result.Data),

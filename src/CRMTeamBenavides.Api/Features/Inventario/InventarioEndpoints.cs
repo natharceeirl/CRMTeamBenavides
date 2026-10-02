@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Domain.Entities;
@@ -104,9 +105,14 @@ public static class InventarioEndpoints
         .RequireAuthorization(PermisosDefinidos.InventarioAjustar)
         .WithName("RegistrarSalidaInventario");
 
-        groupProductos.MapPost("/{id:guid}/ajustes", async (Guid id, RegistrarAjusteRequest request, IInventarioService service) =>
+        groupProductos.MapPost("/{id:guid}/ajustes", async (
+            Guid id,
+            RegistrarAjusteRequest request,
+            ClaimsPrincipal user,
+            IInventarioService service) =>
         {
-            var result = await service.RegistrarAjusteAsync(id, request);
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.RegistrarAjusteAsync(id, request, usuarioId);
             return result.Status switch
             {
                 ServiceResultStatus.Success => Results.Ok(result.Data),
@@ -146,5 +152,14 @@ public static class InventarioEndpoints
         })
         .RequireAuthorization(PermisosDefinidos.InventarioVer)
         .WithName("GetMovimientosInventario");
+    }
+
+    private static Guid? ObtenerUsuarioId(ClaimsPrincipal user)
+    {
+        var idStr = user.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? user.FindFirstValue("sub")
+            ?? user.FindFirstValue("uid");
+
+        return Guid.TryParse(idStr, out var id) ? id : null;
     }
 }

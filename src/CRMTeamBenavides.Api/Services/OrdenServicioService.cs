@@ -13,15 +13,18 @@ public class OrdenServicioService : IOrdenServicioService
     private readonly ApplicationDbContext _context;
     private readonly UserManager<Usuario> _userManager;
     private readonly IConfiguracionService _configuracionService;
+    private readonly IAuditoriaService _auditoriaService;
 
     public OrdenServicioService(
         ApplicationDbContext context,
         UserManager<Usuario> userManager,
-        IConfiguracionService configuracionService)
+        IConfiguracionService configuracionService,
+        IAuditoriaService auditoriaService)
     {
         _context = context;
         _userManager = userManager;
         _configuracionService = configuracionService;
+        _auditoriaService = auditoriaService;
     }
 
     private async Task<string> GenerarNumeroOrdenAsync()
@@ -254,6 +257,19 @@ public class OrdenServicioService : IOrdenServicioService
         _context.HistorialEstadosOrden.Add(primerHistorial);
 
         await _context.SaveChangesAsync();
+
+        await _auditoriaService.RegistrarEventoAsync(
+            usuarioId,
+            "Crear",
+            "OrdenServicio",
+            orden.Id.ToString(),
+            new
+            {
+                orden.NumeroOrden,
+                orden.VehiculoId,
+                orden.ClienteId,
+                Total = orden.Total
+            });
 
         orden.Vehiculo = vehiculo;
         orden.Cliente  = vehiculo.Cliente;
@@ -1030,6 +1046,19 @@ public class OrdenServicioService : IOrdenServicioService
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
+                await _auditoriaService.RegistrarEventoAsync(
+                    usuarioId,
+                    "CambioEstado",
+                    "OrdenServicio",
+                    orden.Id.ToString(),
+                    new
+                    {
+                        OrdenServicioId = orden.Id,
+                        EstadoAnterior = estadoAnterior.ToString(),
+                        EstadoNuevo = request.NuevoEstado.ToString(),
+                        Observaciones = request.Observaciones?.Trim()
+                    });
+
                 return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
             }
             catch
@@ -1048,6 +1077,20 @@ public class OrdenServicioService : IOrdenServicioService
             orden.FechaModificacion = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+
+            await _auditoriaService.RegistrarEventoAsync(
+                usuarioId,
+                "CambioEstado",
+                "OrdenServicio",
+                orden.Id.ToString(),
+                new
+                {
+                    OrdenServicioId = orden.Id,
+                    EstadoAnterior = estadoAnterior.ToString(),
+                    EstadoNuevo = request.NuevoEstado.ToString(),
+                    Observaciones = request.Observaciones?.Trim()
+                });
+
             return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
         }
 
@@ -1056,6 +1099,20 @@ public class OrdenServicioService : IOrdenServicioService
         orden.FechaModificacion = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
+
+        await _auditoriaService.RegistrarEventoAsync(
+            usuarioId,
+            "CambioEstado",
+            "OrdenServicio",
+            orden.Id.ToString(),
+            new
+            {
+                OrdenServicioId = orden.Id,
+                EstadoAnterior = estadoAnterior.ToString(),
+                EstadoNuevo = request.NuevoEstado.ToString(),
+                Observaciones = request.Observaciones?.Trim()
+            });
+
         return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
     }
 
@@ -1182,6 +1239,85 @@ public class OrdenServicioService : IOrdenServicioService
         });
 
         await _context.SaveChangesAsync();
+
+        await _auditoriaService.RegistrarEventoAsync(
+            usuarioId,
+            "PresupuestoCliente",
+            "OrdenServicio",
+            orden.Id.ToString(),
+            new
+            {
+                OrdenServicioId = orden.Id,
+                EstadoPresupuestoCliente = request.Estado.ToString(),
+                Observaciones = request.Observaciones?.Trim()
+            });
+
+        return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
+    }
+
+    public async Task<ServiceResult<OrdenServicioResponse>> SolicitarAprobacionGerenciaAsync(
+        Guid id,
+        SolicitarAprobacionGerenciaRequest request,
+        Guid? usuarioId = null)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.Observaciones))
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid(
+                "Debe indicar el motivo o justificación para solicitar la aprobación de gerencia.");
+        }
+
+        var orden = await _context.OrdenesServicio
+            .Include(o => o.Vehiculo)
+                .ThenInclude(v => v.Cliente)
+            .Include(o => o.Cliente)
+            .Include(o => o.TecnicoAsignado)
+            .Include(o => o.Detalles)
+            .Include(o => o.UsuarioAprobacionGerencia)
+            .Include(o => o.Ventas)
+                .ThenInclude(v => v.Comprobante)
+            .FirstOrDefaultAsync(o => o.Id == id && o.Activo);
+
+        if (orden is null)
+        {
+            return ServiceResult<OrdenServicioResponse>.NotFound();
+        }
+
+        if (orden.Estado == EstadoOrdenServicio.Entregada || orden.Estado == EstadoOrdenServicio.Cancelada)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid(
+                $"No se puede solicitar aprobación de gerencia en una orden en estado terminal '{orden.Estado}'.");
+        }
+
+        orden.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
+        orden.ObservacionesAprobacionGerencia = request.Observaciones.Trim();
+        orden.FechaModificacion = DateTime.UtcNow;
+
+        _context.HistorialEstadosOrden.Add(new HistorialEstadoOrden
+        {
+            OrdenServicioId = orden.Id,
+            EstadoAnterior  = orden.Estado,
+            EstadoNuevo     = orden.Estado,
+            UsuarioId       = usuarioId,
+            FechaCambio     = DateTime.UtcNow,
+            Observaciones   = $"Solicitud de aprobación a Gerencia: {request.Observaciones.Trim()}",
+            FechaCreacion   = DateTime.UtcNow,
+            Activo          = true
+        });
+
+        await _context.SaveChangesAsync();
+
+        await _auditoriaService.RegistrarEventoAsync(
+            usuarioId,
+            "SolicitarAprobacionGerencia",
+            "OrdenServicio",
+            orden.Id.ToString(),
+            new
+            {
+                OrdenServicioId = orden.Id,
+                EstadoAprobacionGerencia = "Pendiente",
+                Motivo = request.Observaciones.Trim()
+            });
+
         return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
     }
 
@@ -1241,6 +1377,19 @@ public class OrdenServicioService : IOrdenServicioService
         });
 
         await _context.SaveChangesAsync();
+
+        await _auditoriaService.RegistrarEventoAsync(
+            usuarioId,
+            "AprobacionGerencia",
+            "OrdenServicio",
+            orden.Id.ToString(),
+            new
+            {
+                OrdenServicioId = orden.Id,
+                EstadoAprobacionGerencia = request.Estado.ToString(),
+                Observaciones = request.Observaciones?.Trim()
+            });
+
         return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
     }
 

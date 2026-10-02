@@ -405,6 +405,32 @@ public static class OrdenServicioEndpoints
             .RequireAuthorization(PoliticaAprobacionCliente)
             .WithName("AprobacionClienteOrdenServicioPost");
 
+        var handleSolicitarAprobacionGerencia = async (
+            Guid id,
+            SolicitarAprobacionGerenciaRequest request,
+            ClaimsPrincipal user,
+            IOrdenServicioService service) =>
+        {
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.SolicitarAprobacionGerenciaAsync(id, request, usuarioId);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.Forbidden => Results.Json(new { error = result.Error }, statusCode: StatusCodes.Status403Forbidden),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        };
+
+        group.MapPut("/{id:guid}/solicitar-aprobacion-gerencia", handleSolicitarAprobacionGerencia)
+            .RequireAuthorization(PermisosDefinidos.OrdenesEditar)
+            .WithName("SolicitarAprobacionGerenciaOrdenServicio");
+
+        group.MapPost("/{id:guid}/solicitar-aprobacion-gerencia", handleSolicitarAprobacionGerencia)
+            .RequireAuthorization(PermisosDefinidos.OrdenesEditar)
+            .WithName("SolicitarAprobacionGerenciaOrdenServicioPost");
+
         var handleAprobacionGerencia = async (
             Guid id,
             AprobacionGerenciaRequest request,

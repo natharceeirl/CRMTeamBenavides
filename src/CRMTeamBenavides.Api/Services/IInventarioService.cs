@@ -13,7 +13,7 @@ public interface IInventarioService
 
     Task<ServiceResult<ProductoResponse>> RegistrarEntradaAsync(Guid productoId, RegistrarEntradaRequest request);
     Task<ServiceResult<ProductoResponse>> RegistrarSalidaAsync(Guid productoId, RegistrarSalidaRequest request);
-    Task<ServiceResult<ProductoResponse>> RegistrarAjusteAsync(Guid productoId, RegistrarAjusteRequest request);
+    Task<ServiceResult<ProductoResponse>> RegistrarAjusteAsync(Guid productoId, RegistrarAjusteRequest request, Guid? usuarioId = null);
 
     Task<ServiceResult<List<MovimientoInventarioResponse>>> GetMovimientosByProductoAsync(Guid productoId);
     Task<List<MovimientoInventarioResponse>> GetAllMovimientosAsync(Guid? productoId, TipoMovimientoInventario? tipo, DateTime? fechaDesde, DateTime? fechaHasta);

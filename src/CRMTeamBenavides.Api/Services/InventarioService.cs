@@ -8,10 +8,12 @@ namespace CRMTeamBenavides.Api.Services;
 public class InventarioService : IInventarioService
 {
     private readonly ApplicationDbContext _context;
+    private readonly IAuditoriaService _auditoriaService;
 
-    public InventarioService(ApplicationDbContext context)
+    public InventarioService(ApplicationDbContext context, IAuditoriaService auditoriaService)
     {
         _context = context;
+        _auditoriaService = auditoriaService;
     }
 
     public async Task<List<ProductoResponse>> GetAllProductosAsync(Guid? categoriaId, string? busqueda, bool? bajoStock)
@@ -364,7 +366,7 @@ public class InventarioService : IInventarioService
         }
     }
 
-    public async Task<ServiceResult<ProductoResponse>> RegistrarAjusteAsync(Guid productoId, RegistrarAjusteRequest request)
+    public async Task<ServiceResult<ProductoResponse>> RegistrarAjusteAsync(Guid productoId, RegistrarAjusteRequest request, Guid? usuarioId = null)
     {
         if (request.NuevoStock < 0)
         {
@@ -392,6 +394,7 @@ public class InventarioService : IInventarioService
                 return ServiceResult<ProductoResponse>.NotFound();
             }
 
+            var stockAnterior = producto.StockActual;
             var diferencia = Math.Abs(request.NuevoStock - producto.StockActual);
 
             producto.StockActual       = request.NuevoStock;
@@ -411,6 +414,21 @@ public class InventarioService : IInventarioService
 
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
+
+            await _auditoriaService.RegistrarEventoAsync(
+                usuarioId,
+                "Ajuste",
+                "Inventario",
+                producto.Id.ToString(),
+                new
+                {
+                    ProductoId = producto.Id,
+                    ProductoCodigo = producto.Codigo,
+                    StockAnterior = stockAnterior,
+                    NuevoStock = request.NuevoStock,
+                    Diferencia = request.NuevoStock - stockAnterior,
+                    Motivo = request.Motivo.Trim()
+                });
 
             return ServiceResult<ProductoResponse>.Success(MapToResponse(producto));
         }

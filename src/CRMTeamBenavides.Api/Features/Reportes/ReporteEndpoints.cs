@@ -46,5 +46,18 @@ public static class ReporteEndpoints
         })
         .RequireAuthorization(PermisosDefinidos.ReportesVerOperativos)
         .WithName("GetReporteStockBajo");
+
+        // --- Rentabilidad / Costos Históricos (D9) ---
+        group.MapGet("/rentabilidad", async (
+            DateTime? fechaDesde,
+            DateTime? fechaHasta,
+            Guid? productoId,
+            IReporteService service) =>
+        {
+            var datos = await service.GetRentabilidadAsync(fechaDesde, fechaHasta, productoId);
+            return Results.Ok(datos);
+        })
+        .RequireAuthorization(PermisosDefinidos.ReportesVerFinancieros)
+        .WithName("GetReporteRentabilidad");
     }
 }

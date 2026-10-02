@@ -172,6 +172,7 @@ builder.Services.AddScoped<IYamahaService, YamahaMockService>();
 builder.Services.AddScoped<IExportacionExcelService, ExportacionExcelService>();
 builder.Services.AddScoped<ICitaService, CitaService>();
 builder.Services.AddScoped<IPedidoLimaService, PedidoLimaService>();
+builder.Services.AddScoped<IAuditoriaService, AuditoriaService>();
 
 // ---------------------------------------------------------------------------
 // Yamaha API — infraestructura del conector

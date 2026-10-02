@@ -8,10 +8,12 @@ namespace CRMTeamBenavides.Api.Services;
 public class VentaService : IVentaService
 {
     private readonly ApplicationDbContext _context;
+    private readonly IAuditoriaService _auditoriaService;
 
-    public VentaService(ApplicationDbContext context)
+    public VentaService(ApplicationDbContext context, IAuditoriaService auditoriaService)
     {
         _context = context;
+        _auditoriaService = auditoriaService;
     }
 
     public async Task<List<VentaResponse>> GetAllAsync(
@@ -292,6 +294,21 @@ public class VentaService : IVentaService
             _context.Ventas.Add(ventaOs);
             await _context.SaveChangesAsync();
 
+            await _auditoriaService.RegistrarEventoAsync(
+                null,
+                "Crear",
+                "Venta",
+                ventaOs.Id.ToString(),
+                new
+                {
+                    Tipo = "LiquidacionOS",
+                    OrdenServicioId = ventaOs.OrdenServicioId,
+                    ClienteId = ventaOs.ClienteId,
+                    Total = ventaOs.Total,
+                    SubtotalGravado = ventaOs.SubtotalGravado,
+                    Estado = ventaOs.Estado.ToString()
+                });
+
             return ServiceResult<VentaDetalleResponse>.Success(MapToDetalleResponse(ventaOs));
         }
 
@@ -393,6 +410,21 @@ public class VentaService : IVentaService
 
             _context.Ventas.Add(cotizacion);
             await _context.SaveChangesAsync();
+
+            await _auditoriaService.RegistrarEventoAsync(
+                null,
+                "Crear",
+                "Venta",
+                cotizacion.Id.ToString(),
+                new
+                {
+                    Tipo = "CotizacionDirecta",
+                    ClienteId = cotizacion.ClienteId,
+                    Total = cotizacion.Total,
+                    SubtotalGravado = cotizacion.SubtotalGravado,
+                    Estado = cotizacion.Estado.ToString()
+                });
+
             return ServiceResult<VentaDetalleResponse>.Success(MapToDetalleResponse(cotizacion));
         }
 
@@ -509,6 +541,20 @@ public class VentaService : IVentaService
 
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
+
+            await _auditoriaService.RegistrarEventoAsync(
+                null,
+                "Crear",
+                "Venta",
+                venta.Id.ToString(),
+                new
+                {
+                    Tipo = "VentaDirecta",
+                    ClienteId = venta.ClienteId,
+                    Total = venta.Total,
+                    SubtotalGravado = venta.SubtotalGravado,
+                    Estado = venta.Estado.ToString()
+                });
 
             return ServiceResult<VentaDetalleResponse>.Success(MapToDetalleResponse(venta));
         }
@@ -641,7 +687,7 @@ public class VentaService : IVentaService
         }
     }
 
-    public async Task<ServiceResult<VentaDetalleResponse>> AnularAsync(Guid id)
+    public async Task<ServiceResult<VentaDetalleResponse>> AnularAsync(Guid id, Guid? usuarioId = null)
     {
         var venta = await _context.Ventas
             .Include(v => v.Cliente)
@@ -661,6 +707,8 @@ public class VentaService : IVentaService
             return ServiceResult<VentaDetalleResponse>.Invalid("La venta ya se encuentra anulada.");
         }
 
+        var estadoAnterior = venta.Estado.ToString();
+
         // Si era cotización o proviene de una OS, no reponemos stock en almacén de venta directa
         if (venta.Estado == EstadoVenta.Cotizacion || venta.OrdenServicioId.HasValue)
         {
@@ -674,6 +722,20 @@ public class VentaService : IVentaService
             }
 
             await _context.SaveChangesAsync();
+
+            await _auditoriaService.RegistrarEventoAsync(
+                usuarioId,
+                "Anular",
+                "Venta",
+                venta.Id.ToString(),
+                new
+                {
+                    ValoresAnteriores = new { Estado = estadoAnterior },
+                    ValoresNuevos = new { Estado = EstadoVenta.Anulada.ToString() },
+                    Total = venta.Total,
+                    OrdenServicioId = venta.OrdenServicioId
+                });
+
             return ServiceResult<VentaDetalleResponse>.Success(MapToDetalleResponse(venta));
         }
 
@@ -731,6 +793,19 @@ public class VentaService : IVentaService
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
+            await _auditoriaService.RegistrarEventoAsync(
+                usuarioId,
+                "Anular",
+                "Venta",
+                venta.Id.ToString(),
+                new
+                {
+                    ValoresAnteriores = new { Estado = estadoAnterior },
+                    ValoresNuevos = new { Estado = EstadoVenta.Anulada.ToString() },
+                    Total = venta.Total,
+                    OrdenServicioId = venta.OrdenServicioId
+                });
+
             return ServiceResult<VentaDetalleResponse>.Success(MapToDetalleResponse(venta));
         }
         catch
@@ -765,7 +840,7 @@ public class VentaService : IVentaService
     }
 
     public async Task<ServiceResult<ComprobanteResponse>> RegistrarComprobanteAsync(
-        Guid ventaId, RegistrarComprobanteRequest request)
+        Guid ventaId, RegistrarComprobanteRequest request, Guid? usuarioId = null)
     {
         if (string.IsNullOrWhiteSpace(request.Tipo) ||
             !Enum.TryParse<TipoComprobante>(request.Tipo.Trim(), ignoreCase: true, out var tipoEnum) ||
@@ -845,10 +920,25 @@ public class VentaService : IVentaService
             return ServiceResult<ComprobanteResponse>.Invalid("La venta ya cuenta con un comprobante registrado.");
         }
 
+        await _auditoriaService.RegistrarEventoAsync(
+            usuarioId,
+            "Crear",
+            "Comprobante",
+            comprobante.Id.ToString(),
+            new
+            {
+                VentaId = ventaId,
+                Tipo = comprobante.Tipo,
+                Serie = comprobante.Serie,
+                Numero = comprobante.Numero,
+                Total = comprobante.Total,
+                MetodoPagoPrincipal = comprobante.MetodoPagoPrincipal
+            });
+
         return ServiceResult<ComprobanteResponse>.Success(MapToComprobanteResponse(comprobante));
     }
 
-    public async Task<ServiceResult<ComprobanteResponse>> AnularComprobanteAsync(Guid ventaId)
+    public async Task<ServiceResult<ComprobanteResponse>> AnularComprobanteAsync(Guid ventaId, Guid? usuarioId = null)
     {
         var venta = await _context.Ventas
             .Include(v => v.Comprobante)
@@ -873,6 +963,18 @@ public class VentaService : IVentaService
         venta.Comprobante.FechaModificacion = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
+
+        await _auditoriaService.RegistrarEventoAsync(
+            usuarioId,
+            "Anular",
+            "Comprobante",
+            venta.Comprobante.Id.ToString(),
+            new
+            {
+                VentaId = ventaId,
+                ValoresAnteriores = new { Estado = "Emitido" },
+                ValoresNuevos = new { Estado = "Anulado" }
+            });
 
         return ServiceResult<ComprobanteResponse>.Success(MapToComprobanteResponse(venta.Comprobante));
     }

@@ -21,8 +21,8 @@ public interface IVentaService
         Guid? soloClienteId = null);
 
     Task<ServiceResult<VentaDetalleResponse>> ConfirmarCotizacionAsync(Guid id, Guid? soloClienteId = null);
-    Task<ServiceResult<VentaDetalleResponse>> AnularAsync(Guid id);
+    Task<ServiceResult<VentaDetalleResponse>> AnularAsync(Guid id, Guid? usuarioId = null);
     Task<ServiceResult<ComprobanteResponse>> GetComprobanteAsync(Guid ventaId, Guid? soloClienteId = null);
-    Task<ServiceResult<ComprobanteResponse>> RegistrarComprobanteAsync(Guid ventaId, RegistrarComprobanteRequest request);
-    Task<ServiceResult<ComprobanteResponse>> AnularComprobanteAsync(Guid ventaId);
+    Task<ServiceResult<ComprobanteResponse>> RegistrarComprobanteAsync(Guid ventaId, RegistrarComprobanteRequest request, Guid? usuarioId = null);
+    Task<ServiceResult<ComprobanteResponse>> AnularComprobanteAsync(Guid ventaId, Guid? usuarioId = null);
 }

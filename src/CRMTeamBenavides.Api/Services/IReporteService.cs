@@ -18,4 +18,9 @@ public interface IReporteService
         Guid? clienteId);
 
     Task<List<StockBajoResponse>> GetStockBajoAsync();
+
+    Task<RentabilidadReporteResponse> GetRentabilidadAsync(
+        DateTime? fechaDesde,
+        DateTime? fechaHasta,
+        Guid? productoId);
 }
