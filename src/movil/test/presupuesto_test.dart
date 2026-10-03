@@ -3,21 +3,25 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('respuestas al presupuesto', () {
-    test('mientras la orden está en su etapa se puede aprobar o rechazar', () {
+    test('con la orden en diagnóstico y el presupuesto armado se puede aprobar o rechazar', () {
       expect(
-        respuestasPresupuesto(EstadoOrden.diagnostico, EstadoPresupuesto.pendiente),
+        respuestasPresupuesto(EstadoOrden.diagnostico, EstadoPresupuesto.pendiente, 120),
         [EstadoPresupuesto.aprobado, EstadoPresupuesto.rechazado],
       );
-      expect(respuestasPresupuesto(EstadoOrden.abierta, EstadoPresupuesto.pendiente), hasLength(2));
+    });
+
+    test('antes del diagnóstico o sin ítems no se responde', () {
+      expect(respuestasPresupuesto(EstadoOrden.abierta, EstadoPresupuesto.pendiente, 120), isEmpty);
+      expect(respuestasPresupuesto(EstadoOrden.diagnostico, EstadoPresupuesto.pendiente, 0), isEmpty);
     });
 
     test('después de aprobado no se ofrece nada, ni para cambiar a rechazado', () {
-      expect(respuestasPresupuesto(EstadoOrden.diagnostico, EstadoPresupuesto.aprobado), isEmpty);
+      expect(respuestasPresupuesto(EstadoOrden.diagnostico, EstadoPresupuesto.aprobado, 120), isEmpty);
     });
 
     test('rechazado y aún en diagnóstico, solo se puede aprobar', () {
       expect(
-        respuestasPresupuesto(EstadoOrden.diagnostico, EstadoPresupuesto.rechazado),
+        respuestasPresupuesto(EstadoOrden.diagnostico, EstadoPresupuesto.rechazado, 120),
         [EstadoPresupuesto.aprobado],
       );
     });
@@ -30,7 +34,7 @@ void main() {
         EstadoOrden.entregada,
         EstadoOrden.cancelada,
       ]) {
-        expect(respuestasPresupuesto(estado, EstadoPresupuesto.pendiente), isEmpty);
+        expect(respuestasPresupuesto(estado, EstadoPresupuesto.pendiente, 120), isEmpty);
       }
     });
   });

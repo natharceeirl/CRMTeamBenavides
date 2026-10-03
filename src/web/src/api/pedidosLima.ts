@@ -20,6 +20,13 @@ export const nombresEstadoPedidoLima: Record<EstadoPedidoLima, string> = {
   [ESTADO_PEDIDO_LIMA.cancelado]: 'Cancelado',
 }
 
+/** Para el cliente, como en la app: «En camino» y «Listo para recoger». */
+export const nombresEstadoPedidoCliente: Record<EstadoPedidoLima, string> = {
+  ...nombresEstadoPedidoLima,
+  [ESTADO_PEDIDO_LIMA.enTransito]: 'En camino',
+  [ESTADO_PEDIDO_LIMA.recibido]: 'Listo para recoger',
+}
+
 export const esPedidoFinal = (estado: EstadoPedidoLima) =>
   estado === ESTADO_PEDIDO_LIMA.entregado || estado === ESTADO_PEDIDO_LIMA.cancelado
 

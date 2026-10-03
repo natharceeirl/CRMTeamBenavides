@@ -544,6 +544,11 @@ public class OrdenServicioService : IOrdenServicioService
                 "No se pueden agregar detalles a una orden en estado 'Lista'. Debe reabrirse a 'EnProceso' para realizar trabajos adicionales.");
         }
 
+        if (await TieneVentaVigenteAsync(orden.Id))
+        {
+            return ServiceResult<DetalleServicioResponse>.Invalid(MensajeOrdenLiquidada);
+        }
+
         var porcentajeIgvVigente = await _configuracionService.ObtenerPorcentajeIgvVigenteAsync();
 
         // Determinar TipoItem
@@ -814,6 +819,11 @@ public class OrdenServicioService : IOrdenServicioService
                 "No se pueden eliminar detalles de una orden en estado 'Lista'. Debe reabrirse a 'EnProceso' si requiere ajustes.");
         }
 
+        if (await TieneVentaVigenteAsync(orden.Id))
+        {
+            return ServiceResult<bool>.Invalid(MensajeOrdenLiquidada);
+        }
+
         var detalle = orden.Detalles.FirstOrDefault(d => d.Id == detalleId && d.Activo);
 
         if (detalle is null)
@@ -958,6 +968,13 @@ public class OrdenServicioService : IOrdenServicioService
             {
                 return ServiceResult<OrdenServicioResponse>.Invalid(
                     "No se puede aprobar la orden de servicio porque el presupuesto fue rechazado por el cliente.");
+            }
+
+            // «Aprobada» es «presupuesto aprobado»: sin la respuesta del cliente no se aprueba.
+            if (orden.EstadoPresupuestoCliente != EstadoPresupuestoCliente.Aprobado)
+            {
+                return ServiceResult<OrdenServicioResponse>.Invalid(
+                    "No se puede aprobar la orden de servicio: falta que el cliente apruebe el presupuesto.");
             }
 
             if (orden.EstadoAprobacionGerencia == EstadoAprobacionGerencia.Pendiente)
@@ -1226,10 +1243,22 @@ public class OrdenServicioService : IOrdenServicioService
                 "El presupuesto ya fue aprobado: no se puede volver a responder.");
         }
 
-        if (orden.Estado is not (EstadoOrdenServicio.Abierta or EstadoOrdenServicio.Diagnostico))
+        if (orden.Estado == EstadoOrdenServicio.Abierta)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid(
+                "La orden todavía no tiene diagnóstico: el presupuesto se responde después.");
+        }
+
+        if (orden.Estado != EstadoOrdenServicio.Diagnostico)
         {
             return ServiceResult<OrdenServicioResponse>.Invalid(
                 "La orden ya pasó la etapa de presupuesto: no se puede volver a responder.");
+        }
+
+        if (orden.Total <= 0)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid(
+                "El presupuesto todavía no tiene trabajos ni repuestos para responder.");
         }
 
         orden.EstadoPresupuestoCliente = request.Estado;
@@ -1252,6 +1281,26 @@ public class OrdenServicioService : IOrdenServicioService
             Activo          = true
         });
 
+        // Aprobar el presupuesto es aprobar la orden: pasa sola a «Aprobada», salvo que
+        // Gerencia tenga la decisión pendiente o la haya rechazado.
+        var avanzaAAprobada = request.Estado == EstadoPresupuestoCliente.Aprobado
+            && orden.EstadoAprobacionGerencia is not (EstadoAprobacionGerencia.Pendiente or EstadoAprobacionGerencia.Rechazado);
+        if (avanzaAAprobada)
+        {
+            orden.Estado = EstadoOrdenServicio.Aprobada;
+            _context.HistorialEstadosOrden.Add(new HistorialEstadoOrden
+            {
+                OrdenServicioId = orden.Id,
+                EstadoAnterior  = EstadoOrdenServicio.Diagnostico,
+                EstadoNuevo     = EstadoOrdenServicio.Aprobada,
+                UsuarioId       = usuarioId,
+                FechaCambio     = DateTime.UtcNow.AddMilliseconds(1),
+                Observaciones   = "Presupuesto aprobado",
+                FechaCreacion   = DateTime.UtcNow,
+                Activo          = true
+            });
+        }
+
         await _context.SaveChangesAsync();
 
         await _auditoriaService.RegistrarEventoAsync(
@@ -1263,11 +1312,18 @@ public class OrdenServicioService : IOrdenServicioService
             {
                 OrdenServicioId = orden.Id,
                 EstadoPresupuestoCliente = request.Estado.ToString(),
-                Observaciones = request.Observaciones?.Trim()
+                Observaciones = request.Observaciones?.Trim(),
+                OrdenAprobada = avanzaAAprobada
             });
 
         return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
     }
+
+    private const string MensajeOrdenLiquidada =
+        "La orden ya está liquidada: anula su venta para cambiar los trabajos o repuestos.";
+
+    private Task<bool> TieneVentaVigenteAsync(Guid ordenId) =>
+        _context.Ventas.AnyAsync(v => v.OrdenServicioId == ordenId && v.Activo && v.Estado != EstadoVenta.Anulada);
 
     public async Task<ServiceResult<OrdenServicioResponse>> SolicitarAprobacionGerenciaAsync(
         Guid id,
@@ -1567,7 +1623,7 @@ public class OrdenServicioService : IOrdenServicioService
 
     private static OrdenServicioResponse MapToResponse(OrdenServicio orden)
     {
-        var primeraVenta = orden.Ventas?.FirstOrDefault(v => v.Activo);
+        var primeraVenta = orden.Ventas?.FirstOrDefault(v => v.Activo && v.Estado != EstadoVenta.Anulada);
         var comprobanteTexto = primeraVenta?.Comprobante != null
             ? $"{primeraVenta.Comprobante.Serie}-{primeraVenta.Comprobante.Numero}"
             : null;
@@ -1665,7 +1721,7 @@ public class OrdenServicioService : IOrdenServicioService
 
         var total = orden.Total > 0 ? orden.Total : detalles.Sum(d => d.Total);
 
-        var primeraVenta = orden.Ventas?.FirstOrDefault(v => v.Activo);
+        var primeraVenta = orden.Ventas?.FirstOrDefault(v => v.Activo && v.Estado != EstadoVenta.Anulada);
         var comprobanteTexto = primeraVenta?.Comprobante != null
             ? $"{primeraVenta.Comprobante.Serie}-{primeraVenta.Comprobante.Numero}"
             : null;

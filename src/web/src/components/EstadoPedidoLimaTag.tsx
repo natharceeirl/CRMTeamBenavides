@@ -13,6 +13,11 @@ const tonos: Record<EstadoPedidoLima, TonoEstado> = {
   [ESTADO_PEDIDO_LIMA.cancelado]: 'apagado',
 }
 
-export function EstadoPedidoLimaTag({ estado }: Readonly<{ estado: EstadoPedidoLima }>) {
-  return <EtiquetaEstado tono={tonos[estado] ?? 'neutro'}>{nombresEstadoPedidoLima[estado] ?? 'Desconocido'}</EtiquetaEstado>
+type Props = {
+  estado: EstadoPedidoLima
+  nombres?: Record<EstadoPedidoLima, string>
+}
+
+export function EstadoPedidoLimaTag({ estado, nombres = nombresEstadoPedidoLima }: Readonly<Props>) {
+  return <EtiquetaEstado tono={tonos[estado] ?? 'neutro'}>{nombres[estado] ?? 'Desconocido'}</EtiquetaEstado>
 }

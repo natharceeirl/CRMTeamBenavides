@@ -272,6 +272,7 @@ class OrdenServicioApi {
     this.totalPagado = 0,
     this.saldo,
     this.estadoPago = EstadoPago.pendiente,
+    this.ventaId,
   });
 
   factory OrdenServicioApi.desdeJson(Map<String, dynamic> json) => OrdenServicioApi(
@@ -314,6 +315,7 @@ class OrdenServicioApi {
         fechaAprobacionGerencia: _fecha(json['fechaAprobacionGerencia']),
         usuarioAprobacionGerencia: json['usuarioAprobacionGerenciaNombre'] as String?,
         observacionesGerencia: json['observacionesAprobacionGerencia'] as String?,
+        ventaId: json['ventaId'] as String?,
         totalPagado: (json['totalPagado'] as num? ?? 0).toDouble(),
         saldo: (json['saldo'] as num?)?.toDouble(),
         estadoPago: json['estadoPago'] as String? ?? EstadoPago.pendiente,
@@ -358,6 +360,9 @@ class OrdenServicioApi {
   final DateTime? fechaAprobacionGerencia;
   final String? usuarioAprobacionGerencia;
   final String? observacionesGerencia;
+
+  /// La venta vigente de la orden (no anulada), o null si todavía no se liquida.
+  final String? ventaId;
 
   /// Adelantos y pagos, también los de la venta que liquidó la orden.
   final double totalPagado;

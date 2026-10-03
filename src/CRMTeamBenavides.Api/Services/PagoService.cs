@@ -151,6 +151,14 @@ public class PagoService : IPagoService
             return ServiceResult<PagoResponse>.Invalid("No se pueden registrar pagos en una orden de servicio cancelada.");
         }
 
+        // Un adelanto después de liquidar no llegaría al saldo de la venta.
+        var liquidada = await _context.Ventas.AnyAsync(v =>
+            v.OrdenServicioId == ordenServicioId && v.Activo && v.Estado != EstadoVenta.Anulada);
+        if (liquidada)
+        {
+            return ServiceResult<PagoResponse>.Invalid("La orden ya está liquidada: registra el pago en su venta.");
+        }
+
         var metodo = await _context.MetodosPago
             .FirstOrDefaultAsync(m => m.Id == request.MetodoPagoId && m.Activo);
 

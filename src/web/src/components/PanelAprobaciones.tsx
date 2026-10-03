@@ -5,11 +5,11 @@ import {
   PRESUPUESTO,
   esEstadoTerminal,
   nombresGerencia,
-  nombresPresupuesto,
   useAprobacionGerencia,
   useSolicitarAprobacionGerencia,
   useResponderPresupuesto,
   respuestasPresupuesto,
+  etiquetaPresupuesto,
 } from '../api/ordenes'
 import type { OrdenServicioDetalleResponse } from '../api/tipos'
 import { useSesion } from '../auth/sesion'
@@ -20,6 +20,8 @@ import { EtiquetaEstado, type TonoEstado } from './EtiquetaEstado'
 
 type Props = {
   orden: OrdenServicioDetalleResponse
+  /** En el portal, «Tu respuesta». */
+  titulo?: string
 }
 
 type Accion = {
@@ -29,13 +31,6 @@ type Accion = {
   titulo: string
   /** El rechazo siempre lleva motivo: queda en el historial para quien retome la orden. */
   motivoObligatorio: boolean
-}
-
-// Lo pendiente pide acción; lo aprobado queda sobrio; lo rechazado, en suave.
-const tonoPresupuesto: Record<number, TonoEstado> = {
-  [PRESUPUESTO.pendiente]: 'alerta',
-  [PRESUPUESTO.aprobado]: 'hecho',
-  [PRESUPUESTO.rechazado]: 'suave',
 }
 
 const tonoGerencia: Record<number, TonoEstado> = {
@@ -50,7 +45,7 @@ const tonoGerencia: Record<number, TonoEstado> = {
  * separadas: la del cliente la registra el personal (en la app la da el propio
  * cliente) y la de Gerencia solo quien tiene `ordenes.aprobar_gerencia`.
  */
-export function PanelAprobaciones({ orden }: Readonly<Props>) {
+export function PanelAprobaciones({ orden, titulo = 'Aprobaciones' }: Readonly<Props>) {
   const sesion = useSesion()
   const { tienePermiso, tieneAlgunPermiso, esCliente, esPersonal } = sesion
   const esSoloCliente = esCliente && !esPersonal
@@ -70,7 +65,8 @@ export function PanelAprobaciones({ orden }: Readonly<Props>) {
   const [observacion, setObservacion] = useState('')
 
   const presupuesto = orden.estadoPresupuestoClienteId ?? PRESUPUESTO.pendiente
-  const respuestas = puedeRegistrarRespuesta ? respuestasPresupuesto(orden.estadoId, presupuesto) : []
+  const respuestas = puedeRegistrarRespuesta ? respuestasPresupuesto(orden.estadoId, presupuesto, orden.total ?? 0) : []
+  const etiqueta = etiquetaPresupuesto(orden.estadoId, presupuesto, orden.total ?? 0)
   const aprobacion = orden.estadoAprobacionGerenciaId ?? GERENCIA.noAplica
 
   const cerrar = () => {
@@ -102,13 +98,13 @@ export function PanelAprobaciones({ orden }: Readonly<Props>) {
   return (
     <section>
       <div className="seccion-titulo">
-        <h2>Aprobaciones</h2>
+        <h2>{titulo}</h2>
       </div>
       <div className="aprobaciones">
         <div className="aprobacion">
           <div className="aprobacion-cabecera">
-            <span>Presupuesto del cliente</span>
-            <EtiquetaEstado tono={tonoPresupuesto[presupuesto]}>{nombresPresupuesto[presupuesto]}</EtiquetaEstado>
+            <span>{esSoloCliente ? 'Presupuesto' : 'Presupuesto del cliente'}</span>
+            <EtiquetaEstado tono={etiqueta.tono}>{etiqueta.texto}</EtiquetaEstado>
           </div>
           {orden.fechaRespuestaCliente && (
             <div className="texto-secundario">{fechaHora(orden.fechaRespuestaCliente)}</div>
@@ -152,85 +148,88 @@ export function PanelAprobaciones({ orden }: Readonly<Props>) {
           )}
         </div>
 
-        <div className="aprobacion">
-          <div className="aprobacion-cabecera">
-            <span>Gerencia</span>
-            <EtiquetaEstado tono={tonoGerencia[aprobacion]}>{nombresGerencia[aprobacion]}</EtiquetaEstado>
-          </div>
-          {orden.fechaAprobacionGerencia && aprobacion !== GERENCIA.noAplica && (
-            <div className="texto-secundario">
-              {fechaHora(orden.fechaAprobacionGerencia)}
-              {orden.usuarioAprobacionGerenciaNombre ? ` · ${orden.usuarioAprobacionGerenciaNombre}` : ''}
+        {/* La aprobación de Gerencia es interna del taller: el cliente no la ve. */}
+        {!esSoloCliente && (
+          <div className="aprobacion">
+            <div className="aprobacion-cabecera">
+              <span>Gerencia</span>
+              <EtiquetaEstado tono={tonoGerencia[aprobacion]}>{nombresGerencia[aprobacion]}</EtiquetaEstado>
             </div>
-          )}
-          {orden.observacionesAprobacionGerencia && (
-            <p className="aprobacion-nota">{orden.observacionesAprobacionGerencia}</p>
-          )}
-          {!cerrada && puedeDecidirGerencia && (
-            <div className="aprobacion-acciones">
-              {aprobacion !== GERENCIA.aprobado && (
+            {orden.fechaAprobacionGerencia && aprobacion !== GERENCIA.noAplica && (
+              <div className="texto-secundario">
+                {fechaHora(orden.fechaAprobacionGerencia)}
+                {orden.usuarioAprobacionGerenciaNombre ? ` · ${orden.usuarioAprobacionGerenciaNombre}` : ''}
+              </div>
+            )}
+            {orden.observacionesAprobacionGerencia && (
+              <p className="aprobacion-nota">{orden.observacionesAprobacionGerencia}</p>
+            )}
+            {!cerrada && puedeDecidirGerencia && (
+              <div className="aprobacion-acciones">
+                {aprobacion !== GERENCIA.aprobado && (
+                  <Button
+                    type="primary"
+                    onClick={() =>
+                      abrir({
+                        destino: 'gerencia',
+                        estado: GERENCIA.aprobado,
+                        titulo: 'Aprobar como Gerencia',
+                        motivoObligatorio: false,
+                      })
+                    }
+                  >
+                    Aprobar
+                  </Button>
+                )}
+                {aprobacion !== GERENCIA.rechazado && (
+                  <Button
+                    danger
+                    onClick={() =>
+                      abrir({
+                        destino: 'gerencia',
+                        estado: GERENCIA.rechazado,
+                        titulo: 'Rechazar como Gerencia',
+                        motivoObligatorio: true,
+                      })
+                    }
+                  >
+                    Rechazar
+                  </Button>
+                )}
+                {aprobacion === GERENCIA.noAplica && (
+                  <Button
+                    onClick={() =>
+                      abrir({
+                        destino: 'gerencia',
+                        estado: GERENCIA.pendiente,
+                        titulo: 'Requerir aprobación de Gerencia',
+                        motivoObligatorio: true,
+                      })
+                    }
+                  >
+                    Requerir aprobación
+                  </Button>
+                )}
+              </div>
+            )}
+            {!cerrada && puedeSolicitarGerencia && aprobacion !== GERENCIA.pendiente && (
+              <div className="aprobacion-acciones">
                 <Button
-                  type="primary"
                   onClick={() =>
                     abrir({
-                      destino: 'gerencia',
-                      estado: GERENCIA.aprobado,
-                      titulo: 'Aprobar como Gerencia',
-                      motivoObligatorio: false,
-                    })
-                  }
-                >
-                  Aprobar
-                </Button>
-              )}
-              {aprobacion !== GERENCIA.rechazado && (
-                <Button
-                  danger
-                  onClick={() =>
-                    abrir({
-                      destino: 'gerencia',
-                      estado: GERENCIA.rechazado,
-                      titulo: 'Rechazar como Gerencia',
-                      motivoObligatorio: true,
-                    })
-                  }
-                >
-                  Rechazar
-                </Button>
-              )}
-              {aprobacion === GERENCIA.noAplica && (
-                <Button
-                  onClick={() =>
-                    abrir({
-                      destino: 'gerencia',
+                      destino: 'solicitud',
                       estado: GERENCIA.pendiente,
-                      titulo: 'Requerir aprobación de Gerencia',
+                      titulo: 'Solicitar aprobación de Gerencia',
                       motivoObligatorio: true,
                     })
                   }
                 >
-                  Requerir aprobación
+                  Solicitar aprobación
                 </Button>
-              )}
-            </div>
-          )}
-          {!cerrada && puedeSolicitarGerencia && aprobacion !== GERENCIA.pendiente && (
-            <div className="aprobacion-acciones">
-              <Button
-                onClick={() =>
-                  abrir({
-                    destino: 'solicitud',
-                    estado: GERENCIA.pendiente,
-                    titulo: 'Solicitar aprobación de Gerencia',
-                    motivoObligatorio: true,
-                  })
-                }
-              >
-                Solicitar aprobación
-              </Button>
-            </div>
-          )}
-        </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <Modal

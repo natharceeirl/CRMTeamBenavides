@@ -394,7 +394,7 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                 ),
               ),
               if (sesion.tienePermiso(Permisos.ordenesAgregarItems) &&
-                  permiteEditarItems(datosOrden.estadoId))
+                  permiteEditarItems(datosOrden.estadoId, liquidada: datosOrden.ventaId != null))
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                   child: OutlinedButton.icon(
@@ -659,7 +659,8 @@ class _Aprobaciones extends StatelessWidget {
   Widget build(BuildContext context) {
     final presupuesto = orden.estadoPresupuestoId;
     final gerencia = orden.estadoGerenciaId;
-    final respuestas = puedeResponder ? respuestasPresupuesto(orden.estadoId, presupuesto) : const <int>[];
+    final respuestas =
+        puedeResponder ? respuestasPresupuesto(orden.estadoId, presupuesto, orden.total ?? 0) : const <int>[];
 
     return Card(
       child: Padding(

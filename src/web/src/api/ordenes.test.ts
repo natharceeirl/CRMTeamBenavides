@@ -10,6 +10,8 @@ import {
   motivoEntregaInvalida,
   nombresEstado,
   permiteEditarDetalles,
+  esperaRespuestaDelCliente,
+  etiquetaPresupuesto,
   respuestasPresupuesto,
   transicionesValidas,
 } from './ordenes'
@@ -77,10 +79,10 @@ describe('edición de detalles', () => {
 
 /** Mismas reglas que CambiarEstadoAsync aplica antes de pasar a «Aprobada». */
 describe('motivoBloqueoAprobacion', () => {
-  it('deja aprobar con el presupuesto pendiente o aprobado y sin Gerencia de por medio', () => {
+  it('deja aprobar solo con el presupuesto aprobado y sin Gerencia de por medio', () => {
     expect(
       motivoBloqueoAprobacion({ estadoPresupuestoClienteId: PRESUPUESTO.pendiente, estadoAprobacionGerenciaId: GERENCIA.noAplica }),
-    ).toBeNull()
+    ).toMatch(/Falta que el cliente apruebe/)
     expect(
       motivoBloqueoAprobacion({ estadoPresupuestoClienteId: PRESUPUESTO.aprobado, estadoAprobacionGerenciaId: GERENCIA.aprobado }),
     ).toBeNull()
@@ -101,8 +103,8 @@ describe('motivoBloqueoAprobacion', () => {
     ).toMatch(/Gerencia rechazó/)
   })
 
-  it('una orden anterior a las aprobaciones no queda bloqueada', () => {
-    expect(motivoBloqueoAprobacion({})).toBeNull()
+  it('sin respuesta del cliente registrada, tampoco se aprueba', () => {
+    expect(motivoBloqueoAprobacion({})).toMatch(/Falta que el cliente apruebe/)
   })
 })
 
@@ -124,25 +126,44 @@ describe('fechas de la orden', () => {
 })
 
 describe('respuestasPresupuesto', () => {
-  it('ofrece aprobar y rechazar mientras la orden está en su etapa', () => {
-    expect(respuestasPresupuesto(ESTADO.diagnostico, PRESUPUESTO.pendiente)).toEqual([
+  it('ofrece aprobar y rechazar con la orden en diagnóstico y el presupuesto armado', () => {
+    expect(respuestasPresupuesto(ESTADO.diagnostico, PRESUPUESTO.pendiente, 120)).toEqual([
       PRESUPUESTO.aprobado,
       PRESUPUESTO.rechazado,
     ])
-    expect(respuestasPresupuesto(ESTADO.abierta, PRESUPUESTO.pendiente)).toHaveLength(2)
+  })
+
+  it('no ofrece nada antes del diagnóstico ni sin ítems', () => {
+    expect(respuestasPresupuesto(ESTADO.abierta, PRESUPUESTO.pendiente, 120)).toEqual([])
+    expect(respuestasPresupuesto(ESTADO.diagnostico, PRESUPUESTO.pendiente, 0)).toEqual([])
   })
 
   it('después de aprobado no ofrece nada, ni para cambiar a rechazado', () => {
-    expect(respuestasPresupuesto(ESTADO.diagnostico, PRESUPUESTO.aprobado)).toEqual([])
+    expect(respuestasPresupuesto(ESTADO.diagnostico, PRESUPUESTO.aprobado, 120)).toEqual([])
   })
 
   it('rechazado y aún en diagnóstico, solo se puede aprobar', () => {
-    expect(respuestasPresupuesto(ESTADO.diagnostico, PRESUPUESTO.rechazado)).toEqual([PRESUPUESTO.aprobado])
+    expect(respuestasPresupuesto(ESTADO.diagnostico, PRESUPUESTO.rechazado, 120)).toEqual([PRESUPUESTO.aprobado])
   })
 
   it('con la orden ya aprobada, en proceso, lista o cerrada no se responde', () => {
     for (const estado of [ESTADO.aprobada, ESTADO.enProceso, ESTADO.lista, ESTADO.entregada, ESTADO.cancelada]) {
-      expect(respuestasPresupuesto(estado, PRESUPUESTO.pendiente)).toEqual([])
+      expect(respuestasPresupuesto(estado, PRESUPUESTO.pendiente, 120)).toEqual([])
     }
+  })
+})
+
+describe('etiquetaPresupuesto', () => {
+  it('dice «Pendiente» solo mientras se espera la respuesta', () => {
+    expect(etiquetaPresupuesto(ESTADO.diagnostico, PRESUPUESTO.pendiente, 120)).toEqual({ texto: 'Pendiente', tono: 'alerta' })
+    expect(etiquetaPresupuesto(ESTADO.abierta, PRESUPUESTO.pendiente, 0).texto).toBe('En preparación')
+    expect(etiquetaPresupuesto(ESTADO.lista, PRESUPUESTO.pendiente, 120)).toEqual({ texto: 'Sin respuesta', tono: 'apagado' })
+    expect(etiquetaPresupuesto(ESTADO.lista, PRESUPUESTO.aprobado, 120).texto).toBe('Aprobado')
+  })
+
+  it('pide respuesta al cliente con el diagnóstico hecho y el presupuesto armado', () => {
+    expect(esperaRespuestaDelCliente({ estadoId: ESTADO.diagnostico, estadoPresupuestoClienteId: PRESUPUESTO.pendiente, total: 120 })).toBe(true)
+    expect(esperaRespuestaDelCliente({ estadoId: ESTADO.diagnostico, estadoPresupuestoClienteId: PRESUPUESTO.pendiente, total: 0 })).toBe(false)
+    expect(esperaRespuestaDelCliente({ estadoId: ESTADO.abierta, estadoPresupuestoClienteId: PRESUPUESTO.pendiente, total: 120 })).toBe(false)
   })
 })

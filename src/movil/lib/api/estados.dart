@@ -53,10 +53,10 @@ class EstadoPresupuesto {
 }
 
 /// Qué respuestas al presupuesto se pueden dar todavía, con la regla del backend:
-/// solo con la orden en Abierta o Diagnóstico, y nunca después de aprobado. Si se
-/// rechazó y la orden sigue en diagnóstico, el cliente aún puede aprobarlo.
-List<int> respuestasPresupuesto(int estadoOrden, int presupuesto) {
-  final enEtapa = estadoOrden == EstadoOrden.abierta || estadoOrden == EstadoOrden.diagnostico;
+/// con la orden en Diagnóstico y algo que aprobar (total mayor a cero), y nunca
+/// después de aprobado. Si se rechazó, el cliente aún puede aprobarlo.
+List<int> respuestasPresupuesto(int estadoOrden, int presupuesto, double total) {
+  final enEtapa = estadoOrden == EstadoOrden.diagnostico && total > 0;
   if (!enEtapa || presupuesto == EstadoPresupuesto.aprobado) return const [];
   return presupuesto == EstadoPresupuesto.rechazado
       ? const [EstadoPresupuesto.aprobado]
@@ -91,6 +91,10 @@ const nombresEstadoGerencia = <int, String>{
 String? motivoBloqueoAprobacion({int? presupuesto, int? gerencia}) {
   if (presupuesto == EstadoPresupuesto.rechazado) {
     return 'El cliente rechazó el presupuesto.';
+  }
+  // «Aprobada» es «presupuesto aprobado»: sin la respuesta del cliente no se aprueba.
+  if (presupuesto != EstadoPresupuesto.aprobado) {
+    return 'Falta que el cliente apruebe el presupuesto.';
   }
   if (gerencia == EstadoGerencia.pendiente) {
     return 'Falta la aprobación de Gerencia.';
@@ -153,9 +157,10 @@ List<int> tiposDeItemPermitidos({required bool puedeFijarPrecios}) => [
 /// Enum TipoAfectacionIgv del backend.
 const nombresAfectacionIgv = <int, String>{0: 'Gravado', 1: 'Exonerado', 2: 'Inafecto'};
 
-/// La orden admite ítems nuevos salvo en Lista o cerrada.
-bool permiteEditarItems(int estadoId) =>
-    !esEstadoTerminal(estadoId) && estadoId != EstadoOrden.lista;
+/// La orden admite ítems nuevos salvo en Lista o cerrada, y tampoco liquidada:
+/// la venta tiene que coincidir con la orden.
+bool permiteEditarItems(int estadoId, {bool liquidada = false}) =>
+    !liquidada && !esEstadoTerminal(estadoId) && estadoId != EstadoOrden.lista;
 
 /// Entregada y Cancelada no admiten más cambios.
 bool esEstadoTerminal(int estadoId) =>

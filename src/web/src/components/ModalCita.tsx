@@ -12,6 +12,11 @@ import { DURACIONES_CITA, reglaFechaCita } from '../utils/agenda'
 
 type Props = {
   abierto: boolean
+  /**
+   * La pide el cliente desde su portal: no elige cliente (la API toma el suyo) y
+   * solo ve sus unidades.
+   */
+  paraCliente?: boolean
   /** El día en que se pulsó «+» en la agenda, a las 09:00. */
   fechaInicial?: Dayjs
   onCerrar: () => void
@@ -27,14 +32,20 @@ type Campos = {
   observaciones?: string
 }
 
-export function ModalCita({ abierto, fechaInicial, onCerrar, onCreada }: Readonly<Props>) {
+export function ModalCita({ abierto, paraCliente = false, fechaInicial, onCerrar, onCreada }: Readonly<Props>) {
   const [formulario] = Form.useForm<Campos>()
   const { tienePermiso } = useSesion()
-  const clientes = useClientes()
+  const clientes = useClientes(!paraCliente)
   const crear = useCrearCita()
 
-  const clienteId = Form.useWatch('clienteId', formulario)
-  const unidades = useVehiculos(clienteId, abierto && Boolean(clienteId) && tienePermiso(PERMISOS.unidadesVer))
+  const clienteElegido = Form.useWatch('clienteId', formulario)
+  // El cliente ve sus unidades sin filtro: la API ya le devuelve solo las suyas.
+  const clienteId = paraCliente ? undefined : clienteElegido
+  const unidades = useVehiculos(
+    clienteId,
+    abierto && (paraCliente || Boolean(clienteId)) && tienePermiso(PERMISOS.unidadesVer),
+  )
+  const hayCliente = paraCliente || Boolean(clienteId)
 
   const cerrar = () => {
     crear.reset()
@@ -43,7 +54,7 @@ export function ModalCita({ abierto, fechaInicial, onCerrar, onCreada }: Readonl
 
   const enviar = async (campos: Campos) => {
     const cita = await crear.mutateAsync({
-      clienteId: campos.clienteId,
+      clienteId: paraCliente ? null : campos.clienteId,
       vehiculoId: campos.vehiculoId,
       fechaHoraProgramada: campos.fechaHora.second(0).millisecond(0).toISOString(),
       duracionMinutos: campos.duracionMinutos,
@@ -56,7 +67,7 @@ export function ModalCita({ abierto, fechaInicial, onCerrar, onCreada }: Readonl
 
   return (
     <Modal
-      title="Nueva cita"
+      title={paraCliente ? 'Agendar cita' : 'Nueva cita'}
       open={abierto}
       onCancel={cerrar}
       onOk={() => formulario.submit()}
@@ -79,24 +90,26 @@ export function ModalCita({ abierto, fechaInicial, onCerrar, onCreada }: Readonl
         }}
       >
         <div className="formulario-grid">
-          <Form.Item label="Cliente" name="clienteId" rules={[{ required: true, message: 'Elige el cliente' }]}>
-            <Select
-              showSearch
-              optionFilterProp="label"
-              loading={clientes.isPending}
-              placeholder="Buscar cliente"
-              options={(clientes.data ?? []).map((cliente) => ({
-                value: cliente.id,
-                label: cliente.nombreCompleto,
-              }))}
-            />
-          </Form.Item>
+          {!paraCliente && (
+            <Form.Item label="Cliente" name="clienteId" rules={[{ required: true, message: 'Elige el cliente' }]}>
+              <Select
+                showSearch
+                optionFilterProp="label"
+                loading={clientes.isPending}
+                placeholder="Buscar cliente"
+                options={(clientes.data ?? []).map((cliente) => ({
+                  value: cliente.id,
+                  label: cliente.nombreCompleto,
+                }))}
+              />
+            </Form.Item>
+          )}
           <Form.Item label="Unidad" name="vehiculoId" rules={[{ required: true, message: 'Elige la unidad' }]}>
             <Select
-              disabled={!clienteId}
-              loading={Boolean(clienteId) && unidades.isPending}
-              placeholder={clienteId ? 'Unidad del cliente' : 'Primero el cliente'}
-              notFoundContent="El cliente no tiene unidades registradas"
+              disabled={!hayCliente}
+              loading={hayCliente && unidades.isPending}
+              placeholder={hayCliente ? (paraCliente ? 'Tu unidad' : 'Unidad del cliente') : 'Primero el cliente'}
+              notFoundContent={paraCliente ? 'No tienes unidades registradas' : 'El cliente no tiene unidades registradas'}
               options={(unidades.data ?? [])
                 .filter((unidad) => unidad.activo)
                 .map((unidad) => ({

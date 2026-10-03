@@ -175,6 +175,13 @@ public class VentaService : IVentaService
                 return ServiceResult<VentaDetalleResponse>.Invalid("El cliente indicado no coincide con el cliente de la orden de servicio.");
             }
 
+            // Se liquida el trabajo terminado: antes de «Lista» los ítems todavía cambian.
+            if (ordenServicio.Estado is not (EstadoOrdenServicio.Lista or EstadoOrdenServicio.Entregada))
+            {
+                return ServiceResult<VentaDetalleResponse>.Invalid(
+                    "La orden se liquida cuando está lista o entregada.");
+            }
+
             // Una orden se liquida una sola vez: sus repuestos ya salieron del stock y
             // sus adelantos ya pasaron a esa venta. Para rehacerla, primero se anula.
             var yaLiquidada = await _context.Ventas.AnyAsync(v =>

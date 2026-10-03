@@ -151,17 +151,20 @@ void main() {
   });
 
   group('aprobaciones', () {
-    test('sin rechazo ni Gerencia pendiente se puede aprobar', () {
-      expect(motivoBloqueoAprobacion(presupuesto: EstadoPresupuesto.pendiente, gerencia: EstadoGerencia.noAplica),
+    test('con el presupuesto aprobado y sin Gerencia pendiente se puede aprobar', () {
+      expect(motivoBloqueoAprobacion(presupuesto: EstadoPresupuesto.aprobado, gerencia: EstadoGerencia.noAplica),
           isNull);
       expect(motivoBloqueoAprobacion(presupuesto: EstadoPresupuesto.aprobado, gerencia: EstadoGerencia.aprobado),
           isNull);
     });
 
     test('las mismas reglas que el backend bloquean «Aprobada»', () {
+      expect(motivoBloqueoAprobacion(presupuesto: EstadoPresupuesto.pendiente), contains('Falta que el cliente apruebe'));
       expect(motivoBloqueoAprobacion(presupuesto: EstadoPresupuesto.rechazado), contains('rechazó el presupuesto'));
-      expect(motivoBloqueoAprobacion(gerencia: EstadoGerencia.pendiente), contains('Gerencia'));
-      expect(motivoBloqueoAprobacion(gerencia: EstadoGerencia.rechazado), contains('Gerencia rechazó'));
+      expect(motivoBloqueoAprobacion(presupuesto: EstadoPresupuesto.aprobado, gerencia: EstadoGerencia.pendiente),
+          contains('Gerencia'));
+      expect(motivoBloqueoAprobacion(presupuesto: EstadoPresupuesto.aprobado, gerencia: EstadoGerencia.rechazado),
+          contains('Gerencia rechazó'));
     });
   });
 
