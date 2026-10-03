@@ -295,3 +295,37 @@ bool esCitaFinal(String estado) =>
 
 /// La cita se cancela mientras la unidad no haya llegado al taller (CitaService.CancelarAsync).
 bool citaAntesDelTaller(String estado) => estado == EstadoCita.pendiente || estado == EstadoCita.confirmada;
+
+/// A qué estados puede pasar una cita (CitaService.CambiarEstadoAsync): no se
+/// retrocede desde el taller y una pendiente no se completa sin pasar por él.
+List<String> siguientesEstadosCita(String estado) => switch (estado) {
+      EstadoCita.pendiente => const [EstadoCita.confirmada, EstadoCita.enTaller, EstadoCita.noAsistio],
+      EstadoCita.confirmada => const [EstadoCita.enTaller, EstadoCita.noAsistio],
+      EstadoCita.enTaller => const [EstadoCita.completada],
+      _ => const [],
+    };
+
+/// Estados del pedido de Lima (EstadoPedidoLima del backend), como texto.
+class EstadoPedidoLima {
+  const EstadoPedidoLima._();
+
+  static const pendiente = 'Pendiente';
+  static const confirmado = 'Confirmado';
+  static const enPreparacion = 'EnPreparacion';
+  static const enTransito = 'EnTransito';
+  static const recibido = 'Recibido';
+  static const entregado = 'Entregado';
+  static const cancelado = 'Cancelado';
+}
+
+const nombresEstadoPedidoLima = <String, String>{
+  EstadoPedidoLima.pendiente: 'Pendiente',
+  EstadoPedidoLima.confirmado: 'Confirmado',
+  EstadoPedidoLima.enPreparacion: 'En preparación',
+  EstadoPedidoLima.enTransito: 'En camino',
+  EstadoPedidoLima.recibido: 'Listo para recoger',
+  EstadoPedidoLima.entregado: 'Entregado',
+  EstadoPedidoLima.cancelado: 'Cancelado',
+};
+
+bool esPedidoFinal(String estado) => estado == EstadoPedidoLima.entregado || estado == EstadoPedidoLima.cancelado;

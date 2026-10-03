@@ -51,6 +51,7 @@ class SesionCliente extends SesionNotifier {
           'citas.ver',
           'citas.crear',
           'citas.cancelar',
+          'pedidos_lima.ver',
         ],
         clienteId: '00000000-0000-0000-0000-0000000000c1',
       );
@@ -91,6 +92,7 @@ Future<void> montarInicio(
         ),
         portalComprobantesProvider.overrideWith((ref) => []),
         citasProvider.overrideWith((ref) => []),
+        pedidosLimaProvider.overrideWith((ref) => []),
       ],
       child: const MaterialApp(home: PantallaInicio()),
     ),

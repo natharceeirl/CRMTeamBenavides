@@ -10,6 +10,7 @@ import { ModalDetalleCita } from '../components/ModalDetalleCita'
 import { esCitaFinal, nombresEstadoCita, rutaCitas, useCitas, type FiltrosCitas } from '../api/citas'
 import type { EstadoCita } from '../api/tipos'
 import { useSesion } from '../auth/sesion'
+import { useClientes } from '../api/clientes'
 import { PERMISOS } from '../auth/acceso'
 import { descargarArchivo } from '../utils/descarga'
 import { citasPorDia, claveDia, diasDeLaSemana, lunesDe, nombreDia, rangoSemana, textoDuracion } from '../utils/agenda'
@@ -22,18 +23,23 @@ const opcionesEstado = Object.entries(nombresEstadoCita).map(([valor, etiqueta])
 export function CitasPage() {
   const [lunes, setLunes] = useState(() => lunesDe(dayjs()))
   const [estado, setEstado] = useState<EstadoCita>()
+  const [clienteId, setClienteId] = useState<string>()
   // `undefined` cerrado; `null` abierto sin fecha; un día, abierto en ese día.
   const [nueva, setNueva] = useState<Dayjs | null | undefined>(undefined)
   const [citaVista, setCitaVista] = useState<string | null>(null)
   const [exportando, setExportando] = useState(false)
   const [errorExportar, setErrorExportar] = useState<unknown>(null)
 
-  const puedeCrear = useSesion().tienePermiso(PERMISOS.citasCrear)
+  const { tienePermiso } = useSesion()
+  const puedeCrear = tienePermiso(PERMISOS.citasCrear)
+  const veClientes = tienePermiso(PERMISOS.clientesVer)
+  const clientes = useClientes(veClientes)
 
   const filtros: FiltrosCitas = {
     fechaInicio: lunes.toISOString(),
     fechaFin: lunes.add(7, 'day').subtract(1, 'millisecond').toISOString(),
     estado,
+    clienteId,
   }
   const citas = useCitas(filtros)
   const porDia = citasPorDia(citas.data ?? [])
@@ -98,6 +104,20 @@ export function CitasPage() {
               options={opcionesEstado}
               style={{ width: 200 }}
             />
+            {veClientes && (
+              <Select<string>
+                id="filtro-cliente-cita"
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                placeholder="Cliente"
+                value={clienteId}
+                onChange={setClienteId}
+                loading={clientes.isPending}
+                options={(clientes.data ?? []).map((cliente) => ({ value: cliente.id, label: cliente.nombreCompleto }))}
+                style={{ width: 260 }}
+              />
+            )}
           </div>
 
           <Spin spinning={citas.isPending}>

@@ -37,10 +37,14 @@ const CAMINO_PEDIDO: EstadoPedidoLima[] = [
 export const siguienteEstadoPedido = (estado: EstadoPedidoLima): EstadoPedidoLima | null =>
   esPedidoFinal(estado) ? null : (CAMINO_PEDIDO[CAMINO_PEDIDO.indexOf(estado) + 1] ?? null)
 
-export type FiltrosPedidosLima = { estado?: EstadoPedidoLima }
+export type FiltrosPedidosLima = { estado?: EstadoPedidoLima; clienteId?: string }
 
 export function rutaPedidosLima(filtros: FiltrosPedidosLima, base = '/pedidos-lima'): string {
-  return filtros.estado ? `${base}?estado=${filtros.estado}` : base
+  const parametros = new URLSearchParams()
+  if (filtros.estado) parametros.set('estado', filtros.estado)
+  if (filtros.clienteId) parametros.set('clienteId', filtros.clienteId)
+  const consulta = parametros.toString()
+  return consulta ? `${base}?${consulta}` : base
 }
 
 const claves = {

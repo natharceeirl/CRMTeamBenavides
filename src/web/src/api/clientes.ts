@@ -7,10 +7,12 @@ export const clavesClientes = {
   uno: (id: string) => ['clientes', id] as const,
 }
 
-export function useClientes() {
+/** `habilitado` en falso evita pedir clientes a quien no tiene `clientes.ver` y recibiría 403. */
+export function useClientes(habilitado = true) {
   return useQuery({
     queryKey: clavesClientes.todos,
     queryFn: () => solicitar<ClienteResponse[]>('/clientes'),
+    enabled: habilitado,
   })
 }
 

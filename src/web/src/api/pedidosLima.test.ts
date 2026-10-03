@@ -22,5 +22,6 @@ describe('rutaPedidosLima', () => {
     expect(rutaPedidosLima({ estado: ESTADO_PEDIDO_LIMA.pendiente }, '/pedidos-lima/exportar-excel')).toBe(
       '/pedidos-lima/exportar-excel?estado=Pendiente',
     )
+    expect(rutaPedidosLima({ clienteId: 'k1' })).toBe('/pedidos-lima?clienteId=k1')
   })
 })

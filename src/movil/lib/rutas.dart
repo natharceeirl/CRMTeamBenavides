@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'auth/sesion.dart';
+import 'pantallas/agenda.dart';
 import 'pantallas/cliente_detalle.dart';
 import 'pantallas/inicio.dart';
 import 'pantallas/login.dart';
@@ -47,6 +48,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, estado) => PantallaClienteDetalle(
               clienteId: estado.pathParameters['id']!,
             ),
+          ),
+          GoRoute(
+            path: 'agenda',
+            builder: (context, estado) => const PantallaAgenda(),
           ),
           GoRoute(
             path: 'ordenes/:id',

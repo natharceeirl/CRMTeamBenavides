@@ -1108,6 +1108,7 @@ class CitaApi {
   const CitaApi({
     required this.id,
     required this.numeroCita,
+    required this.clienteNombre,
     required this.vehiculoId,
     required this.vehiculoModelo,
     required this.fechaHoraProgramada,
@@ -1120,6 +1121,7 @@ class CitaApi {
   factory CitaApi.desdeJson(Map<String, dynamic> json) => CitaApi(
         id: json['id'] as String,
         numeroCita: json['numeroCita'] as String? ?? '',
+        clienteNombre: json['clienteNombre'] as String? ?? '',
         vehiculoId: json['vehiculoId'] as String,
         vehiculoPlaca: json['vehiculoPlaca'] as String?,
         vehiculoModelo: json['vehiculoModelo'] as String? ?? '',
@@ -1131,6 +1133,7 @@ class CitaApi {
 
   final String id;
   final String numeroCita;
+  final String clienteNombre;
   final String vehiculoId;
   final String? vehiculoPlaca;
   final String vehiculoModelo;
@@ -1143,4 +1146,41 @@ class CitaApi {
     final placa = vehiculoPlaca;
     return placa == null || placa.isEmpty ? vehiculoModelo : '$vehiculoModelo · $placa';
   }
+}
+
+/// Un pedido de repuestos que llega de Lima (PedidoLimaResponse). Al cliente la
+/// API solo le devuelve los suyos.
+class PedidoLimaApi {
+  const PedidoLimaApi({
+    required this.id,
+    required this.numeroPedido,
+    required this.fecha,
+    required this.estado,
+    required this.total,
+    required this.repuestos,
+    this.fechaEstimadaLlegada,
+  });
+
+  factory PedidoLimaApi.desdeJson(Map<String, dynamic> json) => PedidoLimaApi(
+        id: json['id'] as String,
+        numeroPedido: json['numeroPedido'] as String? ?? '',
+        fecha: DateTime.parse(json['fecha'] as String),
+        estado: json['estado'] as String? ?? EstadoPedidoLima.pendiente,
+        total: (json['total'] as num? ?? 0).toDouble(),
+        fechaEstimadaLlegada: _fecha(json['fechaEstimadaLlegada']),
+        repuestos: [
+          for (final detalle in (json['detalles'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>())
+            '${detalle['cantidad']} × ${detalle['productoNombre']}',
+        ],
+      );
+
+  final String id;
+  final String numeroPedido;
+  final DateTime fecha;
+  final String estado;
+  final double total;
+  final DateTime? fechaEstimadaLlegada;
+
+  /// «2 × Filtro de aceite», uno por línea del pedido.
+  final List<String> repuestos;
 }

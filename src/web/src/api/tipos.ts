@@ -506,6 +506,8 @@ export type VentaResponse = DesgloseIgv &
     clienteId: string
     clienteNombre: string
     ordenServicioId: string | null
+    /** El número de la orden liquidada (OS-000024), o null en una venta de mostrador. */
+    numeroOrdenServicio?: string | null
     estado: string
     estadoId: number
     fecha: string
@@ -542,6 +544,7 @@ export type VentaDetalleResponse = DesgloseIgv &
     clienteDocumento: string | null
     clienteTelefono: string | null
     ordenServicioId: string | null
+    numeroOrdenServicio?: string | null
     estado: string
     estadoId: number
     fecha: string
@@ -1109,6 +1112,15 @@ export type CitaDetalleResponse = {
 
 export type CrearCitaRequest = {
   clienteId: string | null
+  vehiculoId: string
+  fechaHoraProgramada: string
+  duracionMinutos: number | null
+  motivo: string
+  observaciones: string | null
+}
+
+/** PUT /api/citas/{id}: la fecha se cambia con Reprogramar, que deja la nota en el historial. */
+export type ActualizarCitaRequest = {
   vehiculoId: string
   fechaHoraProgramada: string
   duracionMinutos: number | null

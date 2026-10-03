@@ -1,6 +1,7 @@
+import { useEffect } from 'react'
 import dayjs, { type Dayjs } from 'dayjs'
 import { Button, DatePicker, Form, Input, InputNumber, Select } from 'antd'
-import { useNavigate } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import {
@@ -12,6 +13,7 @@ import {
   useOrdenes,
 } from '../api/ordenes'
 import { useVehiculos } from '../api/vehiculos'
+import { useCita, useVincularOrdenCita } from '../api/citas'
 import { useTecnicos } from '../api/usuarios'
 import {
   identificadorUnidad,
@@ -47,6 +49,22 @@ export function NuevaOrdenPage() {
   const tecnicos = useTecnicos(puedeAsignar && tienePermiso(PERMISOS.usuariosVer))
   const abrir = useAbrirOrden()
 
+  // Desde la agenda: la orden se abre con la unidad y el motivo de la cita, y al
+  // guardarse queda vinculada a ella.
+  const [parametros] = useSearchParams()
+  const citaId = parametros.get('cita')
+  const cita = useCita(citaId)
+  const vincular = useVincularOrdenCita()
+  const datosCita = cita.data
+  useEffect(() => {
+    if (!datosCita) return
+    formulario.setFieldsValue({
+      vehiculoId: datosCita.vehiculoId,
+      motivoFalla: datosCita.motivo,
+      observaciones: datosCita.observaciones ?? undefined,
+    })
+  }, [datosCita, formulario])
+
   const vehiculoId = Form.useWatch('vehiculoId', formulario)
   const unidad = (vehiculos.data ?? []).find((vehiculo) => vehiculo.id === vehiculoId)
   const enHoras = unidad ? midePorHoras(unidad) : false
@@ -72,6 +90,11 @@ export function NuevaOrdenPage() {
       horasUsoIngreso: enHoras ? (campos.lecturaIngreso ?? null) : null,
     })
 
+    if (citaId) {
+      // La orden ya existe: si el vínculo falla, se sigue a la orden igual y la
+      // cita queda sin ella, a la vista en la agenda.
+      await vincular.mutateAsync({ id: citaId, ordenServicioId: orden.id }).catch(() => undefined)
+    }
     navigate(`/ordenes/${orden.id}`)
   }
 
@@ -90,7 +113,13 @@ export function NuevaOrdenPage() {
         }
       />
       <div className="pagina">
-        <AvisoError error={abrir.error} />
+        <AvisoError error={abrir.error ?? cita.error} />
+        {datosCita && (
+          <p className="texto-secundario" style={{ margin: 0 }}>
+            Se abre desde la cita {datosCita.numeroCita} de {datosCita.clienteNombre}. Al guardarla, la cita queda
+            «En taller» con esta orden.
+          </p>
+        )}
         <Form<Campos>
           form={formulario}
           layout="vertical"

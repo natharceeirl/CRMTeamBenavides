@@ -32,6 +32,8 @@ class Permisos {
   static const citasVer = 'citas.ver';
   static const citasCrear = 'citas.crear';
   static const citasCancelar = 'citas.cancelar';
+  static const citasEditar = 'citas.editar';
+  static const pedidosLimaVer = 'pedidos_lima.ver';
 
   static const verOrdenes = [ordenesVerTodas, ordenesVerAsignadas];
 }

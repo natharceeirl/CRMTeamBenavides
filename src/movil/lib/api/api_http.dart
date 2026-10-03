@@ -282,9 +282,31 @@ class ApiHttp {
     return datos.map(AtencionServicioApi.desdeJson).toList();
   }
 
-  Future<List<CitaApi>> citas() async {
-    final datos = await _lista('/api/citas');
+  /// Sin fechas trae todas; la agenda del personal pide solo su semana.
+  Future<List<CitaApi>> citas({DateTime? desde, DateTime? hasta}) async {
+    final parametros = <String, String>{
+      if (desde != null) 'fechaInicio': desde.toUtc().toIso8601String(),
+      if (hasta != null) 'fechaFin': hasta.toUtc().toIso8601String(),
+    };
+    final consulta = parametros.isEmpty ? '' : '?${Uri(queryParameters: parametros).query}';
+    final datos = await _lista('/api/citas$consulta');
     return datos.map(CitaApi.desdeJson).toList();
+  }
+
+  Future<void> cambiarEstadoCita(String id, String nuevoEstado, {String? observacion}) async {
+    try {
+      await _dio.put<Map<String, dynamic>>(
+        '/api/citas/$id/estado',
+        data: {'nuevoEstado': nuevoEstado, 'observacion': observacion == null || observacion.isEmpty ? null : observacion},
+      );
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
+  Future<List<PedidoLimaApi>> pedidosLima() async {
+    final datos = await _lista('/api/pedidos-lima');
+    return datos.map(PedidoLimaApi.desdeJson).toList();
   }
 
   /// El cliente no manda su id: la API toma el del usuario y verifica que la

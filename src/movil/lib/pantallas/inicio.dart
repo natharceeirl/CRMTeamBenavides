@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../auth/permisos.dart';
 import '../auth/sesion.dart';
@@ -158,6 +159,14 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
           ],
         ),
         actions: [
+          // La agenda del personal va arriba y no en la barra inferior, que ya
+          // tiene cinco pestañas para Gerencia.
+          if (!sesion.soloCliente && sesion.tienePermiso(Permisos.citasVer))
+            IconButton(
+              tooltip: 'Agenda',
+              icon: const Icon(Icons.event_outlined),
+              onPressed: () => context.go('/agenda'),
+            ),
           IconButton(
             tooltip: 'Cambiar contraseña',
             icon: const Icon(Icons.key_outlined),
@@ -171,10 +180,15 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
         ],
       ),
       body: secciones.isEmpty
-          ? const ListaVacia(
-              mensaje: 'Tu usuario todavía no tiene pantallas asignadas. '
-                  'Pide a Gerencia que revise tus permisos.',
-            )
+          ? (sesion.errorPermisos != null
+              ? AvisoError(
+                  error: 'No se pudieron cargar tus permisos: ${sesion.errorPermisos}',
+                  alReintentar: () => ref.read(sesionProvider.notifier).reintentarPermisos(),
+                )
+              : const ListaVacia(
+                  mensaje: 'Tu usuario todavía no tiene pantallas asignadas. '
+                      'Pide a Gerencia que revise tus permisos.',
+                ))
           : IndexedStack(
               index: indice,
               children: [for (final seccion in secciones) seccion.pantalla],

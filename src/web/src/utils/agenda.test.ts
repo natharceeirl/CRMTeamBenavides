@@ -87,5 +87,6 @@ describe('estados de la cita', () => {
     expect(rutaCitas({ estado: ESTADO_CITA.pendiente, fechaInicio: 'a' }, '/citas/exportar-excel')).toBe(
       '/citas/exportar-excel?fechaInicio=a&estado=Pendiente',
     )
+    expect(rutaCitas({ clienteId: 'k1' })).toBe('/citas?clienteId=k1')
   })
 })

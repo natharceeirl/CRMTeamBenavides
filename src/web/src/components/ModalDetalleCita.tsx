@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import dayjs, { type Dayjs } from 'dayjs'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { Button, DatePicker, Form, Input, Modal, Select } from 'antd'
 import { useSesion } from '../auth/sesion'
 import { ACCESO_ORDENES, PERMISOS, cumpleAcceso } from '../auth/acceso'
@@ -10,14 +10,17 @@ import {
   siguientesEstadosCita,
   useCambiarEstadoCita,
   useCancelarCita,
+  useActualizarCita,
   useCita,
   useReprogramarCita,
 } from '../api/citas'
+import { useVehiculos } from '../api/vehiculos'
 import { ESTADO_CITA, type CitaDetalleResponse, type EstadoCita } from '../api/tipos'
 import { AvisoError } from './AvisoError'
 import { EstadoCitaTag } from './EstadoCitaTag'
 import { HistorialEstados } from './HistorialEstados'
 import { fechaHoraConAnio } from '../utils/formato'
+import { identificadorUnidad } from '../utils/unidades'
 import { DURACIONES_CITA, reglaFechaCita, textoDuracion } from '../utils/agenda'
 
 type Props = {
@@ -100,11 +103,84 @@ function ModalReprogramar({ cita, onCerrar }: Readonly<{ cita: CitaDetalleRespon
   )
 }
 
+type CamposEditar = {
+  vehiculoId: string
+  motivo: string
+  observaciones?: string
+}
+
+/** Unidad, motivo y observaciones. La fecha va por Reprogramar, que la anota en el historial. */
+function ModalEditar({ cita, onCerrar }: Readonly<{ cita: CitaDetalleResponse; onCerrar: () => void }>) {
+  const [formulario] = Form.useForm<CamposEditar>()
+  const { tienePermiso } = useSesion()
+  const unidades = useVehiculos(cita.clienteId, tienePermiso(PERMISOS.unidadesVer))
+  const actualizar = useActualizarCita()
+
+  const guardar = async (campos: CamposEditar) => {
+    await actualizar.mutateAsync({
+      id: cita.id,
+      datos: {
+        vehiculoId: campos.vehiculoId,
+        fechaHoraProgramada: cita.fechaHoraProgramada,
+        duracionMinutos: cita.duracionMinutos,
+        motivo: campos.motivo.trim(),
+        observaciones: campos.observaciones?.trim() || null,
+      },
+    })
+    onCerrar()
+  }
+
+  return (
+    <Modal
+      title="Editar cita"
+      open
+      onCancel={onCerrar}
+      onOk={() => formulario.submit()}
+      okText="Guardar"
+      cancelText="Volver"
+      confirmLoading={actualizar.isPending}
+    >
+      <AvisoError error={actualizar.error} />
+      <Form<CamposEditar>
+        form={formulario}
+        layout="vertical"
+        requiredMark={false}
+        onFinish={guardar}
+        initialValues={{ vehiculoId: cita.vehiculoId, motivo: cita.motivo, observaciones: cita.observaciones ?? '' }}
+      >
+        <Form.Item label="Unidad" name="vehiculoId" rules={[{ required: true, message: 'Elige la unidad' }]}>
+          <Select
+            loading={unidades.isPending}
+            options={(unidades.data ?? [])
+              .filter((unidad) => unidad.activo || unidad.id === cita.vehiculoId)
+              .map((unidad) => ({
+                value: unidad.id,
+                label: `${unidad.marca} ${unidad.modelo} · ${identificadorUnidad(unidad)}`,
+              }))}
+          />
+        </Form.Item>
+        <Form.Item
+          label="Motivo"
+          name="motivo"
+          rules={[{ required: true, whitespace: true, message: 'Escribe el motivo de la cita' }]}
+        >
+          <Input.TextArea rows={2} maxLength={500} />
+        </Form.Item>
+        <Form.Item label="Observaciones" name="observaciones">
+          <Input.TextArea rows={2} maxLength={500} />
+        </Form.Item>
+      </Form>
+    </Modal>
+  )
+}
+
 export function ModalDetalleCita({ citaId, onCerrar }: Readonly<Props>) {
   const sesion = useSesion()
   const puedeEditar = sesion.tienePermiso(PERMISOS.citasEditar)
   const puedeCancelar = sesion.tienePermiso(PERMISOS.citasCancelar)
   const veOrdenes = cumpleAcceso(ACCESO_ORDENES, sesion)
+  const puedeAbrirOrden = sesion.tienePermiso(PERMISOS.ordenesCrear)
+  const navigate = useNavigate()
 
   const cita = useCita(citaId)
   const cambiarEstado = useCambiarEstadoCita()
@@ -113,10 +189,17 @@ export function ModalDetalleCita({ citaId, onCerrar }: Readonly<Props>) {
   const [paso, setPaso] = useState<Paso | null>(null)
   const [nota, setNota] = useState('')
   const [reprogramando, setReprogramando] = useState(false)
+  const [editando, setEditando] = useState(false)
 
   const datos = cita.data
   const antesDelTaller = datos ? citaAntesDelTaller(datos.estado) : false
   const destinos = datos && puedeEditar ? siguientesEstadosCita(datos.estado) : []
+  // Recibir la unidad es abrir su orden: desde la cita, con la unidad y el motivo ya puestos.
+  const abreOrden =
+    datos !== undefined &&
+    puedeAbrirOrden &&
+    !datos.ordenServicioId &&
+    (antesDelTaller || datos.estado === ESTADO_CITA.enTaller)
 
   const cerrarPaso = () => {
     setPaso(null)
@@ -128,6 +211,7 @@ export function ModalDetalleCita({ citaId, onCerrar }: Readonly<Props>) {
   const cerrar = () => {
     cerrarPaso()
     setReprogramando(false)
+    setEditando(false)
     onCerrar()
   }
 
@@ -223,7 +307,18 @@ export function ModalDetalleCita({ citaId, onCerrar }: Readonly<Props>) {
                 {antesDelTaller && puedeCancelar && (
                   <Button onClick={() => setPaso({ tipo: 'cancelar' })}>Cancelar cita</Button>
                 )}
+                {antesDelTaller && puedeEditar && <Button onClick={() => setEditando(true)}>Editar</Button>}
                 {antesDelTaller && puedeEditar && <Button onClick={() => setReprogramando(true)}>Reprogramar</Button>}
+                {abreOrden && (
+                  <Button
+                    onClick={() => {
+                      cerrar()
+                      navigate(`/ordenes/nueva?cita=${datos.id}`)
+                    }}
+                  >
+                    Abrir orden
+                  </Button>
+                )}
                 {destinos.map((destino, indice) => (
                   <Button
                     key={destino}
@@ -239,6 +334,7 @@ export function ModalDetalleCita({ citaId, onCerrar }: Readonly<Props>) {
           </section>
 
           {reprogramando && <ModalReprogramar cita={datos} onCerrar={() => setReprogramando(false)} />}
+          {editando && <ModalEditar cita={datos} onCerrar={() => setEditando(false)} />}
         </>
       )}
 

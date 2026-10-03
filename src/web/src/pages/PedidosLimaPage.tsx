@@ -8,6 +8,7 @@ import { ModalDetallePedidoLima } from '../components/ModalDetallePedidoLima'
 import { nombresEstadoPedidoLima, rutaPedidosLima, usePedidosLima } from '../api/pedidosLima'
 import type { EstadoPedidoLima, PedidoLimaResponse } from '../api/tipos'
 import { useSesion } from '../auth/sesion'
+import { useClientes } from '../api/clientes'
 import { PERMISOS } from '../auth/acceso'
 import { descargarArchivo } from '../utils/descarga'
 import { diaLocal, entero, fechaCorta, fechaHora, soles } from '../utils/formato'
@@ -19,20 +20,24 @@ const opcionesEstado = Object.entries(nombresEstadoPedidoLima).map(([valor, etiq
 
 export function PedidosLimaPage() {
   const [estado, setEstado] = useState<EstadoPedidoLima>()
+  const [clienteId, setClienteId] = useState<string>()
   const [modalNuevo, setModalNuevo] = useState(false)
   const [pedidoVisto, setPedidoVisto] = useState<string | null>(null)
   const [exportando, setExportando] = useState(false)
   const [errorExportar, setErrorExportar] = useState<unknown>(null)
 
-  const puedeCrear = useSesion().tienePermiso(PERMISOS.pedidosLimaCrear)
-  const pedidos = usePedidosLima({ estado })
+  const { tienePermiso } = useSesion()
+  const puedeCrear = tienePermiso(PERMISOS.pedidosLimaCrear)
+  const veClientes = tienePermiso(PERMISOS.clientesVer)
+  const clientes = useClientes(veClientes)
+  const pedidos = usePedidosLima({ estado, clienteId })
 
   const exportar = async () => {
     setExportando(true)
     setErrorExportar(null)
     try {
       await descargarArchivo(
-        rutaPedidosLima({ estado }, '/pedidos-lima/exportar-excel'),
+        rutaPedidosLima({ estado, clienteId }, '/pedidos-lima/exportar-excel'),
         `pedidos-lima-${diaLocal()}.xlsx`,
       )
     } catch (error) {
@@ -123,6 +128,20 @@ export function PedidosLimaPage() {
               options={opcionesEstado}
               style={{ width: 220 }}
             />
+            {veClientes && (
+              <Select<string>
+                id="filtro-cliente-pedido"
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                placeholder="Cliente"
+                value={clienteId}
+                onChange={setClienteId}
+                loading={clientes.isPending}
+                options={(clientes.data ?? []).map((cliente) => ({ value: cliente.id, label: cliente.nombreCompleto }))}
+                style={{ width: 260 }}
+              />
+            )}
           </div>
           <Table
             rowKey="id"

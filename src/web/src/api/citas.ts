@@ -5,6 +5,7 @@ import {
   ESTADO_CITA,
   type EstadoCita,
   type CitaDetalleResponse,
+  type ActualizarCitaRequest,
   type CitaListResponse,
   type CrearCitaRequest,
   type ReprogramarCitaRequest,
@@ -48,6 +49,7 @@ export type FiltrosCitas = {
   fechaInicio?: string
   fechaFin?: string
   estado?: EstadoCita
+  clienteId?: string
 }
 
 export function rutaCitas(filtros: FiltrosCitas, base = '/citas'): string {
@@ -55,6 +57,7 @@ export function rutaCitas(filtros: FiltrosCitas, base = '/citas'): string {
   if (filtros.fechaInicio) parametros.set('fechaInicio', filtros.fechaInicio)
   if (filtros.fechaFin) parametros.set('fechaFin', filtros.fechaFin)
   if (filtros.estado) parametros.set('estado', filtros.estado)
+  if (filtros.clienteId) parametros.set('clienteId', filtros.clienteId)
   const consulta = parametros.toString()
   return consulta ? `${base}?${consulta}` : base
 }
@@ -92,6 +95,21 @@ export const useCrearCita = () =>
   useMutacionCita(
     (datos: CrearCitaRequest) => solicitar<CitaDetalleResponse>('/citas', { metodo: 'POST', cuerpo: datos }),
     'Cita agendada',
+  )
+
+export const useActualizarCita = () =>
+  useMutacionCita(
+    ({ id, datos }: { id: string; datos: ActualizarCitaRequest }) =>
+      solicitar<CitaDetalleResponse>(`/citas/${id}`, { metodo: 'PUT', cuerpo: datos }),
+    'Cita actualizada',
+  )
+
+/** La orden que se abrió al recibir la unidad: la cita queda «En taller» con ella. */
+export const useVincularOrdenCita = () =>
+  useMutacionCita(
+    ({ id, ordenServicioId }: { id: string; ordenServicioId: string }) =>
+      solicitar<CitaDetalleResponse>(`/citas/${id}/orden-servicio`, { metodo: 'PUT', cuerpo: { ordenServicioId } }),
+    'Cita vinculada a la orden',
   )
 
 export const useReprogramarCita = () =>

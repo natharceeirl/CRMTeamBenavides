@@ -99,11 +99,16 @@ export function useStockBajo() {
  * Solo Gerencia tiene reportes.ver_financieros: para los demás no se consulta.
  * Este reporte filtra por día, así que el rango viaja como días locales.
  */
-export function useRentabilidad(rango: RangoFechas, habilitado: boolean) {
-  const filtros = { fechaDesde: diaLocal(rango.fechaDesde), fechaHasta: diaLocal(rango.fechaHasta) }
+export function useRentabilidad(rango: RangoFechas, habilitado: boolean, productoId?: string) {
+  const parametros = new URLSearchParams({
+    fechaDesde: diaLocal(rango.fechaDesde),
+    fechaHasta: diaLocal(rango.fechaHasta),
+  })
+  if (productoId) parametros.set('productoId', productoId)
+  const consulta = parametros.toString()
   return useQuery({
-    queryKey: ['reportes', 'rentabilidad', filtros.fechaDesde, filtros.fechaHasta] as const,
-    queryFn: () => solicitar<RentabilidadReporteResponse>(rutaReporte('/reportes/rentabilidad', filtros)),
+    queryKey: ['reportes', 'rentabilidad', consulta] as const,
+    queryFn: () => solicitar<RentabilidadReporteResponse>(`/reportes/rentabilidad?${consulta}`),
     enabled: habilitado,
   })
 }

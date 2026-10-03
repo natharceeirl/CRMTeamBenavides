@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Segmented, Table, Tabs, type TableProps } from 'antd'
+import { Segmented, Select, Table, Tabs, type TableProps } from 'antd'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { EstadoOrdenApiTag } from '../components/EstadoOrdenApiTag'
@@ -16,6 +16,7 @@ import {
   type Periodo,
 } from '../api/reportes'
 import { ESTADO_VENTA } from '../api/ventas'
+import { useProductos } from '../api/inventario'
 import type {
   OrdenServicioReporteResponse,
   RentabilidadReporteResponse,
@@ -192,14 +193,36 @@ const columnasOperaciones: TableProps<FilaOperacion>['columns'] = [
   ...columnasMontos<FilaOperacion>('ingresoNeto', 'costoHistoricoRegistrado'),
 ]
 
-function Rentabilidad({
-  datos,
-  cargando,
-}: Readonly<{ datos?: RentabilidadReporteResponse; cargando: boolean }>) {
+type PropsRentabilidad = {
+  datos?: RentabilidadReporteResponse
+  cargando: boolean
+  productoId?: string
+  onProducto: (productoId: string | undefined) => void
+}
+
+function Rentabilidad({ datos, cargando, productoId, onProducto }: Readonly<PropsRentabilidad>) {
   const resumen = datos?.resumen
+  const productos = useProductos()
   return (
     <div className="secciones">
       <div>
+        <div className="filtros">
+          <Select<string>
+            id="filtro-repuesto-rentabilidad"
+            allowClear
+            showSearch
+            optionFilterProp="label"
+            placeholder="Todos los repuestos y servicios"
+            value={productoId}
+            onChange={onProducto}
+            loading={productos.isPending}
+            options={(productos.data ?? []).map((producto) => ({
+              value: producto.id,
+              label: `${producto.codigo} · ${producto.nombre}`,
+            }))}
+            style={{ width: 380 }}
+          />
+        </div>
         <Indicadores
           items={[
             {
@@ -276,7 +299,8 @@ export function ReportesPage() {
   const ordenes = useReporteOrdenes(rango)
   const ventas = useReporteVentas(rango)
   const stockBajo = useStockBajo()
-  const rentabilidad = useRentabilidad(rango, veFinancieros)
+  const [productoRentabilidad, setProductoRentabilidad] = useState<string>()
+  const rentabilidad = useRentabilidad(rango, veFinancieros, productoRentabilidad)
 
   const datos = resumen.data
 
@@ -422,7 +446,14 @@ export function ReportesPage() {
               {
                 key: 'rentabilidad',
                 label: 'Rentabilidad',
-                children: <Rentabilidad datos={rentabilidad.data} cargando={rentabilidad.isPending} />,
+                children: (
+                  <Rentabilidad
+                    datos={rentabilidad.data}
+                    cargando={rentabilidad.isPending}
+                    productoId={productoRentabilidad}
+                    onProducto={setProductoRentabilidad}
+                  />
+                ),
               },
             ]}
           />

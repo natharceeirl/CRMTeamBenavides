@@ -12,6 +12,7 @@ import 'pantalla_inicio_test.dart' show SesionCliente;
 CitaApi cita(String id, DateTime fecha, String estado) => CitaApi(
       id: id,
       numeroCita: 'CT-$id',
+      clienteNombre: 'Luis Quispe',
       vehiculoId: 'v1',
       vehiculoPlaca: 'ABC-123',
       vehiculoModelo: 'YZF-R3',
