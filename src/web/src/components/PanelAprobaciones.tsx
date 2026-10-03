@@ -7,6 +7,7 @@ import {
   nombresGerencia,
   nombresPresupuesto,
   useAprobacionGerencia,
+  useSolicitarAprobacionGerencia,
   useResponderPresupuesto,
 } from '../api/ordenes'
 import type { OrdenServicioDetalleResponse } from '../api/tipos'
@@ -21,7 +22,8 @@ type Props = {
 }
 
 type Accion = {
-  destino: 'cliente' | 'gerencia'
+  /** «solicitud»: quien no aprueba le pide la decisión a Gerencia. */
+  destino: 'cliente' | 'gerencia' | 'solicitud'
   estado: number
   titulo: string
   /** El rechazo siempre lleva motivo: queda en el historial para quien retome la orden. */
@@ -57,10 +59,12 @@ export function PanelAprobaciones({ orden }: Readonly<Props>) {
     PERMISOS.portalAcceso,
   ])
   const puedeDecidirGerencia = tienePermiso(PERMISOS.ordenesAprobarGerencia)
+  const puedeSolicitarGerencia = !puedeDecidirGerencia && tienePermiso(PERMISOS.ordenesEditar)
   const cerrada = esEstadoTerminal(orden.estadoId)
 
   const responder = useResponderPresupuesto()
   const gerencia = useAprobacionGerencia()
+  const solicitud = useSolicitarAprobacionGerencia()
   const [accion, setAccion] = useState<Accion | null>(null)
   const [observacion, setObservacion] = useState('')
 
@@ -72,6 +76,7 @@ export function PanelAprobaciones({ orden }: Readonly<Props>) {
     setObservacion('')
     responder.reset()
     gerencia.reset()
+    solicitud.reset()
   }
 
   const confirmar = async () => {
@@ -79,6 +84,8 @@ export function PanelAprobaciones({ orden }: Readonly<Props>) {
     const datos = { estado: accion.estado, observaciones: observacion.trim() || null }
     if (accion.destino === 'cliente') {
       await responder.mutateAsync({ id: orden.id, datos })
+    } else if (accion.destino === 'solicitud') {
+      await solicitud.mutateAsync({ id: orden.id, datos: { observaciones: observacion.trim() } })
     } else {
       await gerencia.mutateAsync({ id: orden.id, datos })
     }
@@ -205,6 +212,22 @@ export function PanelAprobaciones({ orden }: Readonly<Props>) {
               )}
             </div>
           )}
+          {!cerrada && puedeSolicitarGerencia && aprobacion !== GERENCIA.pendiente && (
+            <div className="aprobacion-acciones">
+              <Button
+                onClick={() =>
+                  abrir({
+                    destino: 'solicitud',
+                    estado: GERENCIA.pendiente,
+                    titulo: 'Solicitar aprobación de Gerencia',
+                    motivoObligatorio: true,
+                  })
+                }
+              >
+                Solicitar aprobación
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -216,11 +239,11 @@ export function PanelAprobaciones({ orden }: Readonly<Props>) {
         okText="Confirmar"
         cancelText="Cancelar"
         okButtonProps={{ disabled: Boolean(accion?.motivoObligatorio) && !observacion.trim() }}
-        confirmLoading={responder.isPending || gerencia.isPending}
+        confirmLoading={responder.isPending || gerencia.isPending || solicitud.isPending}
         destroyOnHidden
       >
-        <AvisoError error={responder.error ?? gerencia.error} />
-        {accion?.destino === 'gerencia' && accion.estado === GERENCIA.pendiente && (
+        <AvisoError error={responder.error ?? gerencia.error ?? solicitud.error} />
+        {accion?.destino !== 'cliente' && accion?.estado === GERENCIA.pendiente && (
           <p>Mientras esté pendiente, la orden no puede pasar a «Aprobada».</p>
         )}
         <Input.TextArea

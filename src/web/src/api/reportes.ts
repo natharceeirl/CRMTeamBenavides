@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { solicitar } from './http'
+import { diaLocal } from '../utils/formato'
 import { ESTADO, esEstadoTerminal, nombresEstado } from './ordenes'
 import type { BarraDato } from '../components/GraficoBarras'
 import type {
   DashboardResumenResponse,
   OrdenServicioReporteResponse,
+  RentabilidadReporteResponse,
   StockBajoResponse,
   VentaReporteResponse,
 } from './tipos'
@@ -90,6 +92,19 @@ export function useStockBajo() {
   return useQuery({
     queryKey: clavesReportes.stockBajo,
     queryFn: () => solicitar<StockBajoResponse[]>('/reportes/stock-bajo'),
+  })
+}
+
+/**
+ * Solo Gerencia tiene reportes.ver_financieros: para los demás no se consulta.
+ * Este reporte filtra por día, así que el rango viaja como días locales.
+ */
+export function useRentabilidad(rango: RangoFechas, habilitado: boolean) {
+  const filtros = { fechaDesde: diaLocal(rango.fechaDesde), fechaHasta: diaLocal(rango.fechaHasta) }
+  return useQuery({
+    queryKey: ['reportes', 'rentabilidad', filtros.fechaDesde, filtros.fechaHasta] as const,
+    queryFn: () => solicitar<RentabilidadReporteResponse>(rutaReporte('/reportes/rentabilidad', filtros)),
+    enabled: habilitado,
   })
 }
 

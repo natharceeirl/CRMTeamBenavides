@@ -8,6 +8,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'pantalla_inicio_test.dart' show SesionAbierta, SesionTecnico;
 import 'tablero_test.dart' show resumenDePrueba;
 
+/// El vendedor ve el tablero (reportes operativos) pero no los montos.
+class SesionVendedor extends SesionNotifier {
+  @override
+  EstadoSesion build() => const EstadoSesion(
+        usuario: UsuarioSesion(id: 'v1', email: 'vendedor@teambenavides.pe', nombre: 'Vendedor'),
+        roles: ['Vendedor'],
+        permisos: ['ventas.ver', 'ventas.crear', 'inventario.ver', 'reportes.ver_operativos'],
+      );
+}
+
 Future<void> montarTablero(
   WidgetTester tester, {
   required SesionNotifier Function() sesion,
@@ -49,6 +59,19 @@ void main() {
     await montarTablero(tester, sesion: SesionAbierta.new, caja: const CajaActualApi(abierta: false));
 
     expect(find.text('Cerrada'), findsOneWidget);
+  });
+
+  testWidgets('Gerencia ve cuánto se vendió', (tester) async {
+    await montarTablero(tester, sesion: SesionAbierta.new);
+    expect(find.text('VENDIDO'), findsOneWidget);
+    expect(find.text('S/ 294.50'), findsOneWidget);
+  });
+
+  testWidgets('sin reportes financieros se ve cuántas ventas hubo, no el monto', (tester) async {
+    await montarTablero(tester, sesion: SesionVendedor.new);
+    expect(find.text('VENDIDO'), findsNothing);
+    expect(find.text('S/ 294.50'), findsNothing);
+    expect(find.text('VENTAS'), findsOneWidget);
   });
 
   testWidgets('sin caja.consultar no aparece la caja', (tester) async {

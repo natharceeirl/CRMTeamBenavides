@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { entero, fechaHora, importe, referenciaOrden, soles } from './formato'
+import { diaLocal, entero, fechaCorta, fechaHora, importe, porcentaje, referenciaOrden, soles } from './formato'
 
 describe('formato', () => {
   it('escribe los montos en soles con dos decimales', () => {
@@ -28,5 +28,17 @@ describe('formato', () => {
 
   it('arma la referencia de la orden con el inicio del id', () => {
     expect(referenciaOrden('64404ca3-6464-486a-b0aa-14d157fa1375')).toBe('#64404CA3')
+  })
+
+  it('escribe el margen con un decimal', () => {
+    expect(porcentaje(32.456)).toMatch(/^32.5 %$/)
+    expect(porcentaje(-4)).toMatch(/^-4.0 %$/)
+  })
+
+  it('da el día local, no el de UTC', () => {
+    // A las 21:00 en Perú ya es el día siguiente en UTC.
+    expect(diaLocal(new Date(2026, 9, 2, 21, 0))).toBe('2026-10-02')
+    expect(fechaCorta(new Date(2026, 9, 2, 21, 0).toISOString())).toBe('02/10/2026')
+    expect(fechaCorta(null)).toBe('—')
   })
 })

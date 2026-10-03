@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { colores } from '../theme/tokens'
 import { indicesVisibles, ticksDeEje, topeDeEje, type PuntoSerie } from '../utils/series'
 
@@ -28,30 +28,42 @@ const ANCHO_CARACTER = 7
 
 const identidad = (valor: number) => String(valor)
 
-/** Ancho real del contenedor, para dibujar en píxeles y no escalar los trazos. */
-function useAnchoDe(referencia: React.RefObject<HTMLDivElement | null>): number {
+/**
+ * Ancho real del contenedor, para dibujar en píxeles y no escalar los trazos.
+ *
+ * Mide con una ref de callback y no con un efecto: mientras cargan los datos
+ * el contenedor no existe, y un efecto que corre al montar nunca lo veía, así
+ * que el gráfico quedaba en el ancho mínimo.
+ */
+function useAnchoDe(referencia: React.RefObject<HTMLDivElement | null>) {
   const [ancho, setAncho] = useState(0)
 
-  useLayoutEffect(() => {
-    const elemento = referencia.current
-    if (!elemento) {
-      return
-    }
+  const medir = useCallback(
+    (elemento: HTMLDivElement | null) => {
+      referencia.current = elemento
+      if (!elemento) {
+        return
+      }
 
-    setAncho(elemento.clientWidth)
+      setAncho(elemento.clientWidth)
 
-    if (typeof ResizeObserver === 'undefined') {
-      return
-    }
+      if (typeof ResizeObserver === 'undefined') {
+        return
+      }
 
-    const observador = new ResizeObserver(([entrada]) => {
-      setAncho(entrada.contentRect.width)
-    })
-    observador.observe(elemento)
-    return () => observador.disconnect()
-  }, [referencia])
+      const observador = new ResizeObserver(([entrada]) => {
+        setAncho(entrada.contentRect.width)
+      })
+      observador.observe(elemento)
+      return () => {
+        observador.disconnect()
+        referencia.current = null
+      }
+    },
+    [referencia],
+  )
 
-  return ancho
+  return [ancho, medir] as const
 }
 
 /**
@@ -72,7 +84,8 @@ export function GraficoArea({
   vacio = 'Sin datos en el periodo',
 }: Readonly<Props>) {
   const contenedor = useRef<HTMLDivElement>(null)
-  const ancho = Math.max(useAnchoDe(contenedor), ANCHO_MINIMO)
+  const [anchoMedido, medirContenedor] = useAnchoDe(contenedor)
+  const ancho = Math.max(anchoMedido, ANCHO_MINIMO)
   const [activo, setActivo] = useState<number | null>(null)
 
   // Si cambia el periodo, el punto resaltado ya no significa lo mismo.
@@ -156,7 +169,7 @@ export function GraficoArea({
   }
 
   return (
-    <div className="grafico-area" ref={contenedor}>
+    <div className="grafico-area" ref={medirContenedor}>
       <svg
         width={ancho}
         height={alto}

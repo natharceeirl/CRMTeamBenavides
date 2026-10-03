@@ -251,6 +251,7 @@ h4 {
 .seccion-titulo .acciones {
   margin-left: auto;
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -869,5 +870,101 @@ h4 {
 @media (width <= 900px) {
   .grafico-barra-fila {
     grid-template-columns: 110px minmax(0, 1fr) 56px;
+  }
+}
+
+/* Secciones dentro de una pestaña, con el mismo aire que en .pagina */
+.secciones {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+
+/* Agenda: la semana en siete columnas; en pantallas angostas, un día debajo del otro */
+.agenda-filtros {
+  align-items: center;
+}
+
+.agenda-rango {
+  font-family: var(--fuente-titulos);
+  font-size: 18px;
+}
+
+.agenda-semana {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border-top: 2px solid var(--color-divisor);
+}
+
+.agenda-dia {
+  min-height: 180px;
+  padding: 10px 8px 12px;
+  border-right: 1px solid var(--color-divisor-suave);
+}
+
+.agenda-dia:last-child {
+  border-right: 0;
+}
+
+.agenda-dia-titulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-height: 28px;
+  margin-bottom: 8px;
+  font-family: var(--fuente-titulos);
+  font-weight: 700;
+}
+
+.agenda-dia.hoy .agenda-dia-titulo {
+  color: var(--color-acento-700);
+}
+
+.agenda-cita {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  color: inherit;
+  background: var(--color-blanco);
+  border: 1px solid var(--color-divisor-suave);
+  border-left: 3px solid var(--color-texto);
+  cursor: pointer;
+}
+
+.agenda-cita:hover,
+.agenda-cita:focus-visible {
+  border-color: var(--color-acento-600);
+}
+
+.agenda-cita.cerrada {
+  border-left-color: var(--color-neutro-300);
+}
+
+.agenda-cita-hora {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.agenda-cita-cliente {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1000px) {
+  .agenda-semana {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agenda-dia {
+    min-height: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-divisor-suave);
   }
 }

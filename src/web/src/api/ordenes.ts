@@ -250,6 +250,10 @@ export const useAprobacionGerencia = () =>
 
 export const useAsignarTecnico = () => useAccionOrden<AsignarTecnicoRequest>('asignar-tecnico', 'Técnico asignado')
 
+/** Quien edita órdenes sin poder aprobarlas (Recepción) pide la aprobación de Gerencia, con su motivo. */
+export const useSolicitarAprobacionGerencia = () =>
+  useAccionOrden<{ observaciones: string }>('solicitar-aprobacion-gerencia', 'Aprobación solicitada a Gerencia')
+
 /** PUT /api/ordenes-servicio/{id}: datos de recepción y seguimiento de la orden. */
 export function useActualizarOrden() {
   const consultas = useQueryClient()

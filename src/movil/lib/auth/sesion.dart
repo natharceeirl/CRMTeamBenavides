@@ -199,3 +199,7 @@ final ventasProvider = FutureProvider.autoDispose<List<VentaApi>>(
 final ventaProvider = FutureProvider.autoDispose.family<VentaDetalleApi, String>(
   (ref, id) => ref.watch(apiProvider).venta(id),
 );
+
+final citasProvider = FutureProvider.autoDispose<List<CitaApi>>(
+  (ref) => ref.watch(apiProvider).citas(),
+);

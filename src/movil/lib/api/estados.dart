@@ -267,3 +267,31 @@ List<PasoAvance> pasosDeAvance({
       }(),
   ];
 }
+
+/// Estados de la cita (EstadoCita del backend). Viajan como texto, no como
+/// número: el enum lleva JsonStringEnumConverter.
+class EstadoCita {
+  const EstadoCita._();
+
+  static const pendiente = 'Pendiente';
+  static const confirmada = 'Confirmada';
+  static const enTaller = 'EnTaller';
+  static const completada = 'Completada';
+  static const cancelada = 'Cancelada';
+  static const noAsistio = 'NoAsistio';
+}
+
+const nombresEstadoCita = <String, String>{
+  EstadoCita.pendiente: 'Pendiente',
+  EstadoCita.confirmada: 'Confirmada',
+  EstadoCita.enTaller: 'En taller',
+  EstadoCita.completada: 'Completada',
+  EstadoCita.cancelada: 'Cancelada',
+  EstadoCita.noAsistio: 'No asistió',
+};
+
+bool esCitaFinal(String estado) =>
+    estado == EstadoCita.completada || estado == EstadoCita.cancelada || estado == EstadoCita.noAsistio;
+
+/// La cita se cancela mientras la unidad no haya llegado al taller (CitaService.CancelarAsync).
+bool citaAntesDelTaller(String estado) => estado == EstadoCita.pendiente || estado == EstadoCita.confirmada;

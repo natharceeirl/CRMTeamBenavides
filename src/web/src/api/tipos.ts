@@ -1032,3 +1032,230 @@ export type EventoAuditoriaResponse = {
   entidadId: string
   detalle: string | null
 }
+
+// ---------------------------------------------------------------------------
+// Citas / agenda del taller
+// ---------------------------------------------------------------------------
+/**
+ * Enum EstadoCita del backend. Viaja como texto (JsonStringEnumConverter en el
+ * enum), no como número. Cancelada, Completada y NoAsistio son finales.
+ */
+export const ESTADO_CITA = {
+  pendiente: 'Pendiente',
+  confirmada: 'Confirmada',
+  enTaller: 'EnTaller',
+  completada: 'Completada',
+  cancelada: 'Cancelada',
+  noAsistio: 'NoAsistio',
+} as const
+
+export type EstadoCita = (typeof ESTADO_CITA)[keyof typeof ESTADO_CITA]
+
+export type CitaListResponse = {
+  id: string
+  numeroCita: string
+  clienteId: string
+  clienteNombre: string
+  vehiculoId: string
+  vehiculoPlaca: string | null
+  vehiculoModelo: string
+  fechaHoraProgramada: string
+  duracionMinutos: number
+  motivo: string
+  estado: EstadoCita
+  estadoDescripcion: string
+  ordenServicioId: string | null
+  numeroOrdenServicio: string | null
+}
+
+export type HistorialEstadoCitaResponse = {
+  id: string
+  estadoAnterior: EstadoCita | null
+  estadoAnteriorDescripcion: string | null
+  estadoNuevo: EstadoCita
+  estadoNuevoDescripcion: string
+  usuarioId: string | null
+  usuarioNombre: string | null
+  fecha: string
+  observacion: string | null
+}
+
+export type CitaDetalleResponse = {
+  id: string
+  numeroCita: string
+  clienteId: string
+  clienteNombre: string
+  clienteDocumento: string | null
+  clienteTelefono: string | null
+  clienteEmail: string | null
+  vehiculoId: string
+  vehiculoMarca: string
+  vehiculoModelo: string
+  vehiculoPlaca: string | null
+  vehiculoAnio: number | null
+  fechaHoraProgramada: string
+  duracionMinutos: number
+  fechaHoraFinEstimada: string
+  motivo: string
+  observaciones: string | null
+  estado: EstadoCita
+  estadoDescripcion: string
+  motivoCancelacion: string | null
+  ordenServicioId: string | null
+  numeroOrdenServicio: string | null
+  historial: HistorialEstadoCitaResponse[]
+  fechaCreacion: string
+}
+
+export type CrearCitaRequest = {
+  clienteId: string | null
+  vehiculoId: string
+  fechaHoraProgramada: string
+  duracionMinutos: number | null
+  motivo: string
+  observaciones: string | null
+}
+
+export type ReprogramarCitaRequest = {
+  nuevaFechaHoraProgramada: string
+  nuevaDuracionMinutos: number | null
+  motivoReprogramacion: string | null
+}
+
+// ---------------------------------------------------------------------------
+// Pedidos de Lima: repuestos que un cliente encarga y llegan de Lima
+// ---------------------------------------------------------------------------
+/**
+ * Enum EstadoPedidoLima del backend, en orden: no se retrocede. Viaja como texto
+ * (JsonStringEnumConverter en el enum), no como número.
+ */
+export const ESTADO_PEDIDO_LIMA = {
+  pendiente: 'Pendiente',
+  confirmado: 'Confirmado',
+  enPreparacion: 'EnPreparacion',
+  enTransito: 'EnTransito',
+  recibido: 'Recibido',
+  entregado: 'Entregado',
+  cancelado: 'Cancelado',
+} as const
+
+export type EstadoPedidoLima = (typeof ESTADO_PEDIDO_LIMA)[keyof typeof ESTADO_PEDIDO_LIMA]
+
+export type DetallePedidoLimaResponse = {
+  id: string
+  productoId: string
+  productoCodigo: string
+  productoNombre: string
+  cantidad: number
+  precioUnitario: number
+  costoUnitarioHistorico: number
+  /** Viaja como texto: «Gravado», «Exonerado» o «Inafecto». */
+  tipoAfectacionIgv: string
+  tipoAfectacionIgvDescripcion: string
+  subtotalGravado: number
+  porcentajeIgvAplicado: number
+  montoIgv: number
+  total: number
+}
+
+export type HistorialEstadoPedidoLimaResponse = {
+  id: string
+  estadoAnterior: EstadoPedidoLima | null
+  estadoAnteriorDescripcion: string | null
+  estadoNuevo: EstadoPedidoLima
+  estadoNuevoDescripcion: string
+  usuarioId: string | null
+  usuarioNombre: string | null
+  fecha: string
+  observacion: string | null
+}
+
+export type PedidoLimaResponse = {
+  id: string
+  numeroPedido: string
+  clienteId: string
+  clienteNombre: string
+  clienteDocumento: string | null
+  clienteTelefono: string | null
+  fecha: string
+  estado: EstadoPedidoLima
+  estadoDescripcion: string
+  empresaTransporte: string | null
+  numeroGuia: string | null
+  fechaEstimadaLlegada: string | null
+  fechaLlegada: string | null
+  fechaEntrega: string | null
+  subtotalGravado: number
+  subtotalExonerado: number
+  subtotalInafecto: number
+  porcentajeIgv: number
+  montoIgv: number
+  total: number
+  observaciones: string | null
+  motivoCancelacion: string | null
+  stockDeducido: boolean
+  detalles: DetallePedidoLimaResponse[]
+  historial: HistorialEstadoPedidoLimaResponse[]
+  fechaCreacion: string
+}
+
+export type CrearPedidoLimaRequest = {
+  clienteId: string
+  empresaTransporte: string | null
+  numeroGuia: string | null
+  fechaEstimadaLlegada: string | null
+  observaciones: string | null
+  detalles: { productoId: string; cantidad: number }[]
+}
+
+export type ActualizarPedidoLimaRequest = {
+  empresaTransporte: string | null
+  numeroGuia: string | null
+  fechaEstimadaLlegada: string | null
+  fechaLlegada: string | null
+  fechaEntrega: string | null
+  observaciones: string | null
+}
+
+// ---------------------------------------------------------------------------
+// Rentabilidad (solo con reportes.ver_financieros)
+// ---------------------------------------------------------------------------
+export type RentabilidadReporteResponse = {
+  fechaDesde: string | null
+  fechaHasta: string | null
+  resumen: {
+    ingresosTotalesSinIgv: number
+    costoTotalHistorico: number
+    utilidadBrutaTotal: number
+    margenPorcentualGlobal: number
+  }
+  desglosePorTipo: {
+    tipoItem: string
+    cantidadItems: number
+    ingresoNeto: number
+    costoHistoricoRegistrado: number
+    utilidadBruta: number
+    margenPorcentual: number
+  }[]
+  detalleOperaciones: {
+    documentoTipo: string
+    numeroDocumento: string
+    operacionId: string
+    fecha: string
+    clienteNombre: string
+    ingresoNeto: number
+    costoHistoricoRegistrado: number
+    utilidadBruta: number
+    margenPorcentual: number
+  }[]
+  rankingRepuestos: {
+    productoId: string
+    codigo: string
+    descripcion: string
+    unidadesVendidas: number
+    ingresoNeto: number
+    costoHistorico: number
+    utilidadBruta: number
+    margenPorcentual: number
+  }[]
+}

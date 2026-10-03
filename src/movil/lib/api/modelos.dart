@@ -1102,3 +1102,45 @@ class AtencionServicioApi {
   final double total;
   final List<String> trabajos;
 }
+
+/// Una cita del listado (CitaListResponse). Al cliente la API solo le devuelve las suyas.
+class CitaApi {
+  const CitaApi({
+    required this.id,
+    required this.numeroCita,
+    required this.vehiculoId,
+    required this.vehiculoModelo,
+    required this.fechaHoraProgramada,
+    required this.duracionMinutos,
+    required this.motivo,
+    required this.estado,
+    this.vehiculoPlaca,
+  });
+
+  factory CitaApi.desdeJson(Map<String, dynamic> json) => CitaApi(
+        id: json['id'] as String,
+        numeroCita: json['numeroCita'] as String? ?? '',
+        vehiculoId: json['vehiculoId'] as String,
+        vehiculoPlaca: json['vehiculoPlaca'] as String?,
+        vehiculoModelo: json['vehiculoModelo'] as String? ?? '',
+        fechaHoraProgramada: DateTime.parse(json['fechaHoraProgramada'] as String),
+        duracionMinutos: json['duracionMinutos'] as int? ?? 60,
+        motivo: json['motivo'] as String? ?? '',
+        estado: json['estado'] as String? ?? EstadoCita.pendiente,
+      );
+
+  final String id;
+  final String numeroCita;
+  final String vehiculoId;
+  final String? vehiculoPlaca;
+  final String vehiculoModelo;
+  final DateTime fechaHoraProgramada;
+  final int duracionMinutos;
+  final String motivo;
+  final String estado;
+
+  String get unidad {
+    final placa = vehiculoPlaca;
+    return placa == null || placa.isEmpty ? vehiculoModelo : '$vehiculoModelo · $placa';
+  }
+}

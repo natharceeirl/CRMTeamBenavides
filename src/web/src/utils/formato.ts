@@ -5,6 +5,11 @@ const numeroConDecimales = new Intl.NumberFormat('es-PE', {
 
 const numeroEntero = new Intl.NumberFormat('es-PE')
 
+const numeroConUnDecimal = new Intl.NumberFormat('es-PE', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+})
+
 const dosDigitos = (valor: number) => String(valor).padStart(2, '0')
 
 export const soles = (monto: number) => `S/ ${numeroConDecimales.format(monto)}`
@@ -12,6 +17,9 @@ export const soles = (monto: number) => `S/ ${numeroConDecimales.format(monto)}`
 export const importe = (monto: number) => numeroConDecimales.format(monto)
 
 export const entero = (valor: number) => numeroEntero.format(valor)
+
+/** Un porcentaje que ya viene en escala 0-100, como el margen del reporte de rentabilidad. */
+export const porcentaje = (valor: number) => `${numeroConUnDecimal.format(valor)} %`
 
 /**
  * Fechas de la API (ISO en UTC) en hora local, como «18/09 08:45».
@@ -30,6 +38,23 @@ export const fechaHora = (iso: string | null | undefined) => {
   }
 
   return `${dosDigitos(fecha.getDate())}/${dosDigitos(fecha.getMonth() + 1)} ${dosDigitos(fecha.getHours())}:${dosDigitos(fecha.getMinutes())}`
+}
+
+/** Solo el día, para fechas sin hora como la llegada estimada de un pedido: «18/09/2026». */
+export const fechaCorta = (iso: string | null | undefined) => {
+  if (!iso) return '—'
+  const fecha = new Date(iso)
+  if (Number.isNaN(fecha.getTime())) return '—'
+  return `${dosDigitos(fecha.getDate())}/${dosDigitos(fecha.getMonth() + 1)}/${fecha.getFullYear()}`
+}
+
+/**
+ * El día local en formato AAAA-MM-DD, para filtros por día y nombres de archivo.
+ * No sale de toISOString: en Perú, desde las 19:00 la fecha UTC ya es la del día siguiente.
+ */
+export const diaLocal = (fecha: Date | string = new Date()) => {
+  const valor = new Date(fecha)
+  return `${valor.getFullYear()}-${dosDigitos(valor.getMonth() + 1)}-${dosDigitos(valor.getDate())}`
 }
 
 /** Como `fechaHora` pero con el año, para documentos impresos: «18/09/2026 08:45». */
