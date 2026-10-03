@@ -34,11 +34,12 @@ public class PortalService : IPortalService
                           && o.Estado != EstadoOrdenServicio.Entregada
                           && o.Estado != EstadoOrdenServicio.Cancelada);
 
+        // Por responder: el presupuesto ya existe (diagnóstico hecho) y sigue sin respuesta.
+        // Una orden que avanzó de Diagnóstico ya no espera nada del cliente.
         var cantidadPresupuestosPendientes = await _context.OrdenesServicio
             .CountAsync(o => (o.ClienteId == clienteId || o.Vehiculo.ClienteId == clienteId)
                           && o.Activo
-                          && o.Estado != EstadoOrdenServicio.Entregada
-                          && o.Estado != EstadoOrdenServicio.Cancelada
+                          && o.Estado == EstadoOrdenServicio.Diagnostico
                           && o.EstadoPresupuestoCliente == EstadoPresupuestoCliente.Pendiente);
 
         var ordenes = await _context.OrdenesServicio

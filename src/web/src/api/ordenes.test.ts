@@ -10,6 +10,7 @@ import {
   motivoEntregaInvalida,
   nombresEstado,
   permiteEditarDetalles,
+  respuestasPresupuesto,
   transicionesValidas,
 } from './ordenes'
 
@@ -119,5 +120,29 @@ describe('fechas de la orden', () => {
     expect(motivoEntregaInvalida(dayjs('2026-09-29T09:00'), ingreso)).toBeNull()
     expect(motivoEntregaInvalida(dayjs('2026-10-02T18:00'), ingreso)).toBeNull()
     expect(motivoEntregaInvalida(null, ingreso)).toBeNull()
+  })
+})
+
+describe('respuestasPresupuesto', () => {
+  it('ofrece aprobar y rechazar mientras la orden está en su etapa', () => {
+    expect(respuestasPresupuesto(ESTADO.diagnostico, PRESUPUESTO.pendiente)).toEqual([
+      PRESUPUESTO.aprobado,
+      PRESUPUESTO.rechazado,
+    ])
+    expect(respuestasPresupuesto(ESTADO.abierta, PRESUPUESTO.pendiente)).toHaveLength(2)
+  })
+
+  it('después de aprobado no ofrece nada, ni para cambiar a rechazado', () => {
+    expect(respuestasPresupuesto(ESTADO.diagnostico, PRESUPUESTO.aprobado)).toEqual([])
+  })
+
+  it('rechazado y aún en diagnóstico, solo se puede aprobar', () => {
+    expect(respuestasPresupuesto(ESTADO.diagnostico, PRESUPUESTO.rechazado)).toEqual([PRESUPUESTO.aprobado])
+  })
+
+  it('con la orden ya aprobada, en proceso, lista o cerrada no se responde', () => {
+    for (const estado of [ESTADO.aprobada, ESTADO.enProceso, ESTADO.lista, ESTADO.entregada, ESTADO.cancelada]) {
+      expect(respuestasPresupuesto(estado, PRESUPUESTO.pendiente)).toEqual([])
+    }
   })
 })

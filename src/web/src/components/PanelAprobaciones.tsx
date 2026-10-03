@@ -9,6 +9,7 @@ import {
   useAprobacionGerencia,
   useSolicitarAprobacionGerencia,
   useResponderPresupuesto,
+  respuestasPresupuesto,
 } from '../api/ordenes'
 import type { OrdenServicioDetalleResponse } from '../api/tipos'
 import { useSesion } from '../auth/sesion'
@@ -69,6 +70,7 @@ export function PanelAprobaciones({ orden }: Readonly<Props>) {
   const [observacion, setObservacion] = useState('')
 
   const presupuesto = orden.estadoPresupuestoClienteId ?? PRESUPUESTO.pendiente
+  const respuestas = puedeRegistrarRespuesta ? respuestasPresupuesto(orden.estadoId, presupuesto) : []
   const aprobacion = orden.estadoAprobacionGerenciaId ?? GERENCIA.noAplica
 
   const cerrar = () => {
@@ -114,9 +116,9 @@ export function PanelAprobaciones({ orden }: Readonly<Props>) {
           {orden.observacionesPresupuestoCliente && (
             <p className="aprobacion-nota">{orden.observacionesPresupuestoCliente}</p>
           )}
-          {!cerrada && puedeRegistrarRespuesta && (
+          {respuestas.length > 0 && (
             <div className="aprobacion-acciones">
-              {presupuesto !== PRESUPUESTO.aprobado && (
+              {respuestas.includes(PRESUPUESTO.aprobado) && (
                 <Button
                   type={esSoloCliente ? 'primary' : 'default'}
                   onClick={() =>
@@ -131,7 +133,7 @@ export function PanelAprobaciones({ orden }: Readonly<Props>) {
                   {esSoloCliente ? 'Aprobar presupuesto' : 'El cliente aprobó'}
                 </Button>
               )}
-              {presupuesto !== PRESUPUESTO.rechazado && (
+              {respuestas.includes(PRESUPUESTO.rechazado) && (
                 <Button
                   danger
                   onClick={() =>

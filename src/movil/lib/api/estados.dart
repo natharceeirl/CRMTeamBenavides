@@ -52,6 +52,17 @@ class EstadoPresupuesto {
   static const rechazado = 2;
 }
 
+/// Qué respuestas al presupuesto se pueden dar todavía, con la regla del backend:
+/// solo con la orden en Abierta o Diagnóstico, y nunca después de aprobado. Si se
+/// rechazó y la orden sigue en diagnóstico, el cliente aún puede aprobarlo.
+List<int> respuestasPresupuesto(int estadoOrden, int presupuesto) {
+  final enEtapa = estadoOrden == EstadoOrden.abierta || estadoOrden == EstadoOrden.diagnostico;
+  if (!enEtapa || presupuesto == EstadoPresupuesto.aprobado) return const [];
+  return presupuesto == EstadoPresupuesto.rechazado
+      ? const [EstadoPresupuesto.aprobado]
+      : const [EstadoPresupuesto.aprobado, EstadoPresupuesto.rechazado];
+}
+
 const nombresEstadoPresupuesto = <int, String>{
   EstadoPresupuesto.pendiente: 'Pendiente',
   EstadoPresupuesto.aprobado: 'Aprobado',

@@ -98,6 +98,19 @@ export const nombresPresupuesto: Record<number, string> = {
   [PRESUPUESTO.rechazado]: 'Rechazado',
 }
 
+/**
+ * Qué respuestas al presupuesto se pueden dar todavía, con la regla del backend:
+ * solo con la orden en Abierta o Diagnóstico, y nunca después de aprobado. Si se
+ * rechazó y la orden sigue en diagnóstico, el cliente aún puede aprobarlo.
+ */
+export function respuestasPresupuesto(estadoOrden: number, presupuesto: number): number[] {
+  const enEtapa = estadoOrden === ESTADO.abierta || estadoOrden === ESTADO.diagnostico
+  if (!enEtapa || presupuesto === PRESUPUESTO.aprobado) return []
+  return presupuesto === PRESUPUESTO.rechazado
+    ? [PRESUPUESTO.aprobado]
+    : [PRESUPUESTO.aprobado, PRESUPUESTO.rechazado]
+}
+
 /** Enum EstadoAprobacionGerencia del backend. */
 export const GERENCIA = { noAplica: 0, pendiente: 1, aprobado: 2, rechazado: 3 } as const
 

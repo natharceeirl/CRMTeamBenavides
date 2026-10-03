@@ -212,8 +212,7 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
               _Aprobaciones(
                 orden: datosOrden,
                 ocupado: _guardando,
-                puedeResponder: !esEstadoTerminal(datosOrden.estadoId) &&
-                    sesion.tieneAlgunPermiso(Permisos.responderPresupuesto),
+                puedeResponder: sesion.tieneAlgunPermiso(Permisos.responderPresupuesto),
                 esCliente: sesion.soloCliente,
                 alResponder: (estado) =>
                     _responderPresupuesto(estado, esCliente: sesion.soloCliente),
@@ -660,6 +659,7 @@ class _Aprobaciones extends StatelessWidget {
   Widget build(BuildContext context) {
     final presupuesto = orden.estadoPresupuestoId;
     final gerencia = orden.estadoGerenciaId;
+    final respuestas = puedeResponder ? respuestasPresupuesto(orden.estadoId, presupuesto) : const <int>[];
 
     return Card(
       child: Padding(
@@ -688,19 +688,19 @@ class _Aprobaciones extends StatelessWidget {
                 orden.observacionesGerencia,
               ].whereType<String>().where((texto) => texto.isNotEmpty).join(' · '),
             ),
-            if (puedeResponder) ...[
+            if (respuestas.isNotEmpty) ...[
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  if (presupuesto != EstadoPresupuesto.aprobado)
+                  if (respuestas.contains(EstadoPresupuesto.aprobado))
                     FilledButton(
                       style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
                       onPressed: ocupado ? null : () => alResponder(EstadoPresupuesto.aprobado),
                       child: Text(esCliente ? 'Aprobar presupuesto' : 'El cliente aprobó'),
                     ),
-                  if (presupuesto != EstadoPresupuesto.rechazado)
+                  if (respuestas.contains(EstadoPresupuesto.rechazado))
                     OutlinedButton(
                       onPressed: ocupado ? null : () => alResponder(EstadoPresupuesto.rechazado),
                       child: Text(esCliente ? 'Rechazar' : 'El cliente rechazó'),

@@ -1218,6 +1218,20 @@ public class OrdenServicioService : IOrdenServicioService
                 $"No se puede modificar la respuesta de presupuesto en una orden en estado terminal '{orden.Estado}'.");
         }
 
+        // El presupuesto se responde en su etapa y una sola vez: aprobado, ya no cambia,
+        // y una orden que pasó de Diagnóstico ya está aprobada o en trabajo.
+        if (orden.EstadoPresupuestoCliente == EstadoPresupuestoCliente.Aprobado)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid(
+                "El presupuesto ya fue aprobado: no se puede volver a responder.");
+        }
+
+        if (orden.Estado is not (EstadoOrdenServicio.Abierta or EstadoOrdenServicio.Diagnostico))
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid(
+                "La orden ya pasó la etapa de presupuesto: no se puede volver a responder.");
+        }
+
         orden.EstadoPresupuestoCliente = request.Estado;
         orden.FechaRespuestaCliente = DateTime.UtcNow;
         if (!string.IsNullOrWhiteSpace(request.Observaciones))
