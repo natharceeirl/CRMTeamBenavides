@@ -1794,10 +1794,12 @@ public class OrdenServicioService : IOrdenServicioService
         var empresa = await _context.ConfiguracionesEmpresa.AsNoTracking().FirstOrDefaultAsync(ct);
         var nombreTaller = !string.IsNullOrWhiteSpace(empresa?.NombreEmpresa) ? empresa.NombreEmpresa : "Team Benavides";
         var razonSocial = !string.IsNullOrWhiteSpace(empresa?.RazonSocial) ? empresa.RazonSocial : "Team Benavides S.R.L.";
-        var ruc = empresa?.Ruc ?? "20601234567";
-        var direccion = empresa?.Direccion ?? "Av. Principal 123, Lima, Perú";
-        var telefono = empresa?.Telefono ?? "(01) 555-1234";
-        var email = empresa?.Email ?? "contacto@teambenavides.com";
+        // Sin configuración, el formato sale sin esos datos: un RUC o una dirección de
+        // ejemplo en un documento que firma el cliente es peor que dejarlos vacíos.
+        var ruc = string.IsNullOrWhiteSpace(empresa?.Ruc) ? null : empresa.Ruc;
+        var direccion = string.IsNullOrWhiteSpace(empresa?.Direccion) ? null : empresa.Direccion;
+        var telefono = string.IsNullOrWhiteSpace(empresa?.Telefono) ? null : empresa.Telefono;
+        var email = string.IsNullOrWhiteSpace(empresa?.Email) ? null : empresa.Email;
         var porcentajeIgv = empresa?.PorcentajeIgv ?? 18.00m;
 
         var empresaDto = new FormatoAtencionTallerDto(

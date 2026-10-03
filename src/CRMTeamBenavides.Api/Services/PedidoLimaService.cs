@@ -386,12 +386,26 @@ public class PedidoLimaService : IPedidoLimaService
             return ServiceResult<PedidoLimaResponse>.Invalid($"No se permite retroceder el estado del pedido de {pedido.Estado} a {request.NuevoEstado}.");
         }
 
+        // Si pasa a Recibido: los repuestos llegaron al taller y entran al stock.
+        if (request.NuevoEstado == EstadoPedidoLima.Recibido)
+        {
+            return await RegistrarLlegadaAsync(pedido, request.Observacion, usuarioId, soloClienteId, ct);
+        }
+
         // Si pasa a Entregado (Despacho): deducir stock de forma segura y pesimista
         if (request.NuevoEstado == EstadoPedidoLima.Entregado)
         {
             if (!puedeDespachar)
             {
                 return ServiceResult<PedidoLimaResponse>.Forbidden("No tiene permisos para despachar pedidos y deducir stock.");
+            }
+
+            // Lo que se entrega es lo que llegó: sin la llegada registrada, el stock no
+            // tiene esos repuestos y la entrega lo dejaría corto.
+            if (!pedido.StockDeducido && !await TieneLlegadaRegistradaAsync(pedido.Id, ct))
+            {
+                return ServiceResult<PedidoLimaResponse>.Invalid(
+                    "Antes de entregarlo, marca el pedido como «Recibido»: su llegada es la que suma los repuestos al stock.");
             }
 
             if (!pedido.StockDeducido)
@@ -415,6 +429,13 @@ public class PedidoLimaService : IPedidoLimaService
                     var productosBd = await _context.Productos
                         .Where(p => orderedProductIds.Contains(p.Id))
                         .ToDictionaryAsync(p => p.Id, ct);
+
+                    // Los productos ya venían cargados con el pedido: se releen después del
+                    // bloqueo para no restar sobre un stock viejo.
+                    foreach (var prod in productosBd.Values)
+                    {
+                        await _context.Entry(prod).ReloadAsync(ct);
+                    }
 
                     // Agrupar cantidades requeridas
                     var requeridos = pedido.Detalles
@@ -491,12 +512,6 @@ public class PedidoLimaService : IPedidoLimaService
             }
         }
 
-        // Si pasa a Recibido (en taller de Lima)
-        if (request.NuevoEstado == EstadoPedidoLima.Recibido && !pedido.FechaLlegada.HasValue)
-        {
-            pedido.FechaLlegada = DateTime.UtcNow;
-        }
-
         var estadoAnterior = pedido.Estado;
         pedido.Estado = request.NuevoEstado;
         pedido.ModificadoPorId = usuarioId;
@@ -516,6 +531,104 @@ public class PedidoLimaService : IPedidoLimaService
         });
 
         await _context.SaveChangesAsync(ct);
+        return await GetByIdAsync(pedido.Id, soloClienteId, ct);
+    }
+
+    private Task<bool> TieneLlegadaRegistradaAsync(Guid pedidoId, CancellationToken ct) =>
+        _context.MovimientosInventario.AnyAsync(m =>
+            m.PedidoLimaId == pedidoId && m.Tipo == TipoMovimientoInventario.Entrada && m.Activo, ct);
+
+    /// <summary>
+    /// El pedido llegó al taller: cada repuesto entra al stock con su movimiento de
+    /// kárdex, y la entrega después lo descuenta. Si el pedido se cancela ya llegado,
+    /// los repuestos se quedan en el inventario, porque físicamente están en el taller.
+    /// </summary>
+    private async Task<ServiceResult<PedidoLimaResponse>> RegistrarLlegadaAsync(
+        PedidoLima pedido,
+        string? observacion,
+        Guid? usuarioId,
+        Guid? soloClienteId,
+        CancellationToken ct)
+    {
+        await using var tx = await _context.Database.BeginTransactionAsync(ct);
+        try
+        {
+            if (!await TieneLlegadaRegistradaAsync(pedido.Id, ct))
+            {
+                var productosIds = pedido.Detalles
+                    .Select(d => d.ProductoId)
+                    .Distinct()
+                    .OrderBy(pId => pId)
+                    .ToList();
+
+                // Bloqueo pesimista en orden determinista, como en el despacho
+                foreach (var prodId in productosIds)
+                {
+                    await _context.Database.ExecuteSqlInterpolatedAsync(
+                        $"SELECT \"Id\" FROM \"Productos\" WHERE \"Id\" = {prodId} FOR UPDATE", ct);
+                }
+
+                var productosBd = await _context.Productos
+                    .Where(p => productosIds.Contains(p.Id))
+                    .ToDictionaryAsync(p => p.Id, ct);
+                foreach (var prod in productosBd.Values)
+                {
+                    await _context.Entry(prod).ReloadAsync(ct);
+                }
+
+                foreach (var detalle in pedido.Detalles)
+                {
+                    var prod = productosBd[detalle.ProductoId];
+                    prod.StockActual += detalle.Cantidad;
+                    prod.FechaModificacion = DateTime.UtcNow;
+
+                    _context.MovimientosInventario.Add(new MovimientoInventario
+                    {
+                        ProductoId = prod.Id,
+                        Tipo = TipoMovimientoInventario.Entrada,
+                        Cantidad = detalle.Cantidad,
+                        CostoUnitario = detalle.CostoUnitarioHistorico,
+                        Motivo = $"Llegada del pedido de Lima {pedido.NumeroPedido}",
+                        PedidoLimaId = pedido.Id,
+                        CreadoPorId = usuarioId,
+                        FechaCreacion = DateTime.UtcNow,
+                        Activo = true
+                    });
+                }
+            }
+
+            if (!pedido.FechaLlegada.HasValue)
+            {
+                pedido.FechaLlegada = DateTime.UtcNow;
+            }
+
+            var estadoAnterior = pedido.Estado;
+            pedido.Estado = EstadoPedidoLima.Recibido;
+            pedido.ModificadoPorId = usuarioId;
+            pedido.FechaModificacion = DateTime.UtcNow;
+
+            _context.HistorialEstadosPedidoLima.Add(new HistorialEstadoPedidoLima
+            {
+                PedidoLimaId = pedido.Id,
+                EstadoAnterior = estadoAnterior,
+                EstadoNuevo = EstadoPedidoLima.Recibido,
+                UsuarioId = usuarioId,
+                Fecha = DateTime.UtcNow,
+                Observacion = observacion?.Trim() ?? "Llegada al taller: los repuestos entran al stock",
+                CreadoPorId = usuarioId,
+                FechaCreacion = DateTime.UtcNow,
+                Activo = true
+            });
+
+            await _context.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+
         return await GetByIdAsync(pedido.Id, soloClienteId, ct);
     }
 

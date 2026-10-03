@@ -26,6 +26,7 @@ public class VentaService : IVentaService
     {
         var query = _context.Ventas
             .Include(v => v.Cliente)
+            .Include(v => v.OrdenServicio)
             .Include(v => v.Detalles)
             .Include(v => v.Pagos)
             .Where(v => v.Activo);
@@ -88,7 +89,8 @@ public class VentaService : IVentaService
                 v.MontoIgv,
                 totalPagado,
                 saldo,
-                estadoPago);
+                estadoPago,
+                v.OrdenServicio?.NumeroOrden);
         }).ToList();
     }
 
@@ -96,6 +98,7 @@ public class VentaService : IVentaService
     {
         var venta = await _context.Ventas
             .Include(v => v.Cliente)
+            .Include(v => v.OrdenServicio)
             .Include(v => v.Comprobante)
             .Include(v => v.Detalles.Where(d => d.Activo))
                 .ThenInclude(d => d.Producto)
@@ -124,7 +127,8 @@ public class VentaService : IVentaService
         CreateVentaRequest request,
         bool puedeModificarPrecios = false,
         bool puedeAplicarDescuentos = false,
-        Guid? soloClienteId = null)
+        Guid? soloClienteId = null,
+        Guid? usuarioId = null)
     {
         if (soloClienteId.HasValue && request.ClienteId != soloClienteId.Value)
         {
@@ -147,6 +151,12 @@ public class VentaService : IVentaService
         // -------------------------------------------------------------------
         if (request.OrdenServicioId.HasValue)
         {
+            // La orden se bloquea mientras se liquida: dos liquidaciones simultáneas
+            // no deben pasar las dos el control de venta vigente.
+            await using var transaccionOs = await _context.Database.BeginTransactionAsync();
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT \"Id\" FROM \"OrdenesServicio\" WHERE \"Id\" = {request.OrdenServicioId.Value} FOR UPDATE");
+
             var ordenServicio = await _context.OrdenesServicio
                 .Include(o => o.Detalles.Where(d => d.Activo))
                     .ThenInclude(d => d.Producto)
@@ -163,6 +173,16 @@ public class VentaService : IVentaService
             if (ordenServicio.ClienteId != request.ClienteId)
             {
                 return ServiceResult<VentaDetalleResponse>.Invalid("El cliente indicado no coincide con el cliente de la orden de servicio.");
+            }
+
+            // Una orden se liquida una sola vez: sus repuestos ya salieron del stock y
+            // sus adelantos ya pasaron a esa venta. Para rehacerla, primero se anula.
+            var yaLiquidada = await _context.Ventas.AnyAsync(v =>
+                v.OrdenServicioId == ordenServicio.Id && v.Activo && v.Estado != EstadoVenta.Anulada);
+            if (yaLiquidada)
+            {
+                return ServiceResult<VentaDetalleResponse>.Conflict(
+                    "La orden de servicio ya tiene una venta vigente. Anúlala antes de liquidarla de nuevo.");
             }
 
             var ventaOs = new Venta
@@ -293,9 +313,10 @@ public class VentaService : IVentaService
 
             _context.Ventas.Add(ventaOs);
             await _context.SaveChangesAsync();
+            await transaccionOs.CommitAsync();
 
             await _auditoriaService.RegistrarEventoAsync(
-                null,
+                usuarioId,
                 "Crear",
                 "Venta",
                 ventaOs.Id.ToString(),
@@ -412,7 +433,7 @@ public class VentaService : IVentaService
             await _context.SaveChangesAsync();
 
             await _auditoriaService.RegistrarEventoAsync(
-                null,
+                usuarioId,
                 "Crear",
                 "Venta",
                 cotizacion.Id.ToString(),
@@ -543,7 +564,7 @@ public class VentaService : IVentaService
             await transaction.CommitAsync();
 
             await _auditoriaService.RegistrarEventoAsync(
-                null,
+                usuarioId,
                 "Crear",
                 "Venta",
                 venta.Id.ToString(),
@@ -1045,7 +1066,8 @@ public class VentaService : IVentaService
                     p.Usuario?.NombreCompleto,
                     p.Observaciones,
                     p.Activo))
-                .ToList());
+                .ToList(),
+            v.OrdenServicio?.NumeroOrden);
     }
 
     private static ComprobanteResponse MapToComprobanteResponse(Comprobante c) => new(

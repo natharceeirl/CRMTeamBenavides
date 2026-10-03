@@ -90,11 +90,14 @@ public static class VentaEndpoints
             var puedeModificarPrecios = await PuedeModificarPreciosAsync(user, dbContext);
             var puedeAplicarDescuentos = await PuedeAplicarDescuentosAsync(user, dbContext);
 
-            var result = await service.CreateAsync(request, puedeModificarPrecios, puedeAplicarDescuentos, isolation.SoloClienteId);
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.CreateAsync(
+                request, puedeModificarPrecios, puedeAplicarDescuentos, isolation.SoloClienteId, usuarioId);
             return result.Status switch
             {
                 ServiceResultStatus.Success => Results.Created($"/api/ventas/{result.Data!.Id}", result.Data),
                 ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                ServiceResultStatus.Conflict => Results.Conflict(new { error = result.Error }),
                 _ => Results.Problem()
             };
         })

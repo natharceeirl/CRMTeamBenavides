@@ -18,7 +18,8 @@ public interface IVentaService
         CreateVentaRequest request,
         bool puedeModificarPrecios = false,
         bool puedeAplicarDescuentos = false,
-        Guid? soloClienteId = null);
+        Guid? soloClienteId = null,
+        Guid? usuarioId = null);
 
     Task<ServiceResult<VentaDetalleResponse>> ConfirmarCotizacionAsync(Guid id, Guid? soloClienteId = null);
     Task<ServiceResult<VentaDetalleResponse>> AnularAsync(Guid id, Guid? usuarioId = null);
