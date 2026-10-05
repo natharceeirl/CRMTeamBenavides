@@ -37,3 +37,11 @@ public record UpdateClienteRequest(
     string? Observaciones,
     TipoDocumentoCliente? TipoDocumento = null,
     string? NumeroDocumento = null);
+
+public record AltaRapidaClienteRequest(
+    string NumeroDocumento,
+    string NombreCompleto,
+    string? Telefono = null,
+    string? Email = null,
+    string? Direccion = null,
+    TipoDocumentoCliente? TipoDocumento = TipoDocumentoCliente.DNI);

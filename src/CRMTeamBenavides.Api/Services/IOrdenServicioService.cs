@@ -46,7 +46,9 @@ public interface IOrdenServicioService
         Guid ordenServicioId,
         AgregarDetalleServicioRequest request,
         bool puedeModificarPrecios,
-        Guid? soloTecnicoId = null);
+        Guid? soloTecnicoId = null,
+        Guid? usuarioId = null);
+
 
     Task<ServiceResult<bool>> EliminarDetalleAsync(Guid ordenServicioId, Guid detalleId);
 

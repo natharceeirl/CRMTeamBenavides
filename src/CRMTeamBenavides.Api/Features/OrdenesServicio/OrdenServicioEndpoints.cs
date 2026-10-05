@@ -51,6 +51,31 @@ public static class OrdenServicioEndpoints
         .RequireAuthorization(PoliticaVerOrdenes)
         .WithName("GetOrdenesServicio");
 
+        group.MapGet("/exportar-excel", async (
+            DateTime? fechaDesde,
+            DateTime? fechaHasta,
+            EstadoOrdenServicio? estado,
+            Guid? tecnicoId,
+            ClaimsPrincipal user,
+            IReporteService reporteService,
+            ApplicationDbContext dbContext) =>
+        {
+            var (soloTecnicoId, soloClienteId, debeDenegarAcceso) = await ResolverAislamientoAsync(user, dbContext);
+            if (debeDenegarAcceso)
+            {
+                return Results.Forbid();
+            }
+
+            var efectivoTecnicoId = soloTecnicoId ?? tecnicoId;
+            bool incluirFinanciero = !soloTecnicoId.HasValue && !soloClienteId.HasValue && (user.IsInRole(RolesDefinidos.GerenciaAdmin) || user.HasClaim("permission", PermisosDefinidos.ReportesVerFinancieros));
+            var bytes = await reporteService.ExportarOrdenesServicioExcelAsync(fechaDesde, fechaHasta, estado, efectivoTecnicoId, incluirFinanciero);
+            var fileName = $"ordenes_servicio_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
+            return Results.File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        })
+        .RequireAuthorization(PoliticaVerOrdenes)
+        .WithName("ExportarOrdenesServicioExcel");
+
+
         group.MapGet("/{id:guid}", async (
             Guid id,
             ClaimsPrincipal user,
@@ -270,7 +295,9 @@ public static class OrdenServicioEndpoints
         {
             var (soloTecnicoId, _, _) = await ResolverAislamientoAsync(user, dbContext);
             var puedeModificarPrecios = await PuedeModificarPreciosAsync(user, dbContext);
-            var result = await service.AgregarDetalleAsync(id, request, puedeModificarPrecios, soloTecnicoId);
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.AgregarDetalleAsync(id, request, puedeModificarPrecios, soloTecnicoId, usuarioId);
+
             return result.Status switch
             {
                 ServiceResultStatus.Success => Results.Created($"/api/ordenes-servicio/{id}/detalles/{result.Data!.Id}", result.Data),

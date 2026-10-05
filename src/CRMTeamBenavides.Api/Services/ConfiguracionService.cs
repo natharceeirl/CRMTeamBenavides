@@ -301,6 +301,39 @@ public class ConfiguracionService : IConfiguracionService
         )).ToList();
     }
 
+    public async Task<ServiceResult<ConversionMonedaResponse>> ConvertirUsdAPenAsync(
+        decimal montoUsd,
+        decimal? tipoCambio = null,
+        CancellationToken ct = default)
+    {
+        if (montoUsd < 0)
+        {
+            return ServiceResult<ConversionMonedaResponse>.Invalid("El monto en USD no puede ser negativo.");
+        }
+
+        decimal tc;
+        if (tipoCambio.HasValue && tipoCambio.Value > 0)
+        {
+            tc = tipoCambio.Value;
+        }
+        else
+        {
+            var config = await GetOrCreateEntityAsync(ct);
+            tc = config.TipoCambioVigente ?? 3.80m;
+        }
+
+        // Regla comercial estricta: Math.Ceiling(montoUsd * tipoCambio)
+        var montoPen = Math.Ceiling(montoUsd * tc);
+
+        var response = new ConversionMonedaResponse(
+            montoUsd,
+            tc,
+            montoPen,
+            "Math.Ceiling(montoUsd * tipoCambio)");
+
+        return ServiceResult<ConversionMonedaResponse>.Success(response);
+    }
+
     private static ConfiguracionEmpresaResponse MapearEmpresa(ConfiguracionEmpresa config)
     {
         return new ConfiguracionEmpresaResponse(

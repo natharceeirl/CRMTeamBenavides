@@ -511,8 +511,10 @@ public class OrdenServicioService : IOrdenServicioService
         Guid ordenServicioId,
         AgregarDetalleServicioRequest request,
         bool puedeModificarPrecios,
-        Guid? soloTecnicoId = null)
+        Guid? soloTecnicoId = null,
+        Guid? usuarioId = null)
     {
+
         if (request.Cantidad <= 0)
         {
             return ServiceResult<DetalleServicioResponse>.Invalid("La cantidad debe ser mayor a 0.");
@@ -590,17 +592,40 @@ public class OrdenServicioService : IOrdenServicioService
 
                 costoHistorico = producto.Costo;
 
-                if (puedeModificarPrecios && request.PrecioUnitario.HasValue && request.PrecioUnitario.Value >= 0)
+                var precioBase = producto.PrecioVenta;
+                var precioModificado = false;
+                if (request.PrecioUnitario.HasValue && request.PrecioUnitario.Value >= 0)
                 {
                     precioFinal = request.PrecioUnitario.Value;
+                    if (Math.Abs(precioFinal - precioBase) > 0.001m)
+                    {
+                        precioModificado = true;
+                    }
                 }
                 else
                 {
-                    if (!puedeModificarPrecios && request.PrecioUnitario.HasValue && request.PrecioUnitario.Value != producto.PrecioVenta)
+                    precioFinal = precioBase;
+                }
+
+                if (precioModificado)
+                {
+                    orden.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
+                    _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
                     {
-                        return ServiceResult<DetalleServicioResponse>.Forbidden("El rol Técnico no está autorizado a fijar o modificar precios de repuestos.");
-                    }
-                    precioFinal = producto.PrecioVenta;
+                        Id = Guid.NewGuid(),
+                        Tipo = "CambioPrecio",
+                        Entidad = "OrdenServicio",
+                        EntidadId = orden.Id.ToString(),
+                        UsuarioSolicitanteId = usuarioId,
+                        FechaSolicitud = DateTime.UtcNow,
+                        Estado = EstadoAprobacionGerencia.Pendiente,
+                        DetalleCambio = $"Modificación de precio en repuesto '{producto.Nombre}': base S/ {precioBase:F2} -> solicitado S/ {precioFinal:F2}",
+                        ValorAnterior = precioBase,
+                        ValorSolicitado = precioFinal,
+                        Motivo = "Modificación de precio de repuesto en Orden de Servicio",
+                        FechaCreacion = DateTime.UtcNow,
+                        Activo = true
+                    });
                 }
 
                 if (string.IsNullOrWhiteSpace(descripcion))
@@ -684,17 +709,40 @@ public class OrdenServicioService : IOrdenServicioService
                 tipoAfectacion = servicio.TipoAfectacionIgv;
             }
 
-            if (puedeModificarPrecios && request.PrecioUnitario.HasValue && request.PrecioUnitario.Value >= 0)
+            var precioBaseServ = servicio.PrecioSugerido;
+            var precioModificadoServ = false;
+            if (request.PrecioUnitario.HasValue && request.PrecioUnitario.Value >= 0)
             {
                 precioFinal = request.PrecioUnitario.Value;
+                if (Math.Abs(precioFinal - precioBaseServ) > 0.001m)
+                {
+                    precioModificadoServ = true;
+                }
             }
             else
             {
-                if (!puedeModificarPrecios && request.PrecioUnitario.HasValue && request.PrecioUnitario.Value != servicio.PrecioSugerido)
+                precioFinal = precioBaseServ;
+            }
+
+            if (precioModificadoServ)
+            {
+                orden.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
+                _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
                 {
-                    return ServiceResult<DetalleServicioResponse>.Forbidden("El rol Técnico no está autorizado a modificar precios sugeridos de servicios.");
-                }
-                precioFinal = servicio.PrecioSugerido;
+                    Id = Guid.NewGuid(),
+                    Tipo = "CambioPrecio",
+                    Entidad = "OrdenServicio",
+                    EntidadId = orden.Id.ToString(),
+                    UsuarioSolicitanteId = usuarioId,
+                    FechaSolicitud = DateTime.UtcNow,
+                    Estado = EstadoAprobacionGerencia.Pendiente,
+                    DetalleCambio = $"Modificación de precio en servicio '{servicio.Nombre}': base S/ {precioBaseServ:F2} -> solicitado S/ {precioFinal:F2}",
+                    ValorAnterior = precioBaseServ,
+                    ValorSolicitado = precioFinal,
+                    Motivo = "Modificación de precio de servicio en Orden de Servicio",
+                    FechaCreacion = DateTime.UtcNow,
+                    Activo = true
+                });
             }
 
             if (string.IsNullOrWhiteSpace(descripcion))
@@ -952,9 +1000,9 @@ public class OrdenServicioService : IOrdenServicioService
                 $"Transición de estado no permitida de '{orden.Estado}' a '{request.NuevoEstado}'.");
         }
 
-        if (request.NuevoEstado == EstadoOrdenServicio.Aprobada)
+        if (request.NuevoEstado == EstadoOrdenServicio.Aprobada || request.NuevoEstado == EstadoOrdenServicio.Entregada)
         {
-            if (orden.EstadoPresupuestoCliente == EstadoPresupuestoCliente.Rechazado)
+            if (request.NuevoEstado == EstadoOrdenServicio.Aprobada && orden.EstadoPresupuestoCliente == EstadoPresupuestoCliente.Rechazado)
             {
                 return ServiceResult<OrdenServicioResponse>.Invalid(
                     "No se puede aprobar la orden de servicio porque el presupuesto fue rechazado por el cliente.");
@@ -963,13 +1011,13 @@ public class OrdenServicioService : IOrdenServicioService
             if (orden.EstadoAprobacionGerencia == EstadoAprobacionGerencia.Pendiente)
             {
                 return ServiceResult<OrdenServicioResponse>.Invalid(
-                    "No se puede aprobar la orden de servicio porque requiere aprobación de Gerencia previa.");
+                    $"No se puede {(request.NuevoEstado == EstadoOrdenServicio.Aprobada ? "aprobar" : "entregar")} la orden de servicio porque requiere aprobación de Gerencia previa.");
             }
 
             if (orden.EstadoAprobacionGerencia == EstadoAprobacionGerencia.Rechazado)
             {
                 return ServiceResult<OrdenServicioResponse>.Invalid(
-                    "No se puede aprobar la orden de servicio porque la aprobación de Gerencia fue rechazada.");
+                    $"No se puede {(request.NuevoEstado == EstadoOrdenServicio.Aprobada ? "aprobar" : "entregar")} la orden de servicio porque la aprobación de Gerencia fue rechazada.");
             }
         }
 
@@ -1375,6 +1423,19 @@ public class OrdenServicioService : IOrdenServicioService
             FechaCreacion   = DateTime.UtcNow,
             Activo          = true
         });
+
+        var solicitudes = await _context.SolicitudesAprobacion
+            .Where(s => s.Entidad == "OrdenServicio" && s.EntidadId == id.ToString() && s.Estado == EstadoAprobacionGerencia.Pendiente)
+            .ToListAsync();
+
+        foreach (var sol in solicitudes)
+        {
+            sol.Estado = request.Estado;
+            sol.UsuarioAprobadorId = usuarioId;
+            sol.FechaRespuesta = DateTime.UtcNow;
+            sol.ObservacionesRespuesta = request.Observaciones?.Trim();
+            sol.FechaModificacion = DateTime.UtcNow;
+        }
 
         await _context.SaveChangesAsync();
 

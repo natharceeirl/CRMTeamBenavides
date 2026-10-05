@@ -16,7 +16,7 @@ public class InventarioService : IInventarioService
         _auditoriaService = auditoriaService;
     }
 
-    public async Task<List<ProductoResponse>> GetAllProductosAsync(Guid? categoriaId, string? busqueda, bool? bajoStock)
+    public async Task<List<ProductoResponse>> GetAllProductosAsync(Guid? categoriaId, string? busqueda, bool? bajoStock, string? marca = null)
     {
         var query = _context.Productos
             .Include(p => p.Categoria)
@@ -27,10 +27,16 @@ public class InventarioService : IInventarioService
             query = query.Where(p => p.CategoriaId == categoriaId.Value);
         }
 
+        if (!string.IsNullOrWhiteSpace(marca))
+        {
+            var m = marca.Trim().ToLower();
+            query = query.Where(p => p.Marca != null && p.Marca.ToLower() == m);
+        }
+
         if (!string.IsNullOrWhiteSpace(busqueda))
         {
             var term = busqueda.Trim().ToLower();
-            query = query.Where(p => p.Codigo.ToLower().Contains(term) || p.Nombre.ToLower().Contains(term));
+            query = query.Where(p => p.Codigo.ToLower().Contains(term) || p.Nombre.ToLower().Contains(term) || (p.Marca != null && p.Marca.ToLower().Contains(term)));
         }
 
         if (bajoStock.HasValue && bajoStock.Value)
@@ -41,6 +47,16 @@ public class InventarioService : IInventarioService
         return await query
             .OrderBy(p => p.Nombre)
             .Select(p => MapToResponse(p))
+            .ToListAsync();
+    }
+
+    public async Task<List<string>> ObtenerMarcasAsync()
+    {
+        return await _context.Productos
+            .Where(p => p.Activo && !string.IsNullOrWhiteSpace(p.Marca))
+            .Select(p => p.Marca!.Trim())
+            .Distinct()
+            .OrderBy(m => m)
             .ToListAsync();
     }
 
@@ -118,6 +134,8 @@ public class InventarioService : IInventarioService
             Costo         = request.Costo,
             StockActual   = request.StockInicial,
             StockMinimo   = request.StockMinimo,
+            Marca         = string.IsNullOrWhiteSpace(request.Marca) ? null : request.Marca.Trim(),
+            FotoUrl       = string.IsNullOrWhiteSpace(request.FotoUrl) ? null : request.FotoUrl.Trim(),
             FechaCreacion = DateTime.UtcNow,
             Activo        = true
         };
@@ -158,6 +176,72 @@ public class InventarioService : IInventarioService
         }
 
         return ServiceResult<ProductoResponse>.Success(MapToResponse(producto));
+    }
+
+    public async Task<ServiceResult<ProductoResponse>> AltaRapidaProductoAsync(AltaRapidaProductoRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Nombre))
+        {
+            return ServiceResult<ProductoResponse>.Invalid("El nombre del producto/repuesto es obligatorio.");
+        }
+
+        if (request.PrecioVenta < 0)
+        {
+            return ServiceResult<ProductoResponse>.Invalid("El precio de venta debe ser mayor o igual a 0.");
+        }
+
+        Guid categoriaId;
+        if (request.CategoriaId.HasValue)
+        {
+            var cat = await _context.CategoriasProducto.FirstOrDefaultAsync(c => c.Id == request.CategoriaId.Value && c.Activo);
+            if (cat == null)
+            {
+                return ServiceResult<ProductoResponse>.Invalid("La categoría especificada no existe.");
+            }
+            categoriaId = cat.Id;
+        }
+        else
+        {
+            var defaultCat = await _context.CategoriasProducto.FirstOrDefaultAsync(c => c.Activo);
+            if (defaultCat == null)
+            {
+                defaultCat = new CategoriaProducto
+                {
+                    Nombre = "Repuestos y Servicios",
+                    Activo = true,
+                    FechaCreacion = DateTime.UtcNow
+                };
+                _context.CategoriasProducto.Add(defaultCat);
+                await _context.SaveChangesAsync();
+            }
+            categoriaId = defaultCat.Id;
+        }
+
+        var codigo = !string.IsNullOrWhiteSpace(request.Codigo)
+            ? request.Codigo.Trim().ToUpperInvariant()
+            : $"REP-{DateTime.UtcNow:yyMMdd}-{Random.Shared.Next(1000, 9999)}";
+
+        var existente = await _context.Productos.Include(p => p.Categoria).FirstOrDefaultAsync(p => p.Codigo == codigo && p.Activo);
+        if (existente != null)
+        {
+            return ServiceResult<ProductoResponse>.Success(MapToResponse(existente));
+        }
+
+        var createReq = new CreateProductoRequest(
+            categoriaId,
+            codigo,
+            request.Nombre.Trim(),
+            null,
+            "UND",
+            request.PrecioVenta,
+            Math.Max(0, request.StockInicial),
+            StockMinimo: 2,
+            Costo: 0m,
+            Marca: request.Marca?.Trim(),
+            FotoUrl: null
+        );
+
+        return await CreateProductoAsync(createReq);
     }
 
     public async Task<ServiceResult<ProductoResponse>> UpdateProductoAsync(Guid id, UpdateProductoRequest request)
@@ -225,8 +309,34 @@ public class InventarioService : IInventarioService
             producto.Costo = request.Costo.Value;
         }
         producto.StockMinimo       = request.StockMinimo;
+        if (request.Marca != null)
+        {
+            producto.Marca = string.IsNullOrWhiteSpace(request.Marca) ? null : request.Marca.Trim();
+        }
+        if (request.FotoUrl != null)
+        {
+            producto.FotoUrl = string.IsNullOrWhiteSpace(request.FotoUrl) ? null : request.FotoUrl.Trim();
+        }
         producto.FechaModificacion = DateTime.UtcNow;
 
+        await _context.SaveChangesAsync();
+
+        return ServiceResult<ProductoResponse>.Success(MapToResponse(producto));
+    }
+
+    public async Task<ServiceResult<ProductoResponse>> ActualizarFotoAsync(Guid id, string fotoUrl)
+    {
+        var producto = await _context.Productos
+            .Include(p => p.Categoria)
+            .FirstOrDefaultAsync(p => p.Id == id && p.Activo);
+
+        if (producto is null)
+        {
+            return ServiceResult<ProductoResponse>.NotFound();
+        }
+
+        producto.FotoUrl = string.IsNullOrWhiteSpace(fotoUrl) ? null : fotoUrl.Trim();
+        producto.FechaModificacion = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
         return ServiceResult<ProductoResponse>.Success(MapToResponse(producto));
@@ -537,6 +647,8 @@ public class InventarioService : IInventarioService
             p.Activo,
             p.FechaCreacion,
             p.Costo,
-            minimoEfectivo);
+            minimoEfectivo,
+            p.Marca,
+            p.FotoUrl);
     }
 }

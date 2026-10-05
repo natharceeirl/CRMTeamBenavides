@@ -10,12 +10,18 @@ public class PedidoLimaService : IPedidoLimaService
 {
     private readonly ApplicationDbContext _context;
     private readonly IExportacionExcelService _excelService;
+    private readonly IAuditoriaService _auditoriaService;
 
-    public PedidoLimaService(ApplicationDbContext context, IExportacionExcelService excelService)
+    public PedidoLimaService(
+        ApplicationDbContext context,
+        IExportacionExcelService excelService,
+        IAuditoriaService auditoriaService)
     {
         _context = context;
         _excelService = excelService;
+        _auditoriaService = auditoriaService;
     }
+
 
     private async Task<string> GenerarNumeroPedidoAsync()
     {
@@ -51,6 +57,10 @@ public class PedidoLimaService : IPedidoLimaService
                 .ThenInclude(d => d.Producto)
             .Include(p => p.HistorialEstados.OrderByDescending(h => h.Fecha))
                 .ThenInclude(h => h.Usuario)
+            .Include(p => p.Pagos.Where(pay => pay.Activo))
+                .ThenInclude(pay => pay.MetodoPago)
+            .Include(p => p.Pagos.Where(pay => pay.Activo))
+                .ThenInclude(pay => pay.Usuario)
             .Where(p => p.Activo);
 
         if (soloClienteId.HasValue)
@@ -104,6 +114,10 @@ public class PedidoLimaService : IPedidoLimaService
                 .ThenInclude(d => d.Producto)
             .Include(p => p.HistorialEstados.OrderByDescending(h => h.Fecha))
                 .ThenInclude(h => h.Usuario)
+            .Include(p => p.Pagos.Where(pay => pay.Activo))
+                .ThenInclude(pay => pay.MetodoPago)
+            .Include(p => p.Pagos.Where(pay => pay.Activo))
+                .ThenInclude(pay => pay.Usuario)
             .FirstOrDefaultAsync(p => p.Id == id && p.Activo, ct);
 
         if (pedido is null)
@@ -186,18 +200,25 @@ public class PedidoLimaService : IPedidoLimaService
         decimal subtotalExonerado = 0m;
         decimal subtotalInafecto = 0m;
         decimal montoIgv = 0m;
+        bool precioModificado = false;
+        string? detalleModificacion = null;
+        decimal? valorBase = null;
+        decimal? valorSolicitado = null;
 
         foreach (var item in request.Detalles)
         {
             var prod = productos[item.ProductoId];
-            if (item.PrecioUnitario.HasValue && !puedeModificarPrecios && Math.Abs(item.PrecioUnitario.Value - prod.PrecioVenta) > 0.001m)
-            {
-                return ServiceResult<PedidoLimaResponse>.Invalid("No tiene permisos para modificar los precios de catálogo.");
-            }
-
-            var precioUnitario = (item.PrecioUnitario.HasValue && puedeModificarPrecios)
+            var precioUnitario = item.PrecioUnitario.HasValue
                 ? item.PrecioUnitario.Value
                 : prod.PrecioVenta;
+
+            if (Math.Abs(precioUnitario - prod.PrecioVenta) > 0.001m)
+            {
+                precioModificado = true;
+                valorBase = prod.PrecioVenta;
+                valorSolicitado = precioUnitario;
+                detalleModificacion = $"Modificación de precio en repuesto '{prod.Nombre}': base S/ {prod.PrecioVenta:F2} -> solicitado S/ {precioUnitario:F2}";
+            }
 
             var afectacion = item.TipoAfectacionIgv ?? TipoAfectacionIgv.Gravado;
             var subtotalItem = decimal.Round(item.Cantidad * precioUnitario, 2, MidpointRounding.AwayFromZero);
@@ -252,6 +273,27 @@ public class PedidoLimaService : IPedidoLimaService
         pedido.PorcentajeIgv = porcentajeIgv;
         pedido.MontoIgv = montoIgv;
         pedido.Total = subtotalGravado + subtotalExonerado + subtotalInafecto + montoIgv;
+
+        if (precioModificado)
+        {
+            pedido.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
+            _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
+            {
+                Id = Guid.NewGuid(),
+                Tipo = "CambioPrecio",
+                Entidad = "PedidoLima",
+                EntidadId = pedido.Id.ToString(),
+                UsuarioSolicitanteId = usuarioId,
+                FechaSolicitud = DateTime.UtcNow,
+                Estado = EstadoAprobacionGerencia.Pendiente,
+                DetalleCambio = detalleModificacion ?? "Modificación de precio en Pedido Lima",
+                ValorAnterior = valorBase,
+                ValorSolicitado = valorSolicitado,
+                Motivo = "Modificación de precio en Pedido Lima",
+                FechaCreacion = DateTime.UtcNow,
+                Activo = true
+            });
+        }
 
         var historial = new HistorialEstadoPedidoLima
         {
@@ -384,6 +426,21 @@ public class PedidoLimaService : IPedidoLimaService
         if ((int)request.NuevoEstado < (int)pedido.Estado)
         {
             return ServiceResult<PedidoLimaResponse>.Invalid($"No se permite retroceder el estado del pedido de {pedido.Estado} a {request.NuevoEstado}.");
+        }
+
+        if (request.NuevoEstado == EstadoPedidoLima.Confirmado || request.NuevoEstado == EstadoPedidoLima.Entregado)
+        {
+            if (pedido.EstadoAprobacionGerencia == EstadoAprobacionGerencia.Pendiente)
+            {
+                return ServiceResult<PedidoLimaResponse>.Invalid(
+                    "No se puede confirmar ni entregar el pedido de Lima porque tiene modificaciones de precio pendientes de aprobación por Gerencia.");
+            }
+
+            if (pedido.EstadoAprobacionGerencia == EstadoAprobacionGerencia.Rechazado)
+            {
+                return ServiceResult<PedidoLimaResponse>.Invalid(
+                    "No se puede confirmar ni entregar el pedido de Lima porque la aprobación de Gerencia fue rechazada.");
+            }
         }
 
         // Si pasa a Entregado (Despacho): deducir stock de forma segura y pesimista
@@ -610,8 +667,100 @@ public class PedidoLimaService : IPedidoLimaService
         return _excelService.GenerarExcelPedidosLima(dtos);
     }
 
+    public async Task<ServiceResult<PedidoLimaResponse>> AprobacionGerenciaAsync(
+        Guid id,
+        AprobacionGerenciaPedidoLimaRequest request,
+        Guid? usuarioId = null,
+        CancellationToken ct = default)
+    {
+        var pedido = await _context.PedidosLima
+            .Include(p => p.Cliente)
+            .Include(p => p.Detalles)
+                .ThenInclude(d => d.Producto)
+            .Include(p => p.HistorialEstados)
+                .ThenInclude(h => h.Usuario)
+            .Include(p => p.Pagos.Where(pay => pay.Activo))
+                .ThenInclude(pay => pay.MetodoPago)
+            .Include(p => p.Pagos.Where(pay => pay.Activo))
+                .ThenInclude(pay => pay.Usuario)
+            .FirstOrDefaultAsync(p => p.Id == id && p.Activo, ct);
+
+        if (pedido is null)
+        {
+            return ServiceResult<PedidoLimaResponse>.NotFound("Pedido no encontrado.");
+        }
+
+        if (pedido.Estado == EstadoPedidoLima.Entregado || pedido.Estado == EstadoPedidoLima.Cancelado)
+        {
+            return ServiceResult<PedidoLimaResponse>.Invalid(
+                $"No se puede modificar la aprobación de gerencia en un pedido en estado terminal '{pedido.Estado}'.");
+        }
+
+        pedido.EstadoAprobacionGerencia = request.Estado;
+        pedido.FechaAprobacionGerencia = DateTime.UtcNow;
+        pedido.UsuarioAprobacionGerenciaId = usuarioId;
+        if (!string.IsNullOrWhiteSpace(request.Observaciones))
+        {
+            pedido.ObservacionesAprobacionGerencia = request.Observaciones.Trim();
+        }
+        pedido.FechaModificacion = DateTime.UtcNow;
+
+        var solicitudes = await _context.SolicitudesAprobacion
+            .Where(s => s.Entidad == "PedidoLima" && s.EntidadId == pedido.Id.ToString() && s.Estado == EstadoAprobacionGerencia.Pendiente)
+            .ToListAsync(ct);
+
+        foreach (var s in solicitudes)
+        {
+            s.Estado = request.Estado;
+            s.UsuarioAprobadorId = usuarioId;
+            s.FechaRespuesta = DateTime.UtcNow;
+            s.ObservacionesRespuesta = request.Observaciones?.Trim();
+            s.FechaModificacion = DateTime.UtcNow;
+        }
+
+        await _context.SaveChangesAsync(ct);
+
+        await _auditoriaService.RegistrarEventoAsync(
+            usuarioId,
+            request.Estado == EstadoAprobacionGerencia.Aprobado ? "AprobacionGerenciaPedidoLimaAprobada" : "AprobacionGerenciaPedidoLimaRechazada",
+            "PedidoLima",
+            pedido.Id.ToString(),
+            new
+            {
+                PedidoLimaId = pedido.Id,
+                EstadoAprobacionGerencia = request.Estado.ToString(),
+                Observaciones = request.Observaciones?.Trim()
+            });
+
+        return ServiceResult<PedidoLimaResponse>.Success(MapToResponse(pedido));
+    }
+
     private static PedidoLimaResponse MapToResponse(PedidoLima p)
     {
+        var totalPagado = p.Pagos != null ? p.Pagos.Where(pay => pay.Activo).Sum(pay => pay.Monto) : 0m;
+        var saldo = Math.Max(0m, p.Total - totalPagado);
+        var estadoPago = saldo == 0m && totalPagado > 0m ? "Pagado" : (totalPagado > 0m ? "Parcial" : "Pendiente");
+
+        var pagosDto = p.Pagos?
+            .Where(pay => pay.Activo)
+            .OrderBy(pay => pay.Fecha)
+            .Select(pay => new CRMTeamBenavides.Api.Features.Ventas.PagoResponse(
+                pay.Id,
+                pay.Monto,
+                pay.MetodoPagoId,
+                pay.MetodoPago?.Nombre ?? string.Empty,
+                pay.MetodoPago?.Codigo ?? string.Empty,
+                pay.Fecha,
+                pay.Referencia,
+                pay.EsAnticipo,
+                pay.VentaId,
+                pay.OrdenServicioId,
+                pay.UsuarioId,
+                pay.Usuario?.NombreCompleto,
+                pay.Observaciones,
+                pay.Activo
+            )).ToList();
+
         return new PedidoLimaResponse(
             p.Id,
             p.NumeroPedido ?? string.Empty,
@@ -662,6 +811,12 @@ public class PedidoLimaService : IPedidoLimaService
                 h.Fecha,
                 h.Observacion
             )).ToList(),
-            p.FechaCreacion);
+            p.FechaCreacion,
+            totalPagado,
+            saldo,
+            estadoPago,
+            (int)p.EstadoAprobacionGerencia,
+            p.EstadoAprobacionGerencia.ToString(),
+            pagosDto);
     }
 }

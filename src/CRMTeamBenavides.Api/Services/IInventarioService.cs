@@ -5,10 +5,13 @@ namespace CRMTeamBenavides.Api.Services;
 
 public interface IInventarioService
 {
-    Task<List<ProductoResponse>> GetAllProductosAsync(Guid? categoriaId, string? busqueda, bool? bajoStock);
+    Task<List<ProductoResponse>> GetAllProductosAsync(Guid? categoriaId, string? busqueda, bool? bajoStock, string? marca = null);
+    Task<List<string>> ObtenerMarcasAsync();
     Task<ServiceResult<ProductoResponse>> GetProductoByIdAsync(Guid id);
     Task<ServiceResult<ProductoResponse>> CreateProductoAsync(CreateProductoRequest request);
+    Task<ServiceResult<ProductoResponse>> AltaRapidaProductoAsync(AltaRapidaProductoRequest request);
     Task<ServiceResult<ProductoResponse>> UpdateProductoAsync(Guid id, UpdateProductoRequest request);
+    Task<ServiceResult<ProductoResponse>> ActualizarFotoAsync(Guid id, string fotoUrl);
     Task<ServiceResult<bool>> DeleteProductoAsync(Guid id);
 
     Task<ServiceResult<ProductoResponse>> RegistrarEntradaAsync(Guid productoId, RegistrarEntradaRequest request);

@@ -43,6 +43,19 @@ public static class CategoriaProductoEndpoints
         .RequireAuthorization(PermisosDefinidos.InventarioCrear)
         .WithName("CreateCategoriaProducto");
 
+        group.MapPost("/alta-rapida", async (CreateCategoriaProductoRequest request, ICategoriaProductoService service) =>
+        {
+            var result = await service.CreateAsync(request);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Created($"/api/categorias-producto/{result.Data!.Id}", result.Data),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.InventarioCrear)
+        .WithName("AltaRapidaCategoriaProducto");
+
         group.MapPut("/{id:guid}", async (Guid id, UpdateCategoriaProductoRequest request, ICategoriaProductoService service) =>
         {
             var result = await service.UpdateAsync(id, request);

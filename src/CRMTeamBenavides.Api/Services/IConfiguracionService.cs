@@ -17,4 +17,5 @@ public interface IConfiguracionService
         Guid? usuarioId,
         CancellationToken ct = default);
     Task<List<HistorialTipoCambioResponse>> ObtenerHistorialTipoCambioAsync(CancellationToken ct = default);
+    Task<ServiceResult<ConversionMonedaResponse>> ConvertirUsdAPenAsync(decimal montoUsd, decimal? tipoCambio = null, CancellationToken ct = default);
 }

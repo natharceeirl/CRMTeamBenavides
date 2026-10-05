@@ -60,3 +60,15 @@ public record HistorialTipoCambioResponse(
     string? UsuarioNombre,
     DateTime FechaCreacion
 );
+
+public record ConversionMonedaResponse(
+    decimal MontoUsd,
+    decimal TipoCambio,
+    decimal MontoPen,
+    string Formula
+);
+
+public record ConversionMonedaRequest(
+    decimal MontoUsd,
+    decimal? TipoCambio = null
+);

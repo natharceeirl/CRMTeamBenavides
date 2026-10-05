@@ -164,4 +164,197 @@ public class ExportacionExcelService : IExportacionExcelService
         workbook.SaveAs(ms);
         return ms.ToArray();
     }
+
+    public byte[] GenerarExcelVentas(IEnumerable<VentaExcelDto> ventas, bool incluirFinanciero = false)
+    {
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Ventas");
+
+        var headerList = new List<string>
+        {
+            "ID Venta",
+            "Fecha",
+            "Cliente",
+            "Estado",
+            "Estado Pago",
+            "Estado Comprobante",
+            "Cant. Ítems",
+            "Total (S/)",
+            "Total Pagado (S/)",
+            "Saldo (S/)"
+        };
+
+        if (incluirFinanciero)
+        {
+            headerList.Add("Costo Total (S/)");
+            headerList.Add("Utilidad (S/)");
+            headerList.Add("Margen (%)");
+        }
+
+        string[] headers = headerList.ToArray();
+
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = ws.Cell(1, i + 1);
+            cell.Value = headers[i];
+            cell.Style.Font.Bold = true;
+            cell.Style.Font.FontColor = XLColor.White;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#1F4E79");
+            cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+        }
+
+        int row = 2;
+        foreach (var v in ventas)
+        {
+            ws.Cell(row, 1).Value = v.Id.ToString()[..8].ToUpper();
+            ws.Cell(row, 2).Value = v.Fecha.ToString("yyyy-MM-dd HH:mm");
+            ws.Cell(row, 3).Value = v.ClienteNombre;
+            ws.Cell(row, 4).Value = v.Estado;
+            ws.Cell(row, 5).Value = v.EstadoPago;
+            ws.Cell(row, 6).Value = v.EstadoComprobante;
+            ws.Cell(row, 7).Value = v.CantidadItems;
+
+            var cTotal = ws.Cell(row, 8);
+            cTotal.Value = v.Total;
+            cTotal.Style.NumberFormat.Format = "S/ #,##0.00";
+
+            var cPagado = ws.Cell(row, 9);
+            cPagado.Value = v.TotalPagado;
+            cPagado.Style.NumberFormat.Format = "S/ #,##0.00";
+
+            var cSaldo = ws.Cell(row, 10);
+            cSaldo.Value = v.Saldo;
+            cSaldo.Style.NumberFormat.Format = "S/ #,##0.00";
+
+            if (incluirFinanciero)
+            {
+                var cCosto = ws.Cell(row, 11);
+                cCosto.Value = v.CostoTotal ?? 0m;
+                cCosto.Style.NumberFormat.Format = "S/ #,##0.00";
+
+                var cUtilidad = ws.Cell(row, 12);
+                cUtilidad.Value = v.Utilidad ?? 0m;
+                cUtilidad.Style.NumberFormat.Format = "S/ #,##0.00";
+
+                var cMargen = ws.Cell(row, 13);
+                cMargen.Value = (v.MargenPorcentaje ?? 0m) / 100m;
+                cMargen.Style.NumberFormat.Format = "0.00%";
+            }
+
+            for (int col = 1; col <= headers.Length; col++)
+            {
+                var cell = ws.Cell(row, col);
+                cell.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+                cell.Style.Border.BottomBorderColor = XLColor.FromHtml("#E0E0E0");
+            }
+
+            ws.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Cell(row, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Cell(row, 5).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Cell(row, 6).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Cell(row, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+
+            row++;
+        }
+
+        ws.Columns().AdjustToContents();
+
+        using var ms = new MemoryStream();
+        workbook.SaveAs(ms);
+        return ms.ToArray();
+    }
+
+    public byte[] GenerarExcelOrdenesServicio(IEnumerable<OrdenServicioExcelDto> ordenes, bool incluirFinanciero = false)
+    {
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Órdenes de Servicio");
+
+        var headerList = new List<string>
+        {
+            "N° Orden",
+            "Fecha Ingreso",
+            "Fecha Salida",
+            "Cliente",
+            "Placa",
+            "Modelo",
+            "Estado",
+            "Técnico",
+            "Total (S/)"
+        };
+
+        if (incluirFinanciero)
+        {
+            headerList.Add("Costo Total (S/)");
+            headerList.Add("Utilidad (S/)");
+            headerList.Add("Margen (%)");
+        }
+
+        string[] headers = headerList.ToArray();
+
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = ws.Cell(1, i + 1);
+            cell.Value = headers[i];
+            cell.Style.Font.Bold = true;
+            cell.Style.Font.FontColor = XLColor.White;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#1F4E79");
+            cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+        }
+
+        int row = 2;
+        foreach (var o in ordenes)
+        {
+            ws.Cell(row, 1).Value = o.NumeroOrden ?? o.Id.ToString()[..8].ToUpper();
+            ws.Cell(row, 2).Value = o.FechaIngreso.ToString("yyyy-MM-dd HH:mm");
+            ws.Cell(row, 3).Value = o.FechaSalida.HasValue ? o.FechaSalida.Value.ToString("yyyy-MM-dd HH:mm") : string.Empty;
+            ws.Cell(row, 4).Value = o.ClienteNombre;
+            ws.Cell(row, 5).Value = o.Placa ?? string.Empty;
+            ws.Cell(row, 6).Value = o.Modelo ?? string.Empty;
+            ws.Cell(row, 7).Value = o.Estado;
+            ws.Cell(row, 8).Value = o.TecnicoNombre ?? string.Empty;
+
+            var cTotal = ws.Cell(row, 9);
+            cTotal.Value = o.Total;
+            cTotal.Style.NumberFormat.Format = "S/ #,##0.00";
+
+            if (incluirFinanciero)
+            {
+                var cCosto = ws.Cell(row, 10);
+                cCosto.Value = o.CostoTotal ?? 0m;
+                cCosto.Style.NumberFormat.Format = "S/ #,##0.00";
+
+                var cUtilidad = ws.Cell(row, 11);
+                cUtilidad.Value = o.Utilidad ?? 0m;
+                cUtilidad.Style.NumberFormat.Format = "S/ #,##0.00";
+
+                var cMargen = ws.Cell(row, 12);
+                cMargen.Value = (o.MargenPorcentaje ?? 0m) / 100m;
+                cMargen.Style.NumberFormat.Format = "0.00%";
+            }
+
+            for (int col = 1; col <= headers.Length; col++)
+            {
+                var cell = ws.Cell(row, col);
+                cell.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+                cell.Style.Border.BottomBorderColor = XLColor.FromHtml("#E0E0E0");
+            }
+
+            ws.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Cell(row, 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Cell(row, 5).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Cell(row, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            row++;
+        }
+
+        ws.Columns().AdjustToContents();
+
+        using var ms = new MemoryStream();
+        workbook.SaveAs(ms);
+        return ms.ToArray();
+    }
 }

@@ -19,6 +19,8 @@ public class Producto : BaseEntity
     public string Nombre { get; set; } = string.Empty;
     public string? Descripcion { get; set; }
     public string Unidad { get; set; } = "unidad"; // unidad, litro, etc.
+    public string? Marca { get; set; }
+    public string? FotoUrl { get; set; }
 
     /// <summary>Precio de venta al público sin IGV o con afectación correspondiente.</summary>
     public decimal PrecioVenta { get; set; }

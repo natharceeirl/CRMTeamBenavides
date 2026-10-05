@@ -309,6 +309,79 @@ public class CajaChicaService : ICajaChicaService
         return ServiceResult<MovimientoCajaResponse>.Success(MapearMovimiento(mov));
     }
 
+    public async Task<ResumenMetodosPagoCajaResponse> ObtenerResumenMetodosAsync(
+        Guid? cajaChicaId = null,
+        CancellationToken ct = default)
+    {
+        CajaChica? caja = null;
+        if (cajaChicaId.HasValue)
+        {
+            caja = await _context.CajasChicas.FirstOrDefaultAsync(c => c.Id == cajaChicaId.Value, ct);
+        }
+        else
+        {
+            caja = await _context.CajasChicas.FirstOrDefaultAsync(c => c.Estado == EstadoCajaChica.Abierta, ct);
+        }
+
+        var cajaId = caja?.Id;
+
+        var query = _context.MovimientosCajaChica
+            .AsNoTracking()
+            .Include(m => m.MetodoPago)
+            .Where(m => m.Tipo == TipoMovimientoCaja.Ingreso && m.Activo);
+
+        if (cajaId.HasValue)
+        {
+            query = query.Where(m => m.CajaChicaId == cajaId.Value);
+        }
+        else
+        {
+            var inicioHoy = DateTime.UtcNow.Date;
+            query = query.Where(m => m.Fecha >= inicioHoy);
+        }
+
+        var movimientos = await query.ToListAsync(ct);
+
+        decimal totalEfectivo = 0m;
+        decimal totalYapePlin = 0m;
+        decimal totalTarjeta = 0m;
+        decimal totalTransferencia = 0m;
+        decimal totalGeneral = 0m;
+        var porMetodo = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var mov in movimientos)
+        {
+            var metodoNombre = (mov.MetodoPagoNombre ?? mov.MetodoPago?.Nombre ?? "EFECTIVO").Trim();
+            var metodoCodigo = (mov.MetodoPago?.Codigo ?? metodoNombre).ToUpperInvariant();
+
+            totalGeneral += mov.Monto;
+
+            if (porMetodo.ContainsKey(metodoNombre))
+                porMetodo[metodoNombre] += mov.Monto;
+            else
+                porMetodo[metodoNombre] = mov.Monto;
+
+            if (metodoCodigo.Contains("EFECTIVO"))
+                totalEfectivo += mov.Monto;
+            else if (metodoCodigo.Contains("YAPE") || metodoCodigo.Contains("PLIN"))
+                totalYapePlin += mov.Monto;
+            else if (metodoCodigo.Contains("TARJETA"))
+                totalTarjeta += mov.Monto;
+            else if (metodoCodigo.Contains("TRANSFERENCIA"))
+                totalTransferencia += mov.Monto;
+        }
+
+        return new ResumenMetodosPagoCajaResponse(
+            cajaId,
+            totalEfectivo,
+            totalYapePlin,
+            totalTarjeta,
+            totalTransferencia,
+            porMetodo,
+            totalGeneral
+        );
+    }
+
     private static MovimientoCajaResponse MapearMovimiento(MovimientoCajaChica m)
     {
         return new MovimientoCajaResponse(
@@ -321,7 +394,10 @@ public class CajaChicaService : ICajaChicaService
             m.Referencia,
             m.Fecha,
             m.UsuarioId,
-            m.Usuario?.NombreCompleto
+            m.Usuario?.NombreCompleto,
+            m.PagoId,
+            m.MetodoPagoId,
+            m.MetodoPagoNombre ?? m.MetodoPago?.Nombre
         );
     }
 

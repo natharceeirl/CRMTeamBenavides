@@ -29,8 +29,40 @@ public record PedidoLimaExcelDto(
     DateTime? FechaEntrega,
     string? Observaciones);
 
+public record VentaExcelDto(
+    Guid Id,
+    DateTime Fecha,
+    string ClienteNombre,
+    string Estado,
+    string EstadoPago,
+    string EstadoComprobante,
+    int CantidadItems,
+    decimal Total,
+    decimal TotalPagado,
+    decimal Saldo,
+    decimal? CostoTotal = null,
+    decimal? Utilidad = null,
+    decimal? MargenPorcentaje = null);
+
+public record OrdenServicioExcelDto(
+    Guid Id,
+    string? NumeroOrden,
+    DateTime FechaIngreso,
+    DateTime? FechaSalida,
+    string ClienteNombre,
+    string? Placa,
+    string? Modelo,
+    string Estado,
+    string? TecnicoNombre,
+    decimal Total,
+    decimal? CostoTotal = null,
+    decimal? Utilidad = null,
+    decimal? MargenPorcentaje = null);
+
 public interface IExportacionExcelService
 {
     byte[] GenerarExcelCitas(IEnumerable<CitaExcelDto> citas);
     byte[] GenerarExcelPedidosLima(IEnumerable<PedidoLimaExcelDto> pedidos);
+    byte[] GenerarExcelVentas(IEnumerable<VentaExcelDto> ventas, bool incluirFinanciero = false);
+    byte[] GenerarExcelOrdenesServicio(IEnumerable<OrdenServicioExcelDto> ordenes, bool incluirFinanciero = false);
 }

@@ -41,6 +41,47 @@ public static class ClienteEndpoints
         .RequireAuthorization(PermisosDefinidos.ClientesVer)
         .WithName("GetClienteById");
 
+        group.MapGet("/buscar-dni/{dni}", async (string dni, ClaimsPrincipal user, IClienteService service, ApplicationDbContext dbContext) =>
+        {
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+            if (isolation.DebeDenegarAcceso)
+            {
+                return Results.NotFound();
+            }
+
+            var result = await service.GetByDocumentoAsync(dni, isolation.SoloClienteId);
+            return result.IsSuccess ? Results.Ok(result.Data) : Results.NotFound();
+        })
+        .RequireAuthorization(PermisosDefinidos.ClientesVer)
+        .WithName("BuscarClientePorDni");
+
+        group.MapGet("/documento/{dni}", async (string dni, ClaimsPrincipal user, IClienteService service, ApplicationDbContext dbContext) =>
+        {
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+            if (isolation.DebeDenegarAcceso)
+            {
+                return Results.NotFound();
+            }
+
+            var result = await service.GetByDocumentoAsync(dni, isolation.SoloClienteId);
+            return result.IsSuccess ? Results.Ok(result.Data) : Results.NotFound();
+        })
+        .RequireAuthorization(PermisosDefinidos.ClientesVer)
+        .WithName("BuscarClientePorDocumento");
+
+        group.MapPost("/alta-rapida", async (AltaRapidaClienteRequest request, IClienteService service) =>
+        {
+            var result = await service.AltaRapidaAsync(request);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Created($"/api/clientes/{result.Data!.Id}", result.Data),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.ClientesCrear)
+        .WithName("AltaRapidaCliente");
+
         group.MapPost("/", async (CreateClienteRequest request, IClienteService service) =>
         {
             var result = await service.CreateAsync(request);

@@ -7,6 +7,8 @@ public interface IPagoService
     Task<List<MetodoPagoResponse>> GetMetodosPagoAsync();
     Task<ServiceResult<PagoResponse>> RegistrarPagoVentaAsync(Guid ventaId, RegistrarPagoRequest request, Guid? usuarioId);
     Task<ServiceResult<PagoResponse>> RegistrarPagoOrdenServicioAsync(Guid ordenServicioId, RegistrarPagoRequest request, Guid? usuarioId);
+    Task<ServiceResult<PagoResponse>> RegistrarPagoPedidoLimaAsync(Guid pedidoLimaId, RegistrarPagoRequest request, Guid? usuarioId);
     Task<ServiceResult<List<PagoResponse>>> GetPagosByVentaIdAsync(Guid ventaId, Guid? soloClienteId = null);
     Task<ServiceResult<List<PagoResponse>>> GetPagosByOrdenServicioIdAsync(Guid ordenServicioId, Guid? soloClienteId = null);
+    Task<ServiceResult<List<PagoResponse>>> GetPagosByPedidoLimaIdAsync(Guid pedidoLimaId, Guid? soloClienteId = null);
 }

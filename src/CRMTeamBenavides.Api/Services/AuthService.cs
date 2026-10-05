@@ -30,7 +30,23 @@ public class AuthService : IAuthService
 
     public async Task<AuthResult<LoginResponse>> LoginAsync(LoginRequest request, string? ipAddress)
     {
-        var usuario = await _userManager.FindByEmailAsync(request.Email);
+        var input = request.Email?.Trim() ?? string.Empty;
+        var usuario = await _userManager.FindByEmailAsync(input);
+
+        if (usuario is null)
+        {
+            usuario = await _userManager.FindByNameAsync(input);
+        }
+
+        if (usuario is null)
+        {
+            var cliente = await _context.Clientes
+                .FirstOrDefaultAsync(c => c.Activo && (c.NumeroDocumento == input || c.DocumentoIdentidad == input) && c.UsuarioId != null);
+            if (cliente?.UsuarioId != null)
+            {
+                usuario = await _userManager.FindByIdAsync(cliente.UsuarioId.Value.ToString());
+            }
+        }
 
         // Mismo resultado si el email no existe, el usuario está inactivo o
         // la contraseña es incorrecta: no se debe poder distinguir el motivo.

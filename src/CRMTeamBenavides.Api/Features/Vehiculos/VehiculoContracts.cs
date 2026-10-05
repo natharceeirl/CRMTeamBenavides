@@ -57,3 +57,11 @@ public record UpdateVehiculoRequest(
     decimal? HorasUso = null,
     decimal? ValorEstimado = null,
     decimal? LecturaMedidorActual = null);
+
+public record AltaRapidaVehiculoRequest(
+    Guid ClienteId,
+    string? Placa,
+    string Marca,
+    string Modelo,
+    int? Kilometraje = null,
+    string? Color = null);

@@ -16,13 +16,38 @@ public static class InventarioEndpoints
             Guid? categoriaId,
             string? busqueda,
             bool? bajoStock,
+            string? marca,
             IInventarioService service) =>
         {
-            var productos = await service.GetAllProductosAsync(categoriaId, busqueda, bajoStock);
+            var productos = await service.GetAllProductosAsync(categoriaId, busqueda, bajoStock, marca);
             return Results.Ok(productos);
         })
         .RequireAuthorization(PermisosDefinidos.InventarioVer)
         .WithName("GetProductos");
+
+        groupProductos.MapGet("/marcas", async (IInventarioService service) =>
+        {
+            var marcas = await service.ObtenerMarcasAsync();
+            return Results.Ok(marcas);
+        })
+        .RequireAuthorization(PermisosDefinidos.InventarioVer)
+        .WithName("GetMarcasProductos");
+
+        groupProductos.MapPost("/{id:guid}/foto", async (
+            Guid id,
+            ActualizarFotoProductoRequest request,
+            IInventarioService service) =>
+        {
+            var result = await service.ActualizarFotoAsync(id, request.FotoUrl);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                _ => Results.Problem()
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.InventarioEditar)
+        .WithName("ActualizarFotoProducto");
 
         groupProductos.MapGet("/{id:guid}", async (Guid id, IInventarioService service) =>
         {
@@ -49,6 +74,19 @@ public static class InventarioEndpoints
         })
         .RequireAuthorization(PermisosDefinidos.InventarioCrear)
         .WithName("CreateProducto");
+
+        groupProductos.MapPost("/alta-rapida", async (AltaRapidaProductoRequest request, IInventarioService service) =>
+        {
+            var result = await service.AltaRapidaProductoAsync(request);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Created($"/api/productos/{result.Data!.Id}", result.Data),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.InventarioCrear)
+        .WithName("AltaRapidaProducto");
 
         groupProductos.MapPut("/{id:guid}", async (Guid id, UpdateProductoRequest request, IInventarioService service) =>
         {
@@ -152,6 +190,43 @@ public static class InventarioEndpoints
         })
         .RequireAuthorization(PermisosDefinidos.InventarioVer)
         .WithName("GetMovimientosInventario");
+
+        groupInventario.MapGet("/productos", async (
+            Guid? categoriaId,
+            string? busqueda,
+            bool? bajoStock,
+            string? marca,
+            IInventarioService service) =>
+        {
+            var productos = await service.GetAllProductosAsync(categoriaId, busqueda, bajoStock, marca);
+            return Results.Ok(productos);
+        })
+        .RequireAuthorization(PermisosDefinidos.InventarioVer)
+        .WithName("GetInventarioProductos");
+
+        groupInventario.MapGet("/productos/marcas", async (IInventarioService service) =>
+        {
+            var marcas = await service.ObtenerMarcasAsync();
+            return Results.Ok(marcas);
+        })
+        .RequireAuthorization(PermisosDefinidos.InventarioVer)
+        .WithName("GetInventarioMarcas");
+
+        groupInventario.MapPost("/productos/{id:guid}/foto", async (
+            Guid id,
+            ActualizarFotoProductoRequest request,
+            IInventarioService service) =>
+        {
+            var result = await service.ActualizarFotoAsync(id, request.FotoUrl);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                _ => Results.Problem()
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.InventarioEditar)
+        .WithName("ActualizarInventarioFotoProducto");
     }
 
     private static Guid? ObtenerUsuarioId(ClaimsPrincipal user)

@@ -90,6 +90,37 @@ public static class ConfiguracionEndpoints
             return Results.Ok(historial);
         })
         .WithName("GetHistorialTipoCambio");
+
+        group.MapGet("/tipo-cambio/convertir", async (
+            decimal montoUsd,
+            decimal? tipoCambio,
+            IConfiguracionService service,
+            CancellationToken ct) =>
+        {
+            var result = await service.ConvertirUsdAPenAsync(montoUsd, tipoCambio, ct);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { mensaje = result.Error }),
+                _ => Results.StatusCode(500)
+            };
+        })
+        .WithName("ConvertirUsdAPenGet");
+
+        group.MapPost("/tipo-cambio/convertir", async (
+            ConversionMonedaRequest request,
+            IConfiguracionService service,
+            CancellationToken ct) =>
+        {
+            var result = await service.ConvertirUsdAPenAsync(request.MontoUsd, request.TipoCambio, ct);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { mensaje = result.Error }),
+                _ => Results.StatusCode(500)
+            };
+        })
+        .WithName("ConvertirUsdAPenPost");
     }
 
     private static Guid? ObtenerUsuarioId(ClaimsPrincipal user)

@@ -52,4 +52,13 @@ public class MovimientoCajaChica : BaseEntity
 
     public Guid? UsuarioId { get; set; }
     public Usuario? Usuario { get; set; }
+
+    // Trazabilidad de pago de venta / taller / pedido lima
+    public Guid? PagoId { get; set; }
+    public Pago? Pago { get; set; }
+
+    public Guid? MetodoPagoId { get; set; }
+    public MetodoPago? MetodoPago { get; set; }
+
+    public string? MetodoPagoNombre { get; set; }
 }

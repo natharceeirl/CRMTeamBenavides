@@ -29,7 +29,20 @@ public record MovimientoCajaResponse(
     string? Referencia,
     DateTime Fecha,
     Guid? UsuarioId,
-    string? UsuarioNombre
+    string? UsuarioNombre,
+    Guid? PagoId = null,
+    Guid? MetodoPagoId = null,
+    string? MetodoPagoNombre = null
+);
+
+public record ResumenMetodosPagoCajaResponse(
+    Guid? CajaChicaId,
+    decimal TotalEfectivo,
+    decimal TotalYapePlin,
+    decimal TotalTarjeta,
+    decimal TotalTransferencia,
+    Dictionary<string, decimal> PorMetodo,
+    decimal TotalGeneral
 );
 
 public record CajaChicaResponse(

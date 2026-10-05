@@ -38,6 +38,19 @@ public static class ServicioEndpoints
         .RequireAuthorization(PermisosDefinidos.ServiciosCrear)
         .WithName("CreateServicio");
 
+        group.MapPost("/alta-rapida", async (CrearServicioRequest request, IServicioService service, CancellationToken ct) =>
+        {
+            var result = await service.CreateAsync(request, ct);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Created($"/api/servicios/{result.Data!.Id}", result.Data),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { mensaje = result.Error }),
+                _ => Results.StatusCode(500)
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.ServiciosCrear)
+        .WithName("AltaRapidaServicio");
+
         group.MapPut("/{id:guid}", async (Guid id, ActualizarServicioRequest request, IServicioService service, CancellationToken ct) =>
         {
             var result = await service.UpdateAsync(id, request, ct);

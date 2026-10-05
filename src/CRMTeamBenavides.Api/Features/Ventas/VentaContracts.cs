@@ -32,7 +32,10 @@ public record VentaResponse(
     decimal MontoIgv = 0m,
     decimal TotalPagado = 0m,
     decimal Saldo = 0m,
-    string EstadoPago = "Pendiente");
+    string EstadoPago = "Pendiente",
+    string EstadoComprobante = "Pendiente",
+    int EstadoAprobacionGerenciaId = 0,
+    string EstadoAprobacionGerencia = "NoAplica");
 
 public record VentaDetalleResponse(
     Guid Id,
@@ -55,7 +58,10 @@ public record VentaDetalleResponse(
     decimal TotalPagado = 0m,
     decimal Saldo = 0m,
     string EstadoPago = "Pendiente",
-    List<PagoResponse>? Pagos = null);
+    List<PagoResponse>? Pagos = null,
+    string EstadoComprobante = "Pendiente",
+    int EstadoAprobacionGerenciaId = 0,
+    string EstadoAprobacionGerencia = "NoAplica");
 
 public record DetalleVentaResponse(
     Guid Id,

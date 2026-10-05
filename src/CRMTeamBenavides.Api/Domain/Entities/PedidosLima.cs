@@ -58,8 +58,16 @@ public class PedidoLima : BaseEntity
     /// <summary>Indica si el stock ya fue deducido del inventario (al despachar/entregar).</summary>
     public bool StockDeducido { get; set; }
 
+    // Aprobación de Gerencia para modificación de precios
+    public EstadoAprobacionGerencia EstadoAprobacionGerencia { get; set; } = EstadoAprobacionGerencia.NoAplica;
+    public DateTime? FechaAprobacionGerencia { get; set; }
+    public Guid? UsuarioAprobacionGerenciaId { get; set; }
+    public Usuario? UsuarioAprobacionGerencia { get; set; }
+    public string? ObservacionesAprobacionGerencia { get; set; }
+
     public ICollection<DetallePedidoLima> Detalles { get; set; } = new List<DetallePedidoLima>();
     public ICollection<HistorialEstadoPedidoLima> HistorialEstados { get; set; } = new List<HistorialEstadoPedidoLima>();
+    public ICollection<Pago> Pagos { get; set; } = new List<Pago>();
 }
 
 /// <summary>

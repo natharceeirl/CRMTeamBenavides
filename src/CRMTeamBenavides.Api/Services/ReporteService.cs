@@ -1,4 +1,5 @@
 using CRMTeamBenavides.Api.Features.Reportes;
+using CRMTeamBenavides.Api.Services.Exportacion;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -8,10 +9,12 @@ namespace CRMTeamBenavides.Api.Services;
 public class ReporteService : IReporteService
 {
     private readonly ApplicationDbContext _context;
+    private readonly IExportacionExcelService _excelService;
 
-    public ReporteService(ApplicationDbContext context)
+    public ReporteService(ApplicationDbContext context, IExportacionExcelService excelService)
     {
         _context = context;
+        _excelService = excelService;
     }
 
     // ------------------------------------------------------------------
@@ -311,5 +314,152 @@ public class ReporteService : IReporteService
             desglosePorTipo,
             detalleOperaciones,
             rankingRepuestos);
+    }
+
+    // ------------------------------------------------------------------
+    // EXPORTACIÓN EXCEL: Ventas
+    // ------------------------------------------------------------------
+    public async Task<byte[]> ExportarVentasExcelAsync(
+        DateTime? fechaDesde,
+        DateTime? fechaHasta,
+        EstadoVenta? estado,
+        Guid? clienteId,
+        bool incluirFinanciero)
+    {
+        var query = _context.Ventas
+            .Include(v => v.Cliente)
+            .Include(v => v.Pagos.Where(p => p.Activo))
+            .Include(v => v.Comprobante)
+            .Include(v => v.Detalles.Where(d => d.Activo))
+            .Where(v => v.Activo);
+
+        if (fechaDesde.HasValue)
+        {
+            var desde = DateTime.SpecifyKind(fechaDesde.Value.Date, DateTimeKind.Utc);
+            query = query.Where(v => v.Fecha >= desde);
+        }
+
+        if (fechaHasta.HasValue)
+        {
+            var hastaExclusivo = DateTime.SpecifyKind(fechaHasta.Value.Date.AddDays(1), DateTimeKind.Utc);
+            query = query.Where(v => v.Fecha < hastaExclusivo);
+        }
+
+        if (estado.HasValue)
+            query = query.Where(v => v.Estado == estado.Value);
+
+        if (clienteId.HasValue)
+            query = query.Where(v => v.ClienteId == clienteId.Value);
+
+        var ventas = await query.OrderByDescending(v => v.Fecha).ToListAsync();
+
+        var dtos = ventas.Select(v =>
+        {
+            var totalPagado = v.Pagos.Sum(p => p.Monto);
+            var saldo = Math.Max(0m, v.Total - totalPagado);
+            var estadoPago = saldo <= 0 ? "Pagado" : (totalPagado > 0 ? "Parcial" : "Pendiente");
+            var estadoComprobante = v.Comprobante != null ? "Emitido" : "Sin comprobante";
+
+            decimal? costoTotal = null;
+            decimal? utilidad = null;
+            decimal? margen = null;
+
+            if (incluirFinanciero)
+            {
+                var ingresoSinIgv = v.Detalles.Sum(d => d.Cantidad * d.PrecioUnitario);
+                costoTotal = v.Detalles.Sum(d => d.Cantidad * d.CostoUnitarioHistorico);
+                utilidad = ingresoSinIgv - costoTotal.Value;
+                margen = ingresoSinIgv > 0 ? Math.Round((utilidad.Value / ingresoSinIgv) * 100m, 2) : 0m;
+            }
+
+            return new VentaExcelDto(
+                Id: v.Id,
+                Fecha: v.Fecha,
+                ClienteNombre: v.Cliente?.NombreCompleto ?? "N/A",
+                Estado: v.Estado.ToString(),
+                EstadoPago: estadoPago,
+                EstadoComprobante: estadoComprobante,
+                CantidadItems: v.Detalles.Sum(d => d.Cantidad),
+                Total: v.Total,
+                TotalPagado: totalPagado,
+                Saldo: saldo,
+                CostoTotal: costoTotal,
+                Utilidad: utilidad,
+                MargenPorcentaje: margen
+            );
+        }).ToList();
+
+        return _excelService.GenerarExcelVentas(dtos, incluirFinanciero);
+    }
+
+    // ------------------------------------------------------------------
+    // EXPORTACIÓN EXCEL: Órdenes de Servicio
+    // ------------------------------------------------------------------
+    public async Task<byte[]> ExportarOrdenesServicioExcelAsync(
+        DateTime? fechaDesde,
+        DateTime? fechaHasta,
+        EstadoOrdenServicio? estado,
+        Guid? tecnicoId,
+        bool incluirFinanciero)
+    {
+        var query = _context.OrdenesServicio
+            .Include(o => o.Vehiculo)
+            .Include(o => o.Cliente)
+            .Include(o => o.TecnicoAsignado)
+            .Include(o => o.Detalles.Where(d => d.Activo))
+            .Where(o => o.Activo);
+
+        if (fechaDesde.HasValue)
+        {
+            var desde = DateTime.SpecifyKind(fechaDesde.Value.Date, DateTimeKind.Utc);
+            query = query.Where(o => o.FechaApertura >= desde);
+        }
+
+        if (fechaHasta.HasValue)
+        {
+            var hastaExclusivo = DateTime.SpecifyKind(fechaHasta.Value.Date.AddDays(1), DateTimeKind.Utc);
+            query = query.Where(o => o.FechaApertura < hastaExclusivo);
+        }
+
+        if (estado.HasValue)
+            query = query.Where(o => o.Estado == estado.Value);
+
+        if (tecnicoId.HasValue)
+            query = query.Where(o => o.TecnicoAsignadoId == tecnicoId.Value);
+
+        var ordenes = await query.OrderByDescending(o => o.FechaApertura).ToListAsync();
+
+        var dtos = ordenes.Select(o =>
+        {
+            decimal? costoTotal = null;
+            decimal? utilidad = null;
+            decimal? margen = null;
+
+            if (incluirFinanciero)
+            {
+                var ingresoSinIgv = o.Detalles.Sum(d => d.Cantidad * d.PrecioUnitario);
+                costoTotal = o.Detalles.Sum(d => d.Cantidad * d.CostoUnitarioHistorico);
+                utilidad = ingresoSinIgv - costoTotal.Value;
+                margen = ingresoSinIgv > 0 ? Math.Round((utilidad.Value / ingresoSinIgv) * 100m, 2) : 0m;
+            }
+
+            return new OrdenServicioExcelDto(
+                Id: o.Id,
+                NumeroOrden: o.NumeroOrden,
+                FechaIngreso: o.FechaApertura,
+                FechaSalida: o.FechaCierre,
+                ClienteNombre: o.Cliente?.NombreCompleto ?? o.Vehiculo?.Cliente?.NombreCompleto ?? "N/A",
+                Placa: o.Vehiculo?.Placa,
+                Modelo: o.Vehiculo?.Modelo,
+                Estado: o.Estado.ToString(),
+                TecnicoNombre: o.TecnicoAsignado?.NombreCompleto,
+                Total: o.Total,
+                CostoTotal: costoTotal,
+                Utilidad: utilidad,
+                MargenPorcentaje: margen
+            );
+        }).ToList();
+
+        return _excelService.GenerarExcelOrdenesServicio(dtos, incluirFinanciero);
     }
 }

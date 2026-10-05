@@ -23,4 +23,18 @@ public interface IReporteService
         DateTime? fechaDesde,
         DateTime? fechaHasta,
         Guid? productoId);
+
+    Task<byte[]> ExportarVentasExcelAsync(
+        DateTime? fechaDesde,
+        DateTime? fechaHasta,
+        EstadoVenta? estado,
+        Guid? clienteId,
+        bool incluirFinanciero);
+
+    Task<byte[]> ExportarOrdenesServicioExcelAsync(
+        DateTime? fechaDesde,
+        DateTime? fechaHasta,
+        EstadoOrdenServicio? estado,
+        Guid? tecnicoId,
+        bool incluirFinanciero);
 }

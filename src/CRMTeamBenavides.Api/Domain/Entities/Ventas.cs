@@ -44,6 +44,9 @@ public class Pago : BaseEntity
     public Guid? OrdenServicioId { get; set; }
     public OrdenServicio? OrdenServicio { get; set; }
 
+    public Guid? PedidoLimaId { get; set; }
+    public PedidoLima? PedidoLima { get; set; }
+
     /// <summary>Indica si el pago fue registrado como anticipo/adelanto.</summary>
     public bool EsAnticipo { get; set; }
 
@@ -71,6 +74,13 @@ public class Venta : BaseEntity
     public decimal SubtotalInafecto { get; set; }
     public decimal MontoIgv { get; set; }
     public decimal Total { get; set; }
+
+    // Aprobación de Gerencia para modificación de precios
+    public EstadoAprobacionGerencia EstadoAprobacionGerencia { get; set; } = EstadoAprobacionGerencia.NoAplica;
+    public DateTime? FechaAprobacionGerencia { get; set; }
+    public Guid? UsuarioAprobacionGerenciaId { get; set; }
+    public Usuario? UsuarioAprobacionGerencia { get; set; }
+    public string? ObservacionesAprobacionGerencia { get; set; }
 
     public ICollection<DetalleVenta> Detalles { get; set; } = new List<DetalleVenta>();
     public ICollection<Pago> Pagos { get; set; } = new List<Pago>();

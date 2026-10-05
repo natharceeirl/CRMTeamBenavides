@@ -23,6 +23,22 @@ public static class CajaChicaEndpoints
         .RequireAuthorization(PermisosDefinidos.CajaConsultar)
         .WithName("GetCajaChicaActual");
 
+        group.MapGet("/actual/resumen-metodos", async (ICajaChicaService service, CancellationToken ct) =>
+        {
+            var res = await service.ObtenerResumenMetodosAsync(null, ct);
+            return Results.Ok(res);
+        })
+        .RequireAuthorization(PermisosDefinidos.CajaConsultar)
+        .WithName("GetCajaChicaActualResumenMetodos");
+
+        group.MapGet("/{id:guid}/resumen-metodos", async (Guid id, ICajaChicaService service, CancellationToken ct) =>
+        {
+            var res = await service.ObtenerResumenMetodosAsync(id, ct);
+            return Results.Ok(res);
+        })
+        .RequireAuthorization(PermisosDefinidos.CajaConsultar)
+        .WithName("GetCajaChicaResumenMetodosPorId");
+
         group.MapGet("/", async (ICajaChicaService service, CancellationToken ct) =>
         {
             var res = await service.ObtenerHistorialCajasAsync(ct);
@@ -64,11 +80,11 @@ public static class CajaChicaEndpoints
         // -------------------------------------------------------------------
         // Operaciones de Apertura y Cierre
         // -------------------------------------------------------------------
-        group.MapPost("/apertura", async (
+        async Task<IResult> HandleApertura(
             AperturaCajaRequest request,
             ClaimsPrincipal user,
             ICajaChicaService service,
-            CancellationToken ct) =>
+            CancellationToken ct)
         {
             var usuarioId = ObtenerUsuarioId(user);
             var result = await service.AperturarCajaAsync(request, usuarioId, ct);
@@ -80,15 +96,22 @@ public static class CajaChicaEndpoints
                 ServiceResultStatus.Conflict => Results.Conflict(new { mensaje = result.Error }),
                 _ => Results.StatusCode(500)
             };
-        })
+        }
+
+        group.MapPost("/apertura", HandleApertura)
         .RequireAuthorization(PermisosDefinidos.CajaAperturar)
         .WithName("AperturarCajaChica");
 
-        group.MapPost("/cierre", async (
+        group.MapPost("/aperturar", HandleApertura)
+        .RequireAuthorization(PermisosDefinidos.CajaAperturar)
+        .WithName("AperturarCajaChicaAlias");
+
+
+        async Task<IResult> HandleCierre(
             CierreCajaRequest request,
             ClaimsPrincipal user,
             ICajaChicaService service,
-            CancellationToken ct) =>
+            CancellationToken ct)
         {
             var usuarioId = ObtenerUsuarioId(user);
             var result = await service.CerrarCajaAsync(request, usuarioId, ct);
@@ -100,9 +123,16 @@ public static class CajaChicaEndpoints
                 ServiceResultStatus.ValidationError => Results.BadRequest(new { mensaje = result.Error }),
                 _ => Results.StatusCode(500)
             };
-        })
+        }
+
+        group.MapPost("/cierre", HandleCierre)
         .RequireAuthorization(PermisosDefinidos.CajaCerrar)
         .WithName("CerrarCajaChica");
+
+        group.MapPost("/cerrar", HandleCierre)
+        .RequireAuthorization(PermisosDefinidos.CajaCerrar)
+        .WithName("CerrarCajaChicaAlias");
+
 
         // -------------------------------------------------------------------
         // Movimientos (Ingresos / Egresos)

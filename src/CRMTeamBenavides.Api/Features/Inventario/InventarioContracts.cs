@@ -9,7 +9,18 @@ public record CreateProductoRequest(
     decimal PrecioVenta,
     int StockInicial,
     int? StockMinimo = null,
-    decimal Costo = 0m);
+    decimal Costo = 0m,
+    string? Marca = null,
+    string? FotoUrl = null);
+
+public record AltaRapidaProductoRequest(
+    string Nombre,
+    decimal PrecioVenta,
+    string? Codigo = null,
+    string? Marca = null,
+    Guid? CategoriaId = null,
+    int StockInicial = 0);
+
 
 public record UpdateProductoRequest(
     Guid CategoriaId,
@@ -19,7 +30,9 @@ public record UpdateProductoRequest(
     string? Unidad,
     decimal PrecioVenta,
     int? StockMinimo = null,
-    decimal? Costo = null);
+    decimal? Costo = null,
+    string? Marca = null,
+    string? FotoUrl = null);
 
 public record ProductoResponse(
     Guid Id,
@@ -36,7 +49,9 @@ public record ProductoResponse(
     bool Activo,
     DateTime FechaCreacion,
     decimal Costo = 0m,
-    int StockMinimoEfectivo = 4);
+    int StockMinimoEfectivo = 4,
+    string? Marca = null,
+    string? FotoUrl = null);
 
 public record RegistrarEntradaRequest(
     int Cantidad,
@@ -65,3 +80,5 @@ public record MovimientoInventarioResponse(
     Guid? VentaId,
     DateTime FechaCreacion,
     decimal? CostoUnitario = null);
+
+public record ActualizarFotoProductoRequest(string FotoUrl);

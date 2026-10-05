@@ -23,6 +23,7 @@ using CRMTeamBenavides.Api.Features.Fotos;
 using CRMTeamBenavides.Api.Features.Yamaha;
 using CRMTeamBenavides.Api.Features.Citas;
 using CRMTeamBenavides.Api.Features.PedidosLima;
+using CRMTeamBenavides.Api.Features.Aprobaciones;
 using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Api.Services.Almacenamiento;
 using CRMTeamBenavides.Api.Services.Exportacion;
@@ -76,7 +77,14 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddDataProtection();
 
 builder.Services
-    .AddIdentityCore<Usuario>()
+    .AddIdentityCore<Usuario>(options =>
+    {
+        options.Password.RequireDigit = false;
+        options.Password.RequireLowercase = false;
+        options.Password.RequireUppercase = false;
+        options.Password.RequireNonAlphanumeric = false;
+        options.Password.RequiredLength = 6;
+    })
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddSignInManager()
     .AddDefaultTokenProviders()
@@ -173,6 +181,7 @@ builder.Services.AddScoped<IExportacionExcelService, ExportacionExcelService>();
 builder.Services.AddScoped<ICitaService, CitaService>();
 builder.Services.AddScoped<IPedidoLimaService, PedidoLimaService>();
 builder.Services.AddScoped<IAuditoriaService, AuditoriaService>();
+builder.Services.AddScoped<IAprobacionService, AprobacionService>();
 
 // ---------------------------------------------------------------------------
 // Yamaha API — infraestructura del conector
@@ -260,5 +269,6 @@ app.MapFotoEndpoints();
 app.MapYamahaEndpoints();
 app.MapCitaEndpoints();
 app.MapPedidoLimaEndpoints();
+app.MapAprobacionEndpoints();
 
 app.Run();

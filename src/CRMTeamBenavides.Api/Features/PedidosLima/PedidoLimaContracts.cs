@@ -85,4 +85,14 @@ public record PedidoLimaResponse(
     bool StockDeducido,
     List<DetallePedidoLimaResponse> Detalles,
     List<HistorialEstadoPedidoLimaResponse> Historial,
-    DateTime FechaCreacion);
+    DateTime FechaCreacion,
+    decimal TotalPagado = 0m,
+    decimal Saldo = 0m,
+    string EstadoPago = "Pendiente",
+    int EstadoAprobacionGerenciaId = 0,
+    string EstadoAprobacionGerencia = "NoAplica",
+    List<CRMTeamBenavides.Api.Features.Ventas.PagoResponse>? Pagos = null);
+
+public record AprobacionGerenciaPedidoLimaRequest(
+    EstadoAprobacionGerencia Estado,
+    string? Observaciones);

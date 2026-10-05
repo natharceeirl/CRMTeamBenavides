@@ -1,6 +1,8 @@
+using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Features.Clientes;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace CRMTeamBenavides.Api.Services;
@@ -8,10 +10,12 @@ namespace CRMTeamBenavides.Api.Services;
 public class ClienteService : IClienteService
 {
     private readonly ApplicationDbContext _context;
+    private readonly UserManager<Usuario> _userManager;
 
-    public ClienteService(ApplicationDbContext context)
+    public ClienteService(ApplicationDbContext context, UserManager<Usuario> userManager)
     {
         _context = context;
+        _userManager = userManager;
     }
 
     public async Task<List<ClienteResponse>> GetAllAsync(Guid? soloClienteId = null)
@@ -86,6 +90,10 @@ public class ClienteService : IClienteService
         };
 
         _context.Clientes.Add(cliente);
+        if (!string.IsNullOrWhiteSpace(numDoc))
+        {
+            await AsegurarUsuarioClienteAsync(cliente, numDoc);
+        }
         await _context.SaveChangesAsync();
 
         return ServiceResult<ClienteResponse>.Success(MapToResponse(cliente));
@@ -154,6 +162,122 @@ public class ClienteService : IClienteService
         await _context.SaveChangesAsync();
 
         return ServiceResult<bool>.Success(true);
+    }
+
+    public async Task<ServiceResult<ClienteResponse>> GetByDocumentoAsync(string documento, Guid? soloClienteId = null)
+    {
+        if (string.IsNullOrWhiteSpace(documento))
+        {
+            return ServiceResult<ClienteResponse>.NotFound();
+        }
+
+        var doc = documento.Trim();
+        var query = _context.Clientes
+            .AsNoTracking()
+            .Where(c => c.Activo && (c.NumeroDocumento == doc || c.DocumentoIdentidad == doc));
+
+        if (soloClienteId.HasValue)
+        {
+            query = query.Where(c => c.Id == soloClienteId.Value);
+        }
+
+        var cliente = await query.FirstOrDefaultAsync();
+
+        return cliente is null
+            ? ServiceResult<ClienteResponse>.NotFound()
+            : ServiceResult<ClienteResponse>.Success(MapToResponse(cliente));
+    }
+
+    public async Task<ServiceResult<ClienteResponse>> AltaRapidaAsync(AltaRapidaClienteRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.NombreCompleto))
+        {
+            return ServiceResult<ClienteResponse>.Invalid("NombreCompleto es obligatorio.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.NumeroDocumento))
+        {
+            return ServiceResult<ClienteResponse>.Invalid("NumeroDocumento es obligatorio.");
+        }
+
+        var numDoc = request.NumeroDocumento.Trim();
+        var tipoDoc = request.TipoDocumento ?? TipoDocumentoCliente.DNI;
+
+        var clienteExistente = await _context.Clientes
+            .FirstOrDefaultAsync(c => c.Activo && (c.NumeroDocumento == numDoc || c.DocumentoIdentidad == numDoc));
+
+        if (clienteExistente != null)
+        {
+            return ServiceResult<ClienteResponse>.Success(MapToResponse(clienteExistente));
+        }
+
+        var cliente = new Cliente
+        {
+            NombreCompleto     = request.NombreCompleto.Trim(),
+            TipoDocumento      = tipoDoc,
+            NumeroDocumento    = numDoc,
+            DocumentoIdentidad = numDoc,
+            Telefono           = request.Telefono?.Trim(),
+            Email              = request.Email?.Trim(),
+            Direccion          = request.Direccion?.Trim(),
+            FechaCreacion      = DateTime.UtcNow,
+            Activo             = true
+        };
+
+        _context.Clientes.Add(cliente);
+        await AsegurarUsuarioClienteAsync(cliente, numDoc);
+        await _context.SaveChangesAsync();
+
+        return ServiceResult<ClienteResponse>.Success(MapToResponse(cliente));
+    }
+
+    private async Task AsegurarUsuarioClienteAsync(Cliente cliente, string? passwordDni)
+    {
+        if (string.IsNullOrWhiteSpace(passwordDni) || passwordDni.Trim().Length < 6) return;
+
+        var dni = passwordDni.Trim();
+        var existingUser = await _userManager.FindByNameAsync(dni);
+        if (existingUser == null)
+        {
+            var email = !string.IsNullOrWhiteSpace(cliente.Email) ? cliente.Email.Trim() : $"{dni}@client.teambenavides.pe";
+            existingUser = await _userManager.FindByEmailAsync(email);
+        }
+
+        if (existingUser == null)
+        {
+            var email = !string.IsNullOrWhiteSpace(cliente.Email) ? cliente.Email.Trim() : $"{dni}@client.teambenavides.pe";
+            var user = new Usuario
+            {
+                UserName = dni,
+                Email = email,
+                NombreCompleto = cliente.NombreCompleto,
+                Activo = true,
+                FechaCreacion = DateTime.UtcNow
+            };
+
+            var createRes = await _userManager.CreateAsync(user, dni);
+            if (createRes.Succeeded)
+            {
+                cliente.UsuarioId = user.Id;
+                cliente.Usuario = user;
+
+                var rolCliente = await _context.Roles.FirstOrDefaultAsync(r => r.Nombre == RolesDefinidos.Cliente && r.Activo);
+                if (rolCliente != null)
+                {
+                    _context.UsuarioRoles.Add(new UsuarioRol
+                    {
+                        UsuarioId = user.Id,
+                        RolId = rolCliente.Id
+                    });
+
+                }
+            }
+        }
+        else
+        {
+            cliente.UsuarioId = existingUser.Id;
+            cliente.Usuario = existingUser;
+        }
     }
 
     private static (TipoDocumentoCliente? tipo, string? numero, string? error) ValidarYResolverDocumento(

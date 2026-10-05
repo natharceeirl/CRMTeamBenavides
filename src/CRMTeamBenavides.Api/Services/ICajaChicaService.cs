@@ -29,4 +29,8 @@ public interface ICajaChicaService
         RegistrarMovimientoCajaRequest request,
         Guid? usuarioId,
         CancellationToken ct = default);
+
+    Task<ResumenMetodosPagoCajaResponse> ObtenerResumenMetodosAsync(
+        Guid? cajaChicaId = null,
+        CancellationToken ct = default);
 }

@@ -86,6 +86,7 @@ public class PagoService : IPagoService
         };
 
         _context.Pagos.Add(pago);
+        await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, $"Venta #{venta.Id}", usuarioId);
         await _context.SaveChangesAsync();
 
         await _auditoriaService.RegistrarEventoAsync(
@@ -189,6 +190,7 @@ public class PagoService : IPagoService
         };
 
         _context.Pagos.Add(pago);
+        await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, $"OS #{orden.NumeroOrden ?? orden.Id.ToString()}", usuarioId);
         await _context.SaveChangesAsync();
 
         await _auditoriaService.RegistrarEventoAsync(
@@ -312,5 +314,187 @@ public class PagoService : IPagoService
             .ToListAsync();
 
         return ServiceResult<List<PagoResponse>>.Success(pagos);
+    }
+
+    public async Task<ServiceResult<PagoResponse>> RegistrarPagoPedidoLimaAsync(
+        Guid pedidoLimaId, RegistrarPagoRequest request, Guid? usuarioId)
+    {
+        if (request.Monto <= 0)
+        {
+            return ServiceResult<PagoResponse>.Invalid("El monto del pago debe ser mayor a 0.");
+        }
+
+        var pedido = await _context.PedidosLima
+            .Include(p => p.Pagos)
+            .FirstOrDefaultAsync(p => p.Id == pedidoLimaId && p.Activo);
+
+        if (pedido is null)
+        {
+            return ServiceResult<PagoResponse>.NotFound();
+        }
+
+        if (pedido.Estado == EstadoPedidoLima.Cancelado)
+        {
+            return ServiceResult<PagoResponse>.Invalid("No se pueden registrar pagos en un pedido de Lima cancelado.");
+        }
+
+        var metodo = await _context.MetodosPago
+            .FirstOrDefaultAsync(m => m.Id == request.MetodoPagoId && m.Activo);
+
+        if (metodo is null)
+        {
+            return ServiceResult<PagoResponse>.Invalid("El método de pago indicado no existe o está inactivo.");
+        }
+
+        var totalPagado = pedido.Pagos.Where(p => p.Activo).Sum(p => p.Monto);
+        var saldo = Math.Max(0m, pedido.Total - totalPagado);
+
+        if (saldo <= 0)
+        {
+            return ServiceResult<PagoResponse>.Invalid("El pedido de Lima ya se encuentra pagado en su totalidad.");
+        }
+
+        if (request.Monto > saldo)
+        {
+            return ServiceResult<PagoResponse>.Invalid(
+                $"El monto del pago (S/ {request.Monto:F2}) no puede exceder el saldo pendiente (S/ {saldo:F2}).");
+        }
+
+        var pago = new Pago
+        {
+            Monto           = request.Monto,
+            MetodoPagoId    = request.MetodoPagoId,
+            MetodoPago      = metodo,
+            Fecha           = DateTime.UtcNow,
+            Referencia      = string.IsNullOrWhiteSpace(request.Referencia) ? null : request.Referencia.Trim(),
+            PedidoLimaId    = pedido.Id,
+            EsAnticipo      = request.EsAnticipo || saldo > request.Monto,
+            UsuarioId       = usuarioId,
+            Observaciones   = string.IsNullOrWhiteSpace(request.Observaciones) ? null : request.Observaciones.Trim(),
+            Activo          = true,
+            FechaCreacion   = DateTime.UtcNow
+        };
+
+        _context.Pagos.Add(pago);
+        await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, $"Pedido Lima #{pedido.NumeroPedido ?? pedido.Id.ToString()}", usuarioId);
+        await _context.SaveChangesAsync();
+
+        await _auditoriaService.RegistrarEventoAsync(
+            usuarioId,
+            "Crear",
+            "Pago",
+            pago.Id.ToString(),
+            new
+            {
+                pago.Monto,
+                pago.MetodoPagoId,
+                MetodoPago = metodo.Nombre,
+                pago.PedidoLimaId,
+                pago.EsAnticipo,
+                pago.Referencia
+            });
+
+        string? usuarioNombre = null;
+        if (usuarioId.HasValue)
+        {
+            usuarioNombre = await _context.Usuarios
+                .Where(u => u.Id == usuarioId.Value)
+                .Select(u => u.NombreCompleto)
+                .FirstOrDefaultAsync();
+        }
+
+        return ServiceResult<PagoResponse>.Success(new PagoResponse(
+            pago.Id,
+            pago.Monto,
+            pago.MetodoPagoId,
+            metodo.Nombre,
+            metodo.Codigo,
+            pago.Fecha,
+            pago.Referencia,
+            pago.EsAnticipo,
+            pago.VentaId,
+            pago.OrdenServicioId,
+            pago.UsuarioId,
+            usuarioNombre,
+            pago.Observaciones,
+            pago.Activo));
+    }
+
+    public async Task<ServiceResult<List<PagoResponse>>> GetPagosByPedidoLimaIdAsync(
+        Guid pedidoLimaId, Guid? soloClienteId = null)
+    {
+        var pedido = await _context.PedidosLima
+            .Include(p => p.Pagos)
+                .ThenInclude(p => p.MetodoPago)
+            .Include(p => p.Pagos)
+                .ThenInclude(p => p.Usuario)
+            .FirstOrDefaultAsync(p => p.Id == pedidoLimaId && p.Activo);
+
+        if (pedido is null)
+        {
+            return ServiceResult<List<PagoResponse>>.NotFound();
+        }
+
+        if (soloClienteId.HasValue && pedido.ClienteId != soloClienteId.Value)
+        {
+            return ServiceResult<List<PagoResponse>>.NotFound();
+        }
+
+        var pagos = pedido.Pagos
+            .Where(p => p.Activo)
+            .OrderBy(p => p.Fecha)
+            .Select(p => new PagoResponse(
+                p.Id,
+                p.Monto,
+                p.MetodoPagoId,
+                p.MetodoPago.Nombre,
+                p.MetodoPago.Codigo,
+                p.Fecha,
+                p.Referencia,
+                p.EsAnticipo,
+                p.VentaId,
+                p.OrdenServicioId,
+                p.UsuarioId,
+                p.Usuario != null ? p.Usuario.NombreCompleto : null,
+                p.Observaciones,
+                p.Activo))
+            .ToList();
+
+        return ServiceResult<List<PagoResponse>>.Success(pagos);
+    }
+
+    private async Task RegistrarMovimientoCajaChicaAutomaticoAsync(
+        Pago pago, MetodoPago metodo, string referenciaTexto, Guid? usuarioId)
+    {
+        var cajaAbierta = await _context.CajasChicas
+            .FirstOrDefaultAsync(c => c.Estado == EstadoCajaChica.Abierta);
+
+        if (cajaAbierta != null)
+        {
+            var movCaja = new MovimientoCajaChica
+            {
+                Id = Guid.NewGuid(),
+                CajaChicaId = cajaAbierta.Id,
+                Tipo = TipoMovimientoCaja.Ingreso,
+                Monto = pago.Monto,
+                Concepto = $"Cobro {metodo.Nombre} - {referenciaTexto}",
+                Referencia = pago.Referencia,
+                Fecha = DateTime.UtcNow,
+                UsuarioId = usuarioId,
+                PagoId = pago.Id,
+                MetodoPagoId = metodo.Id,
+                MetodoPagoNombre = metodo.Nombre,
+                Activo = true,
+                FechaCreacion = DateTime.UtcNow
+            };
+
+            if (metodo.Codigo.Equals("EFECTIVO", StringComparison.OrdinalIgnoreCase))
+            {
+                cajaAbierta.SaldoCalculado += pago.Monto;
+                cajaAbierta.FechaModificacion = DateTime.UtcNow;
+            }
+
+            _context.MovimientosCajaChica.Add(movCaja);
+        }
     }
 }

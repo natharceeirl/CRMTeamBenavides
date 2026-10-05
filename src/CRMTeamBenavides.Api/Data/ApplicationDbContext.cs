@@ -59,8 +59,9 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
     public DbSet<FaqItem> FaqItems => Set<FaqItem>();
     public DbSet<ConsultaChatbot> ConsultasChatbot => Set<ConsultaChatbot>();
 
-    // Auditoría
+    // Auditoría y Aprobaciones
     public DbSet<EventoAuditoria> EventosAuditoria => Set<EventoAuditoria>();
+    public DbSet<SolicitudAprobacion> SolicitudesAprobacion => Set<SolicitudAprobacion>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -547,6 +548,79 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
 
             entity.HasIndex(h => h.PedidoLimaId);
             entity.HasIndex(h => h.Fecha);
+        });
+
+        modelBuilder.Entity<Pago>(entity =>
+        {
+            entity.HasOne(p => p.PedidoLima)
+                .WithMany(pl => pl.Pagos)
+                .HasForeignKey(p => p.PedidoLimaId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(p => p.PedidoLimaId);
+        });
+
+        modelBuilder.Entity<MovimientoCajaChica>(entity =>
+        {
+            entity.HasOne(m => m.Pago)
+                .WithMany()
+                .HasForeignKey(m => m.PagoId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(m => m.MetodoPago)
+                .WithMany()
+                .HasForeignKey(m => m.MetodoPagoId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(m => m.PagoId);
+            entity.HasIndex(m => m.MetodoPagoId);
+        });
+
+        modelBuilder.Entity<Venta>(entity =>
+        {
+            entity.HasOne(v => v.UsuarioAprobacionGerencia)
+                .WithMany()
+                .HasForeignKey(v => v.UsuarioAprobacionGerenciaId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<PedidoLima>(entity =>
+        {
+            entity.HasOne(p => p.UsuarioAprobacionGerencia)
+                .WithMany()
+                .HasForeignKey(p => p.UsuarioAprobacionGerenciaId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<SolicitudAprobacion>(entity =>
+        {
+            entity.ToTable("SolicitudesAprobacion");
+
+            entity.Property(s => s.Tipo).HasMaxLength(50).IsRequired();
+            entity.Property(s => s.Entidad).HasMaxLength(50).IsRequired();
+            entity.Property(s => s.EntidadId).HasMaxLength(100).IsRequired();
+            entity.Property(s => s.DetalleCambio).HasMaxLength(1000).IsRequired();
+            entity.Property(s => s.ValorAnterior).HasPrecision(12, 2);
+            entity.Property(s => s.ValorSolicitado).HasPrecision(12, 2);
+            entity.Property(s => s.Motivo).HasMaxLength(500);
+            entity.Property(s => s.UsuarioSolicitanteNombre).HasMaxLength(150);
+            entity.Property(s => s.UsuarioAprobadorNombre).HasMaxLength(150);
+            entity.Property(s => s.ObservacionesRespuesta).HasMaxLength(500);
+
+            entity.HasOne(s => s.UsuarioSolicitante)
+                .WithMany()
+                .HasForeignKey(s => s.UsuarioSolicitanteId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(s => s.UsuarioAprobador)
+                .WithMany()
+                .HasForeignKey(s => s.UsuarioAprobadorId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(s => s.Estado);
+            entity.HasIndex(s => s.Entidad);
+            entity.HasIndex(s => s.EntidadId);
+            entity.HasIndex(s => s.FechaSolicitud);
         });
     }
 }

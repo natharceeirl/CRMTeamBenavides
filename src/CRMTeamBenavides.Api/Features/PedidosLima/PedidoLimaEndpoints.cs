@@ -224,6 +224,93 @@ public static class PedidoLimaEndpoints
         .RequireAuthorization(PermisosDefinidos.PedidosLimaCancelar)
         .WithName("CancelarPedidoLima");
 
+        group.MapPost("/{id:guid}/pagos", async (
+            Guid id,
+            CRMTeamBenavides.Api.Features.Ventas.RegistrarPagoRequest request,
+            IPagoService pagoService,
+            ClaimsPrincipal user) =>
+        {
+            var usuarioId = UserIsolationHelper.ObtenerUsuarioId(user);
+            var result = await pagoService.RegistrarPagoPedidoLimaAsync(id, request, usuarioId);
+
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Created($"/api/pedidos-lima/{id}/pagos/{result.Data!.Id}", result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(new { mensaje = "Pedido de Lima no encontrado." }),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { mensaje = result.Error }),
+                _ => Results.StatusCode(500)
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.VentasCrear)
+        .WithName("RegistrarPagoPedidoLima");
+
+        group.MapPost("/{id:guid}/adelanto", async (
+            Guid id,
+            CRMTeamBenavides.Api.Features.Ventas.RegistrarPagoRequest request,
+            IPagoService pagoService,
+            ClaimsPrincipal user) =>
+        {
+            var reqAdelanto = request with { EsAnticipo = true };
+            var usuarioId = UserIsolationHelper.ObtenerUsuarioId(user);
+            var result = await pagoService.RegistrarPagoPedidoLimaAsync(id, reqAdelanto, usuarioId);
+
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Created($"/api/pedidos-lima/{id}/pagos/{result.Data!.Id}", result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(new { mensaje = "Pedido de Lima no encontrado." }),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { mensaje = result.Error }),
+                _ => Results.StatusCode(500)
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.VentasCrear)
+        .WithName("RegistrarAdelantoPedidoLima");
+
+        group.MapGet("/{id:guid}/pagos", async (
+            Guid id,
+            IPagoService pagoService,
+            ApplicationDbContext dbContext,
+            ClaimsPrincipal user,
+            CancellationToken ct) =>
+        {
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext, ct);
+            if (isolation.DebeDenegarAcceso)
+            {
+                return Results.Forbid();
+            }
+
+            var result = await pagoService.GetPagosByPedidoLimaIdAsync(id, isolation.SoloClienteId);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(new { mensaje = "Pedido de Lima no encontrado." }),
+                _ => Results.StatusCode(500)
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.PedidosLimaVer)
+        .WithName("ObtenerPagosPedidoLima");
+
+        group.MapPut("/{id:guid}/aprobacion-gerencia", async (
+            Guid id,
+            AprobacionGerenciaPedidoLimaRequest request,
+            IPedidoLimaService pedidoLimaService,
+            ClaimsPrincipal user,
+            CancellationToken ct) =>
+        {
+            var usuarioId = UserIsolationHelper.ObtenerUsuarioId(user);
+            var result = await pedidoLimaService.AprobacionGerenciaAsync(id, request, usuarioId, ct);
+
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(new { mensaje = result.Error }),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { mensaje = result.Error }),
+                _ => Results.StatusCode(500)
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.OrdenesAprobarGerencia)
+        .WithName("AprobacionGerenciaPedidoLima");
+
+
         return app;
     }
 

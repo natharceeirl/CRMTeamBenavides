@@ -55,4 +55,10 @@ public interface IPedidoLimaService
         DateTime? fechaInicio = null,
         DateTime? fechaFin = null,
         CancellationToken ct = default);
+
+    Task<ServiceResult<PedidoLimaResponse>> AprobacionGerenciaAsync(
+        Guid id,
+        AprobacionGerenciaPedidoLimaRequest request,
+        Guid? usuarioId = null,
+        CancellationToken ct = default);
 }
