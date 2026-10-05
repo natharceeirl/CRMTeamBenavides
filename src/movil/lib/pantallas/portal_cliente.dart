@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../api/estados.dart';
 import '../api/modelos.dart';
+import '../auth/permisos.dart';
 import '../auth/sesion.dart';
 import '../formato.dart';
 import '../tema.dart';
@@ -21,6 +22,8 @@ class PantallaInicioCliente extends ConsumerWidget {
     final resumen = ref.watch(portalResumenProvider);
     final ordenes = ref.watch(ordenesProvider);
     final unidades = ref.watch(vehiculosProvider(null));
+    final vePedidos = ref.watch(sesionProvider).tienePermiso(Permisos.pedidosLimaVer);
+    final pedidos = vePedidos ? ref.watch(pedidosLimaProvider) : const AsyncValue<List<PedidoLimaApi>>.data([]);
     final nombre = resumen.value?.clienteNombre ?? ref.watch(sesionProvider).usuario?.nombre ?? '';
 
     return RefreshIndicator(
@@ -28,6 +31,7 @@ class PantallaInicioCliente extends ConsumerWidget {
         ref.invalidate(portalResumenProvider);
         ref.invalidate(ordenesProvider);
         ref.invalidate(vehiculosProvider(null));
+        if (vePedidos) ref.invalidate(pedidosLimaProvider);
       },
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
@@ -68,6 +72,21 @@ class PantallaInicioCliente extends ConsumerWidget {
               }
               return Column(children: [for (final orden in enCurso) _TarjetaOrden(orden: orden)]);
             },
+          ),
+          // Los repuestos que encargó a Lima: solo los que siguen en camino o por
+          // recoger; si no hay ninguno, la sección no aparece.
+          ...pedidos.maybeWhen(
+            data: (lista) {
+              final enCurso = lista.where((pedido) => !esPedidoFinal(pedido.estado)).toList()
+                ..sort((uno, otro) => otro.fecha.compareTo(uno.fecha));
+              return [
+                if (enCurso.isNotEmpty) ...[
+                  const _Titulo('Repuestos encargados'),
+                  for (final pedido in enCurso) _TarjetaPedido(pedido: pedido),
+                ],
+              ];
+            },
+            orElse: () => const <Widget>[],
           ),
           const _Titulo('Tus unidades'),
           unidades.when(
@@ -145,6 +164,60 @@ class _TarjetaOrden extends StatelessWidget {
               const Text('Ver avance', style: TextStyle(color: Marca.acentoBoton, fontWeight: FontWeight.w600)),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TarjetaPedido extends StatelessWidget {
+  const _TarjetaPedido({required this.pedido});
+
+  final PedidoLimaApi pedido;
+
+  @override
+  Widget build(BuildContext context) {
+    final llego = pedido.estado == EstadoPedidoLima.recibido;
+    final estimada = pedido.fechaEstimadaLlegada;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(pedido.numeroPedido, style: const TextStyle(fontWeight: FontWeight.w700)),
+                const Spacer(),
+                Text(
+                  nombresEstadoPedidoLima[pedido.estado] ?? pedido.estado,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: llego ? Marca.acento : Marca.textoSecundario,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            for (final repuesto in pedido.repuestos) Text(repuesto),
+            if (llego)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  'Ya llegó: puedes recogerlo en el taller',
+                  style: TextStyle(color: Marca.acento, fontWeight: FontWeight.w600),
+                ),
+              )
+            else if (estimada != null)
+              Text(
+                'Llegada estimada: ${dia(estimada.toLocal())}',
+                style: const TextStyle(color: Marca.textoSecundario),
+              ),
+            const SizedBox(height: 4),
+            Text('Total ${soles(pedido.total)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+          ],
         ),
       ),
     );

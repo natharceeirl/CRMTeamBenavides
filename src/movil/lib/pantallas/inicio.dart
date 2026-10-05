@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../auth/permisos.dart';
 import '../auth/sesion.dart';
 import '../tema.dart';
 import 'cambiar_password.dart';
 import 'chatbot.dart';
+import 'citas_cliente.dart';
 import 'clientes.dart';
 import 'comunes.dart';
 import 'tienda.dart';
@@ -34,8 +36,8 @@ class _Seccion {
 /// Solo las pestañas que el usuario puede ver. Así ninguna pide datos que la
 /// API le negaría con 403: el técnico, por ejemplo, no ve el tablero ni clientes.
 List<_Seccion> _seccionesPara(EstadoSesion sesion) {
-  // El cliente tiene su propia app: inicio con lo suyo, sus órdenes y sus
-  // comprobantes (docs/referencias/app-cliente.html).
+  // El cliente tiene su propia app: inicio con lo suyo, sus órdenes, sus citas
+  // y sus comprobantes (docs/referencias/app-cliente.html).
   if (sesion.soloCliente) {
     return [
       if (sesion.tienePermiso(Permisos.portalAcceso))
@@ -53,6 +55,14 @@ List<_Seccion> _seccionesPara(EstadoSesion sesion) {
           icono: Icons.build_outlined,
           iconoActivo: Icons.build,
           pantalla: PantallaOrdenes(),
+        ),
+      if (sesion.tienePermiso(Permisos.citasVer))
+        const _Seccion(
+          etiqueta: 'Citas',
+          titulo: 'Mis citas',
+          icono: Icons.event_outlined,
+          iconoActivo: Icons.event,
+          pantalla: PantallaCitasCliente(),
         ),
       if (sesion.tienePermiso(Permisos.portalAcceso))
         const _Seccion(
@@ -149,6 +159,14 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
           ],
         ),
         actions: [
+          // La agenda del personal va arriba y no en la barra inferior, que ya
+          // tiene cinco pestañas para Gerencia.
+          if (!sesion.soloCliente && sesion.tienePermiso(Permisos.citasVer))
+            IconButton(
+              tooltip: 'Agenda',
+              icon: const Icon(Icons.event_outlined),
+              onPressed: () => context.go('/agenda'),
+            ),
           IconButton(
             tooltip: 'Cambiar contraseña',
             icon: const Icon(Icons.key_outlined),
@@ -162,10 +180,15 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
         ],
       ),
       body: secciones.isEmpty
-          ? const ListaVacia(
-              mensaje: 'Tu usuario todavía no tiene pantallas asignadas. '
-                  'Pide a Gerencia que revise tus permisos.',
-            )
+          ? (sesion.errorPermisos != null
+              ? AvisoError(
+                  error: 'No se pudieron cargar tus permisos: ${sesion.errorPermisos}',
+                  alReintentar: () => ref.read(sesionProvider.notifier).reintentarPermisos(),
+                )
+              : const ListaVacia(
+                  mensaje: 'Tu usuario todavía no tiene pantallas asignadas. '
+                      'Pide a Gerencia que revise tus permisos.',
+                ))
           : IndexedStack(
               index: indice,
               children: [for (final seccion in secciones) seccion.pantalla],

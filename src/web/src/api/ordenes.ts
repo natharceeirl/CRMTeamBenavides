@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Dayjs } from 'dayjs'
 import { solicitar } from './http'
 import { avisoSegun, type AvisoExito } from './avisos'
+import { clavesPortal } from './portal'
 import type {
   ActualizarOrdenRequest,
   AgregarDetalleRequest,
@@ -68,6 +69,20 @@ export const esEstadoTerminal = (estadoId: number) =>
 export const permiteEditarDetalles = (estadoId: number) =>
   !esEstadoTerminal(estadoId) && estadoId !== ESTADO.lista
 
+/**
+ * Por qué la orden no admite cambios en sus ítems, o null si los admite. Con la
+ * orden liquidada tampoco: la venta tiene que coincidir con la orden.
+ */
+export function motivoItemsBloqueados(orden: { estadoId: number; ventaId?: string | null }): string | null {
+  if (!permiteEditarDetalles(orden.estadoId)) {
+    return `La orden está en «${nombresEstado[orden.estadoId]}» y ya no admite cambios en los ítems.`
+  }
+  if (orden.ventaId) {
+    return 'La orden ya está liquidada: anula su venta para cambiar los trabajos o repuestos.'
+  }
+  return null
+}
+
 /** Enums TipoAtencion, ModalidadAtencion y TipoFalla del backend, en el mismo orden. */
 export const TIPOS_ATENCION = [
   { value: 0, label: 'Mantenimiento preventivo' },
@@ -98,6 +113,58 @@ export const nombresPresupuesto: Record<number, string> = {
   [PRESUPUESTO.rechazado]: 'Rechazado',
 }
 
+/**
+ * Qué respuestas al presupuesto se pueden dar todavía, con la regla del backend:
+ * con la orden en Diagnóstico y algo que aprobar (total mayor a cero), y nunca
+ * después de aprobado. Si se rechazó, el cliente aún puede aprobarlo.
+ */
+export function respuestasPresupuesto(estadoOrden: number, presupuesto: number, total: number): number[] {
+  const enEtapa = estadoOrden === ESTADO.diagnostico && total > 0
+  if (!enEtapa || presupuesto === PRESUPUESTO.aprobado) return []
+  return presupuesto === PRESUPUESTO.rechazado
+    ? [PRESUPUESTO.aprobado]
+    : [PRESUPUESTO.aprobado, PRESUPUESTO.rechazado]
+}
+
+/**
+ * Cómo se muestra la respuesta al presupuesto. «Pendiente» solo mientras de verdad
+ * se espera; una orden que pasó de etapa sin respuesta queda «Sin respuesta».
+ */
+export function etiquetaPresupuesto(
+  estadoOrden: number,
+  presupuesto: number,
+  total: number,
+): { texto: string; tono: 'alerta' | 'hecho' | 'suave' | 'neutro' | 'apagado' } {
+  if (presupuesto === PRESUPUESTO.aprobado) return { texto: 'Aprobado', tono: 'hecho' }
+  if (presupuesto === PRESUPUESTO.rechazado) return { texto: 'Rechazado', tono: 'suave' }
+  if (respuestasPresupuesto(estadoOrden, presupuesto, total).length > 0) return { texto: 'Pendiente', tono: 'alerta' }
+  // Antes del diagnóstico, o sin ítems todavía, el presupuesto se está armando.
+  if (estadoOrden === ESTADO.abierta || estadoOrden === ESTADO.diagnostico) {
+    return { texto: 'En preparación', tono: 'neutro' }
+  }
+  return { texto: 'Sin respuesta', tono: 'apagado' }
+}
+
+/** El presupuesto ya está armado y espera al cliente: lo que se le pide responder. */
+export const esperaRespuestaDelCliente = (orden: {
+  estadoId: number
+  estadoPresupuestoClienteId?: number
+  total?: number
+}) =>
+  (orden.estadoPresupuestoClienteId ?? PRESUPUESTO.pendiente) === PRESUPUESTO.pendiente &&
+  respuestasPresupuesto(orden.estadoId, PRESUPUESTO.pendiente, orden.total ?? 0).length > 0
+
+/** Los estados con los nombres que entiende el cliente, como en la app. */
+export const nombresEstadoCliente: Record<number, string> = {
+  [ESTADO.abierta]: 'Recibida',
+  [ESTADO.diagnostico]: 'En diagnóstico',
+  [ESTADO.aprobada]: 'Presupuesto aprobado',
+  [ESTADO.enProceso]: 'En reparación',
+  [ESTADO.lista]: 'Lista para recoger',
+  [ESTADO.entregada]: 'Entregada',
+  [ESTADO.cancelada]: 'Cancelada',
+}
+
 /** Enum EstadoAprobacionGerencia del backend. */
 export const GERENCIA = { noAplica: 0, pendiente: 1, aprobado: 2, rechazado: 3 } as const
 
@@ -118,6 +185,10 @@ export function motivoBloqueoAprobacion(
 ): string | null {
   if (orden.estadoPresupuestoClienteId === PRESUPUESTO.rechazado) {
     return 'El cliente rechazó el presupuesto.'
+  }
+  // «Aprobada» es «presupuesto aprobado»: sin la respuesta del cliente no se aprueba.
+  if (orden.estadoPresupuestoClienteId !== PRESUPUESTO.aprobado) {
+    return 'Falta que el cliente apruebe el presupuesto.'
   }
   if (orden.estadoAprobacionGerenciaId === GERENCIA.pendiente) {
     return 'Falta la aprobación de Gerencia.'
@@ -222,8 +293,12 @@ function useAccionOrden<T>(ruta: string, exito: AvisoExito) {
         metodo: 'PUT',
         cuerpo: datos,
       }),
+    // El resumen del portal (por responder, saldo) depende de la orden.
     onSuccess: async () => {
-      await consultas.invalidateQueries({ queryKey: clavesOrdenes.todas })
+      await Promise.all([
+        consultas.invalidateQueries({ queryKey: clavesOrdenes.todas }),
+        consultas.invalidateQueries({ queryKey: clavesPortal.todas }),
+      ])
     },
   })
 }
@@ -249,6 +324,10 @@ export const useAprobacionGerencia = () =>
   )
 
 export const useAsignarTecnico = () => useAccionOrden<AsignarTecnicoRequest>('asignar-tecnico', 'Técnico asignado')
+
+/** Quien edita órdenes sin poder aprobarlas (Recepción) pide la aprobación de Gerencia, con su motivo. */
+export const useSolicitarAprobacionGerencia = () =>
+  useAccionOrden<{ observaciones: string }>('solicitar-aprobacion-gerencia', 'Aprobación solicitada a Gerencia')
 
 /** PUT /api/ordenes-servicio/{id}: datos de recepción y seguimiento de la orden. */
 export function useActualizarOrden() {

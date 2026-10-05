@@ -253,6 +253,27 @@ public static class CitaEndpoints
         .RequireAuthorization(PermisosDefinidos.CitasCancelar)
         .WithName("CancelarCita");
 
+        group.MapPut("/{id:guid}/orden-servicio", async (
+            Guid id,
+            [FromBody] VincularOrdenCitaRequest request,
+            ICitaService citaService,
+            ClaimsPrincipal user,
+            CancellationToken ct) =>
+        {
+            var usuarioId = UserIsolationHelper.ObtenerUsuarioId(user);
+            var result = await citaService.VincularOrdenAsync(id, request, usuarioId, ct);
+
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(new { mensaje = result.Error }),
+                ServiceResultStatus.Conflict => Results.Conflict(new { mensaje = result.Error }),
+                _ => Results.BadRequest(new { mensaje = result.Error })
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.CitasEditar)
+        .WithName("VincularOrdenCita");
+
         return app;
     }
 }

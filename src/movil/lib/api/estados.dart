@@ -52,6 +52,17 @@ class EstadoPresupuesto {
   static const rechazado = 2;
 }
 
+/// Qué respuestas al presupuesto se pueden dar todavía, con la regla del backend:
+/// con la orden en Diagnóstico y algo que aprobar (total mayor a cero), y nunca
+/// después de aprobado. Si se rechazó, el cliente aún puede aprobarlo.
+List<int> respuestasPresupuesto(int estadoOrden, int presupuesto, double total) {
+  final enEtapa = estadoOrden == EstadoOrden.diagnostico && total > 0;
+  if (!enEtapa || presupuesto == EstadoPresupuesto.aprobado) return const [];
+  return presupuesto == EstadoPresupuesto.rechazado
+      ? const [EstadoPresupuesto.aprobado]
+      : const [EstadoPresupuesto.aprobado, EstadoPresupuesto.rechazado];
+}
+
 const nombresEstadoPresupuesto = <int, String>{
   EstadoPresupuesto.pendiente: 'Pendiente',
   EstadoPresupuesto.aprobado: 'Aprobado',
@@ -80,6 +91,10 @@ const nombresEstadoGerencia = <int, String>{
 String? motivoBloqueoAprobacion({int? presupuesto, int? gerencia}) {
   if (presupuesto == EstadoPresupuesto.rechazado) {
     return 'El cliente rechazó el presupuesto.';
+  }
+  // «Aprobada» es «presupuesto aprobado»: sin la respuesta del cliente no se aprueba.
+  if (presupuesto != EstadoPresupuesto.aprobado) {
+    return 'Falta que el cliente apruebe el presupuesto.';
   }
   if (gerencia == EstadoGerencia.pendiente) {
     return 'Falta la aprobación de Gerencia.';
@@ -142,9 +157,10 @@ List<int> tiposDeItemPermitidos({required bool puedeFijarPrecios}) => [
 /// Enum TipoAfectacionIgv del backend.
 const nombresAfectacionIgv = <int, String>{0: 'Gravado', 1: 'Exonerado', 2: 'Inafecto'};
 
-/// La orden admite ítems nuevos salvo en Lista o cerrada.
-bool permiteEditarItems(int estadoId) =>
-    !esEstadoTerminal(estadoId) && estadoId != EstadoOrden.lista;
+/// La orden admite ítems nuevos salvo en Lista o cerrada, y tampoco liquidada:
+/// la venta tiene que coincidir con la orden.
+bool permiteEditarItems(int estadoId, {bool liquidada = false}) =>
+    !liquidada && !esEstadoTerminal(estadoId) && estadoId != EstadoOrden.lista;
 
 /// Entregada y Cancelada no admiten más cambios.
 bool esEstadoTerminal(int estadoId) =>
@@ -267,3 +283,65 @@ List<PasoAvance> pasosDeAvance({
       }(),
   ];
 }
+
+/// Estados de la cita (EstadoCita del backend). Viajan como texto, no como
+/// número: el enum lleva JsonStringEnumConverter.
+class EstadoCita {
+  const EstadoCita._();
+
+  static const pendiente = 'Pendiente';
+  static const confirmada = 'Confirmada';
+  static const enTaller = 'EnTaller';
+  static const completada = 'Completada';
+  static const cancelada = 'Cancelada';
+  static const noAsistio = 'NoAsistio';
+}
+
+const nombresEstadoCita = <String, String>{
+  EstadoCita.pendiente: 'Pendiente',
+  EstadoCita.confirmada: 'Confirmada',
+  EstadoCita.enTaller: 'En taller',
+  EstadoCita.completada: 'Completada',
+  EstadoCita.cancelada: 'Cancelada',
+  EstadoCita.noAsistio: 'No asistió',
+};
+
+bool esCitaFinal(String estado) =>
+    estado == EstadoCita.completada || estado == EstadoCita.cancelada || estado == EstadoCita.noAsistio;
+
+/// La cita se cancela mientras la unidad no haya llegado al taller (CitaService.CancelarAsync).
+bool citaAntesDelTaller(String estado) => estado == EstadoCita.pendiente || estado == EstadoCita.confirmada;
+
+/// A qué estados puede pasar una cita (CitaService.CambiarEstadoAsync): no se
+/// retrocede desde el taller y una pendiente no se completa sin pasar por él.
+List<String> siguientesEstadosCita(String estado) => switch (estado) {
+      EstadoCita.pendiente => const [EstadoCita.confirmada, EstadoCita.enTaller, EstadoCita.noAsistio],
+      EstadoCita.confirmada => const [EstadoCita.enTaller, EstadoCita.noAsistio],
+      EstadoCita.enTaller => const [EstadoCita.completada],
+      _ => const [],
+    };
+
+/// Estados del pedido de Lima (EstadoPedidoLima del backend), como texto.
+class EstadoPedidoLima {
+  const EstadoPedidoLima._();
+
+  static const pendiente = 'Pendiente';
+  static const confirmado = 'Confirmado';
+  static const enPreparacion = 'EnPreparacion';
+  static const enTransito = 'EnTransito';
+  static const recibido = 'Recibido';
+  static const entregado = 'Entregado';
+  static const cancelado = 'Cancelado';
+}
+
+const nombresEstadoPedidoLima = <String, String>{
+  EstadoPedidoLima.pendiente: 'Pendiente',
+  EstadoPedidoLima.confirmado: 'Confirmado',
+  EstadoPedidoLima.enPreparacion: 'En preparación',
+  EstadoPedidoLima.enTransito: 'En camino',
+  EstadoPedidoLima.recibido: 'Listo para recoger',
+  EstadoPedidoLima.entregado: 'Entregado',
+  EstadoPedidoLima.cancelado: 'Cancelado',
+};
+
+bool esPedidoFinal(String estado) => estado == EstadoPedidoLima.entregado || estado == EstadoPedidoLima.cancelado;

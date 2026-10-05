@@ -46,6 +46,12 @@ public interface ICitaService
         Guid? soloClienteId = null,
         CancellationToken ct = default);
 
+    Task<ServiceResult<CitaDetalleResponse>> VincularOrdenAsync(
+        Guid id,
+        VincularOrdenCitaRequest request,
+        Guid? usuarioId,
+        CancellationToken ct = default);
+
     Task<ServiceResult<CitaDetalleResponse>> CancelarAsync(
         Guid id,
         CancelarCitaRequest request,

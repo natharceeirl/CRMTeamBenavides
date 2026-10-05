@@ -26,7 +26,14 @@ class Permisos {
   static const ventasVer = 'ventas.ver';
   static const cajaConsultar = 'caja.consultar';
   static const reportesVerOperativos = 'reportes.ver_operativos';
+  /// Montos de ventas y rentabilidad: solo Gerencia.
   static const reportesVerFinancieros = 'reportes.ver_financieros';
+
+  static const citasVer = 'citas.ver';
+  static const citasCrear = 'citas.crear';
+  static const citasCancelar = 'citas.cancelar';
+  static const citasEditar = 'citas.editar';
+  static const pedidosLimaVer = 'pedidos_lima.ver';
 
   static const verOrdenes = [ordenesVerTodas, ordenesVerAsignadas];
 }

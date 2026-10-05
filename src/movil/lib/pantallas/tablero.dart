@@ -13,7 +13,10 @@ class PantallaTablero extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final resumen = ref.watch(resumenProvider);
-    final veCaja = ref.watch(sesionProvider).tienePermiso(Permisos.cajaConsultar);
+    final sesion = ref.watch(sesionProvider);
+    final veCaja = sesion.tienePermiso(Permisos.cajaConsultar);
+    // Los montos son de Gerencia; el resto ve cuántas ventas hubo.
+    final veMontos = sesion.tienePermiso(Permisos.reportesVerFinancieros);
 
     return resumen.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -39,11 +42,9 @@ class PantallaTablero extends ConsumerWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                _Indicador(
-                  etiqueta: 'Vendido',
-                  valor: soles(datos.montoVentas),
-                  compacto: true,
-                ),
+                veMontos
+                    ? _Indicador(etiqueta: 'Vendido', valor: soles(datos.montoVentas), compacto: true)
+                    : _Indicador(etiqueta: 'Ventas', valor: '${datos.ventasConfirmadas}'),
                 const SizedBox(width: 12),
                 _Indicador(
                   etiqueta: 'Stock bajo',

@@ -5,20 +5,20 @@ import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { useAuditoria, type FiltrosAuditoria } from '../api/auditoria'
 import type { EventoAuditoriaResponse } from '../api/tipos'
-import { cambiosDelDetalle, camposDelDetalle, nombreEntidad, nombresEntidad } from '../utils/auditoria'
+import { cambiosDelDetalle, camposDelDetalle, nombreAccion, nombreEntidad, nombresAccion, nombresEntidad } from '../utils/auditoria'
+import { useUsuarios } from '../api/usuarios'
+import { useSesion } from '../auth/sesion'
+import { PERMISOS } from '../auth/acceso'
 import { fechaHora } from '../utils/formato'
 
 const opcionesEntidad = Object.entries(nombresEntidad).map(([valor, etiqueta]) => ({ value: valor, label: etiqueta }))
-const opcionesAccion = ['Crear', 'Actualizar', 'Eliminar', 'Apertura', 'Cierre', 'Ingreso', 'Egreso'].map((accion) => ({
-  value: accion,
-  label: accion,
-}))
+const opcionesAccion = Object.entries(nombresAccion).map(([valor, etiqueta]) => ({ value: valor, label: etiqueta }))
 const opcionesLimite = [50, 100, 200].map((limite) => ({ value: limite, label: `Últimos ${limite}` }))
 
 const columnas: TableProps<EventoAuditoriaResponse>['columns'] = [
   { title: 'Fecha', dataIndex: 'fecha', className: 'num', render: (fecha: string) => fechaHora(fecha) },
   { title: 'Usuario', dataIndex: 'usuarioNombre', render: (nombre: string | null) => nombre ?? 'Sistema' },
-  { title: 'Acción', dataIndex: 'accion', render: (accion: string) => <Tag style={{ marginInlineEnd: 0 }}>{accion}</Tag> },
+  { title: 'Acción', dataIndex: 'accion', render: (accion: string) => <Tag style={{ marginInlineEnd: 0 }}>{nombreAccion(accion)}</Tag> },
   { title: 'Registro', dataIndex: 'entidad', render: (entidad: string) => nombreEntidad(entidad) },
   {
     title: 'Id',
@@ -71,6 +71,9 @@ export function AuditoriaPage() {
   const [accion, setAccion] = useState<string>()
   const [rango, setRango] = useState<[Dayjs | null, Dayjs | null] | null>(null)
   const [limite, setLimite] = useState(50)
+  const [usuarioId, setUsuarioId] = useState<string>()
+  const { tienePermiso } = useSesion()
+  const usuarios = useUsuarios(tienePermiso(PERMISOS.usuariosVer))
 
   const filtros: FiltrosAuditoria = {
     entidad,
@@ -78,6 +81,7 @@ export function AuditoriaPage() {
     fechaDesde: rango?.[0]?.startOf('day').toISOString(),
     fechaHasta: rango?.[1]?.endOf('day').toISOString(),
     limite,
+    usuarioId,
   }
   const eventos = useAuditoria(filtros)
 
@@ -104,6 +108,18 @@ export function AuditoriaPage() {
               options={opcionesAccion}
               style={{ width: 180 }}
             />
+            {usuarios.data && (
+              <Select
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                placeholder="Usuario"
+                value={usuarioId}
+                onChange={setUsuarioId}
+                options={usuarios.data.map((usuario) => ({ value: usuario.id, label: usuario.nombreCompleto }))}
+                style={{ width: 220 }}
+              />
+            )}
             <DatePicker.RangePicker value={rango} onChange={setRango} format="DD/MM/YYYY" allowEmpty={[true, true]} />
             <Select value={limite} onChange={setLimite} options={opcionesLimite} style={{ width: 160 }} />
           </div>
@@ -116,10 +132,6 @@ export function AuditoriaPage() {
             expandable={{ expandedRowRender: (evento) => <DetalleEvento evento={evento} /> }}
             locale={{ emptyText: 'No hay eventos con esos filtros' }}
           />
-          <p className="texto-secundario" style={{ marginTop: 16 }}>
-            Por ahora se registran la caja chica, el tipo de cambio y la configuración. El resto de módulos se suma con
-            la auditoría automática del backend.
-          </p>
         </section>
       </div>
     </>

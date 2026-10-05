@@ -1,6 +1,7 @@
 /** Nombres legibles de lo que registra el backend (EventoAuditoria.Entidad). */
 export const nombresEntidad: Record<string, string> = {
   CajaChica: 'Caja chica',
+  Inventario: 'Inventario',
   MovimientoCajaChica: 'Movimiento de caja',
   TipoCambio: 'Tipo de cambio',
   ConfiguracionEmpresa: 'Configuración',
@@ -15,6 +16,24 @@ export const nombresEntidad: Record<string, string> = {
 }
 
 export const nombreEntidad = (entidad: string) => nombresEntidad[entidad] ?? entidad
+
+/** Acciones que registra el backend (EventoAuditoria.Accion), con su nombre legible. */
+export const nombresAccion: Record<string, string> = {
+  Crear: 'Crear',
+  Actualizar: 'Actualizar',
+  CambioEstado: 'Cambio de estado',
+  Anular: 'Anular',
+  Ajuste: 'Ajuste de stock',
+  PresupuestoCliente: 'Respuesta al presupuesto',
+  SolicitarAprobacionGerencia: 'Solicitud a Gerencia',
+  AprobacionGerencia: 'Decisión de Gerencia',
+  Apertura: 'Apertura',
+  Cierre: 'Cierre',
+  IngresoCaja: 'Ingreso de caja',
+  EgresoCaja: 'Egreso de caja',
+}
+
+export const nombreAccion = (accion: string) => nombresAccion[accion] ?? accion
 
 /** «MontoApertura» → «Monto apertura». */
 export function etiquetaDeCampo(clave: string): string {

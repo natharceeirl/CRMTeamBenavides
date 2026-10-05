@@ -1,8 +1,7 @@
 import { Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, type TableProps } from 'antd'
 import { useState } from 'react'
 import { useSesion } from '../auth/sesion'
-import { ACCESO_ORDENES, PERMISOS, cumpleAcceso } from '../auth/acceso'
-import { useOrden } from '../api/ordenes'
+import { PERMISOS } from '../auth/acceso'
 import {
   ESTADO_VENTA,
   nombresEstadoVenta,
@@ -74,8 +73,7 @@ const TIPOS_COMPROBANTE = [
 ]
 
 export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props>) {
-  const sesion = useSesion()
-  const { tienePermiso } = sesion
+  const { tienePermiso } = useSesion()
   const puedeRegistrar = tienePermiso(PERMISOS.ventasCrear)
   const puedeAnular = tienePermiso(PERMISOS.ventasAnular)
   const [mostrarForm, setMostrarForm] = useState(false)
@@ -89,12 +87,7 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
   const anular = useAnularComprobante()
   const pagar = useRegistrarPagoVenta()
   const datos = venta.data
-  // La venta solo trae el id de la orden: el número (OS-000024) se consulta
-  // aparte, y solo si el usuario puede ver órdenes.
-  const orden = useOrden(
-    datos?.ordenServicioId && cumpleAcceso(ACCESO_ORDENES, sesion) ? datos.ordenServicioId : undefined,
-  )
-  const numeroOrden = orden.data?.numeroOrden ?? null
+  const numeroOrden = datos?.numeroOrdenServicio ?? null
 
   const handleCerrar = () => {
     setMostrarForm(false)

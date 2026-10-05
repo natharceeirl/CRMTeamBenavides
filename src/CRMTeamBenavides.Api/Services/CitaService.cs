@@ -35,6 +35,11 @@ public class CitaService : ICitaService
         };
     }
 
+    private const string MensajeFechaPasada = "La cita no puede quedar en el pasado.";
+
+    /// <summary>Unos minutos de tolerancia por la diferencia de reloj entre el teléfono y el servidor.</summary>
+    private static bool EsPasado(DateTime fechaUtc) => fechaUtc < DateTime.UtcNow.AddMinutes(-5);
+
     public async Task<List<CitaListResponse>> GetAllAsync(
         Guid? soloClienteId = null,
         Guid? clienteId = null,
@@ -161,6 +166,11 @@ public class CitaService : ICitaService
         }
 
         var fechaInicio = NormalizarUtc(request.FechaHoraProgramada);
+        if (EsPasado(fechaInicio))
+        {
+            return ServiceResult<CitaDetalleResponse>.Invalid(MensajeFechaPasada);
+        }
+
         var duracion = request.DuracionMinutos is > 0 ? request.DuracionMinutos.Value : 60;
         var fechaFin = fechaInicio.AddMinutes(duracion);
 
@@ -245,6 +255,12 @@ public class CitaService : ICitaService
         }
 
         var fechaInicio = NormalizarUtc(request.FechaHoraProgramada);
+        // Corregir el motivo de una cita ya pasada se permite; moverla al pasado, no.
+        if (fechaInicio != cita.FechaHoraProgramada && EsPasado(fechaInicio))
+        {
+            return ServiceResult<CitaDetalleResponse>.Invalid(MensajeFechaPasada);
+        }
+
         var duracion = request.DuracionMinutos is > 0 ? request.DuracionMinutos.Value : cita.DuracionMinutos;
         var fechaFin = fechaInicio.AddMinutes(duracion);
 
@@ -307,6 +323,11 @@ public class CitaService : ICitaService
         }
 
         var fechaInicio = NormalizarUtc(request.NuevaFechaHoraProgramada);
+        if (EsPasado(fechaInicio))
+        {
+            return ServiceResult<CitaDetalleResponse>.Invalid(MensajeFechaPasada);
+        }
+
         var duracion = request.NuevaDuracionMinutos is > 0 ? request.NuevaDuracionMinutos.Value : cita.DuracionMinutos;
         var fechaFin = fechaInicio.AddMinutes(duracion);
 
@@ -322,9 +343,11 @@ public class CitaService : ICitaService
         cita.ModificadoPorId = usuarioId;
         cita.FechaModificacion = DateTime.UtcNow;
 
+        // Las fechas se guardan en UTC, pero la nota la lee una persona: va en hora de Perú.
+        var cambio = $"Cita reprogramada de {HoraPeru.Texto(fechaAnterior)} a {HoraPeru.Texto(fechaInicio)}";
         var detalleObs = string.IsNullOrWhiteSpace(request.MotivoReprogramacion)
-            ? $"Cita reprogramada de {fechaAnterior:yyyy-MM-dd HH:mm} a {fechaInicio:yyyy-MM-dd HH:mm}"
-            : $"Cita reprogramada de {fechaAnterior:yyyy-MM-dd HH:mm} a {fechaInicio:yyyy-MM-dd HH:mm}. Motivo: {request.MotivoReprogramacion.Trim()}";
+            ? cambio
+            : $"{cambio}. Motivo: {request.MotivoReprogramacion.Trim()}";
 
         _context.HistorialEstadosCita.Add(new HistorialEstadoCita
         {
@@ -341,6 +364,72 @@ public class CitaService : ICitaService
 
         await _context.SaveChangesAsync(ct);
         return await GetByIdAsync(cita.Id, soloClienteId, ct);
+    }
+
+    /// <summary>
+    /// Vincula la orden que se abrió al recibir la unidad de la cita: tiene que ser de
+    /// la misma unidad y del mismo cliente. Si la cita no estaba «En taller», pasa a ese
+    /// estado, porque abrir la orden es recibir la unidad.
+    /// </summary>
+    public async Task<ServiceResult<CitaDetalleResponse>> VincularOrdenAsync(
+        Guid id,
+        VincularOrdenCitaRequest request,
+        Guid? usuarioId,
+        CancellationToken ct = default)
+    {
+        var cita = await _context.Citas.FirstOrDefaultAsync(c => c.Id == id && c.Activo, ct);
+        if (cita is null)
+        {
+            return ServiceResult<CitaDetalleResponse>.NotFound("Cita no encontrada.");
+        }
+
+        if (cita.Estado is EstadoCita.Cancelada or EstadoCita.NoAsistio)
+        {
+            return ServiceResult<CitaDetalleResponse>.Invalid("No se puede vincular una orden a una cita cancelada o sin asistencia.");
+        }
+
+        if (cita.OrdenServicioId.HasValue && cita.OrdenServicioId != request.OrdenServicioId)
+        {
+            return ServiceResult<CitaDetalleResponse>.Conflict("La cita ya tiene una orden de servicio vinculada.");
+        }
+
+        var orden = await _context.OrdenesServicio
+            .AsNoTracking()
+            .FirstOrDefaultAsync(o => o.Id == request.OrdenServicioId && o.Activo, ct);
+        if (orden is null)
+        {
+            return ServiceResult<CitaDetalleResponse>.Invalid("La orden de servicio no existe o está inactiva.");
+        }
+
+        if (orden.VehiculoId != cita.VehiculoId || (orden.ClienteId != Guid.Empty && orden.ClienteId != cita.ClienteId))
+        {
+            return ServiceResult<CitaDetalleResponse>.Invalid("La orden debe ser de la misma unidad y del mismo cliente que la cita.");
+        }
+
+        var estadoAnterior = cita.Estado;
+        cita.OrdenServicioId = orden.Id;
+        if (cita.Estado is EstadoCita.Pendiente or EstadoCita.Confirmada)
+        {
+            cita.Estado = EstadoCita.EnTaller;
+        }
+        cita.ModificadoPorId = usuarioId;
+        cita.FechaModificacion = DateTime.UtcNow;
+
+        _context.HistorialEstadosCita.Add(new HistorialEstadoCita
+        {
+            CitaId = cita.Id,
+            EstadoAnterior = estadoAnterior,
+            EstadoNuevo = cita.Estado,
+            UsuarioId = usuarioId,
+            Fecha = DateTime.UtcNow,
+            Observacion = $"Orden {orden.NumeroOrden ?? "de servicio"} abierta al recibir la unidad",
+            CreadoPorId = usuarioId,
+            FechaCreacion = DateTime.UtcNow,
+            Activo = true
+        });
+
+        await _context.SaveChangesAsync(ct);
+        return await GetByIdAsync(cita.Id, null, ct);
     }
 
     public async Task<ServiceResult<CitaDetalleResponse>> CambiarEstadoAsync(

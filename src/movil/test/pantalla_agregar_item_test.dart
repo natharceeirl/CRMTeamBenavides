@@ -107,6 +107,8 @@ void main() {
       expect(permiteEditarItems(EstadoOrden.lista), isFalse);
       expect(permiteEditarItems(EstadoOrden.entregada), isFalse);
       expect(permiteEditarItems(EstadoOrden.cancelada), isFalse);
+      // Liquidada, la venta tiene que coincidir con la orden.
+      expect(permiteEditarItems(EstadoOrden.enProceso, liquidada: true), isFalse);
     });
   });
 

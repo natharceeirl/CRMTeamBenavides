@@ -282,6 +282,66 @@ class ApiHttp {
     return datos.map(AtencionServicioApi.desdeJson).toList();
   }
 
+  /// Sin fechas trae todas; la agenda del personal pide solo su semana.
+  Future<List<CitaApi>> citas({DateTime? desde, DateTime? hasta}) async {
+    final parametros = <String, String>{
+      if (desde != null) 'fechaInicio': desde.toUtc().toIso8601String(),
+      if (hasta != null) 'fechaFin': hasta.toUtc().toIso8601String(),
+    };
+    final consulta = parametros.isEmpty ? '' : '?${Uri(queryParameters: parametros).query}';
+    final datos = await _lista('/api/citas$consulta');
+    return datos.map(CitaApi.desdeJson).toList();
+  }
+
+  Future<void> cambiarEstadoCita(String id, String nuevoEstado, {String? observacion}) async {
+    try {
+      await _dio.put<Map<String, dynamic>>(
+        '/api/citas/$id/estado',
+        data: {'nuevoEstado': nuevoEstado, 'observacion': observacion == null || observacion.isEmpty ? null : observacion},
+      );
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
+  Future<List<PedidoLimaApi>> pedidosLima() async {
+    final datos = await _lista('/api/pedidos-lima');
+    return datos.map(PedidoLimaApi.desdeJson).toList();
+  }
+
+  /// El cliente no manda su id: la API toma el del usuario y verifica que la
+  /// unidad sea suya. Sin duración, el backend reserva una hora.
+  Future<void> agendarCita({
+    required String vehiculoId,
+    required DateTime fechaHora,
+    required String motivo,
+    String? observaciones,
+  }) async {
+    try {
+      await _dio.post<Map<String, dynamic>>(
+        '/api/citas',
+        data: {
+          'clienteId': null,
+          'vehiculoId': vehiculoId,
+          'fechaHoraProgramada': fechaHora.toUtc().toIso8601String(),
+          'duracionMinutos': null,
+          'motivo': motivo,
+          'observaciones': observaciones == null || observaciones.isEmpty ? null : observaciones,
+        },
+      );
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
+  Future<void> cancelarCita(String id, String motivo) async {
+    try {
+      await _dio.put<Map<String, dynamic>>('/api/citas/$id/cancelar', data: {'motivoCancelacion': motivo});
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
   Future<CajaActualApi> cajaActual() async {
     final datos = await _pedir<Map<String, dynamic>>('/api/caja-chica/actual');
     return CajaActualApi.desdeJson(datos);
@@ -433,11 +493,14 @@ class ApiHttp {
   }
 
   String _mensajeDeError(DioException fallo) {
+    // Unos módulos responden { error }, otros (citas, pedidos) { mensaje }.
     final cuerpo = fallo.response?.data;
-    if (cuerpo is Map && cuerpo['error'] is String) {
-      final detalle = cuerpo['error'] as String;
-      if (detalle.isNotEmpty) {
-        return detalle;
+    if (cuerpo is Map) {
+      for (final clave in const ['error', 'mensaje']) {
+        final detalle = cuerpo[clave];
+        if (detalle is String && detalle.isNotEmpty) {
+          return detalle;
+        }
       }
     }
 

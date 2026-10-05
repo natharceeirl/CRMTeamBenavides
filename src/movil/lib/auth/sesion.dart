@@ -12,6 +12,7 @@ class EstadoSesion {
     this.permisos = const [],
     this.clienteId,
     this.cargando = false,
+    this.errorPermisos,
   });
 
   final UsuarioSesion? usuario;
@@ -26,6 +27,10 @@ class EstadoSesion {
   final String? clienteId;
 
   final bool cargando;
+
+  /// Por qué no llegaron los roles y permisos de /api/auth/me. Sin esto, la app
+  /// decía «no tienes pantallas asignadas», que es otra cosa.
+  final String? errorPermisos;
 
   bool get autenticado => usuario != null;
 
@@ -91,7 +96,10 @@ class SesionNotifier extends Notifier<EstadoSesion> {
   Future<void> _cargarUsuario(String accessToken) async {
     final delToken = leerUsuarioDelToken(accessToken);
     state = EstadoSesion(usuario: delToken);
+    await _cargarPermisos(delToken);
+  }
 
+  Future<void> _cargarPermisos(UsuarioSesion? delToken) async {
     try {
       final yo = await ref.read(apiProvider).usuarioActual();
       state = EstadoSesion(
@@ -100,10 +108,18 @@ class SesionNotifier extends Notifier<EstadoSesion> {
         permisos: yo.permisos,
         clienteId: yo.clienteId,
       );
-    } on ErrorApi {
-      // Si /me falla se sigue con lo que trae el token: no vale la pena
-      // echar al usuario de la app por esto.
+    } on ErrorApi catch (error) {
+      // Si /me falla se sigue con lo que trae el token: no vale la pena echar
+      // al usuario de la app por esto, pero la pantalla dice qué pasó.
+      state = EstadoSesion(usuario: delToken, errorPermisos: error.mensaje);
     }
+  }
+
+  /// Vuelve a pedir los roles y permisos después de un fallo de /api/auth/me.
+  Future<void> reintentarPermisos() async {
+    final usuario = state.usuario;
+    state = EstadoSesion(usuario: usuario, cargando: true);
+    await _cargarPermisos(usuario);
   }
 
   Future<void> entrar(String email, String password) async {
@@ -199,3 +215,18 @@ final ventasProvider = FutureProvider.autoDispose<List<VentaApi>>(
 final ventaProvider = FutureProvider.autoDispose.family<VentaDetalleApi, String>(
   (ref, id) => ref.watch(apiProvider).venta(id),
 );
+
+final citasProvider = FutureProvider.autoDispose<List<CitaApi>>(
+  (ref) => ref.watch(apiProvider).citas(),
+);
+
+final pedidosLimaProvider = FutureProvider.autoDispose<List<PedidoLimaApi>>(
+  (ref) => ref.watch(apiProvider).pedidosLima(),
+);
+
+/// Las citas de hoy y de los seis días siguientes, para la agenda del personal.
+final agendaProvider = FutureProvider.autoDispose<List<CitaApi>>((ref) {
+  final hoy = DateTime.now();
+  final desde = DateTime(hoy.year, hoy.month, hoy.day);
+  return ref.watch(apiProvider).citas(desde: desde, hasta: desde.add(const Duration(days: 7)));
+});

@@ -27,6 +27,7 @@ public class VentaService : IVentaService
     {
         var query = _context.Ventas
             .Include(v => v.Cliente)
+            .Include(v => v.OrdenServicio)
             .Include(v => v.Detalles)
             .Include(v => v.Pagos)
             .Include(v => v.Comprobante)
@@ -99,7 +100,8 @@ public class VentaService : IVentaService
                 estadoPago,
                 estadoComprobante,
                 (int)v.EstadoAprobacionGerencia,
-                v.EstadoAprobacionGerencia.ToString());
+                v.EstadoAprobacionGerencia.ToString(),
+                v.OrdenServicio?.NumeroOrden);
         }).ToList();
     }
 
@@ -107,6 +109,7 @@ public class VentaService : IVentaService
     {
         var venta = await _context.Ventas
             .Include(v => v.Cliente)
+            .Include(v => v.OrdenServicio)
             .Include(v => v.Comprobante)
             .Include(v => v.Detalles.Where(d => d.Activo))
                 .ThenInclude(d => d.Producto)
@@ -159,6 +162,12 @@ public class VentaService : IVentaService
         // -------------------------------------------------------------------
         if (request.OrdenServicioId.HasValue)
         {
+            // La orden se bloquea mientras se liquida: dos liquidaciones simultáneas
+            // no deben pasar las dos el control de venta vigente.
+            await using var transaccionOs = await _context.Database.BeginTransactionAsync();
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT \"Id\" FROM \"OrdenesServicio\" WHERE \"Id\" = {request.OrdenServicioId.Value} FOR UPDATE");
+
             var ordenServicio = await _context.OrdenesServicio
                 .Include(o => o.Detalles.Where(d => d.Activo))
                     .ThenInclude(d => d.Producto)
@@ -175,6 +184,23 @@ public class VentaService : IVentaService
             if (ordenServicio.ClienteId != request.ClienteId)
             {
                 return ServiceResult<VentaDetalleResponse>.Invalid("El cliente indicado no coincide con el cliente de la orden de servicio.");
+            }
+
+            // Se liquida el trabajo terminado: antes de «Lista» los ítems todavía cambian.
+            if (ordenServicio.Estado is not (EstadoOrdenServicio.Lista or EstadoOrdenServicio.Entregada))
+            {
+                return ServiceResult<VentaDetalleResponse>.Invalid(
+                    "La orden se liquida cuando está lista o entregada.");
+            }
+
+            // Una orden se liquida una sola vez: sus repuestos ya salieron del stock y
+            // sus adelantos ya pasaron a esa venta. Para rehacerla, primero se anula.
+            var yaLiquidada = await _context.Ventas.AnyAsync(v =>
+                v.OrdenServicioId == ordenServicio.Id && v.Activo && v.Estado != EstadoVenta.Anulada);
+            if (yaLiquidada)
+            {
+                return ServiceResult<VentaDetalleResponse>.Conflict(
+                    "La orden de servicio ya tiene una venta vigente. Anúlala antes de liquidarla de nuevo.");
             }
 
             var ventaOs = new Venta
@@ -333,6 +359,7 @@ public class VentaService : IVentaService
 
             _context.Ventas.Add(ventaOs);
             await _context.SaveChangesAsync();
+            await transaccionOs.CommitAsync();
 
             await _auditoriaService.RegistrarEventoAsync(
                 usuarioId,
@@ -1228,7 +1255,8 @@ public class VentaService : IVentaService
                 .ToList(),
             estadoComprobante,
             (int)v.EstadoAprobacionGerencia,
-            v.EstadoAprobacionGerencia.ToString());
+            v.EstadoAprobacionGerencia.ToString(),
+            v.OrdenServicio?.NumeroOrden);
     }
 
     private static ComprobanteResponse MapToComprobanteResponse(Comprobante c) => new(

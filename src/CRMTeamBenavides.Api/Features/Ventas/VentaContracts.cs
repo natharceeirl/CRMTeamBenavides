@@ -35,7 +35,8 @@ public record VentaResponse(
     string EstadoPago = "Pendiente",
     string EstadoComprobante = "Pendiente",
     int EstadoAprobacionGerenciaId = 0,
-    string EstadoAprobacionGerencia = "NoAplica");
+    string EstadoAprobacionGerencia = "NoAplica",
+    string? NumeroOrdenServicio = null);
 
 public record VentaDetalleResponse(
     Guid Id,
@@ -61,7 +62,8 @@ public record VentaDetalleResponse(
     List<PagoResponse>? Pagos = null,
     string EstadoComprobante = "Pendiente",
     int EstadoAprobacionGerenciaId = 0,
-    string EstadoAprobacionGerencia = "NoAplica");
+    string EstadoAprobacionGerencia = "NoAplica",
+    string? NumeroOrdenServicio = null);
 
 public record DetalleVentaResponse(
     Guid Id,

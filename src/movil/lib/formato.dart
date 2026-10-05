@@ -19,3 +19,23 @@ String fechaHora(DateTime? fecha) {
   final local = fecha.toLocal();
   return '${_dos(local.day)}/${_dos(local.month)} ${_dos(local.hour)}:${_dos(local.minute)}';
 }
+
+const _dias = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+/// El día con su nombre: «Lun 05/10».
+String diaConNombre(DateTime fecha) {
+  final local = fecha.toLocal();
+  return '${_dias[local.weekday - 1]} ${_dos(local.day)}/${_dos(local.month)}';
+}
+
+/// Fecha de una cita, con el día de la semana: «Lun 05/10 · 09:00».
+String fechaConDia(DateTime fecha) {
+  final local = fecha.toLocal();
+  return '${diaConNombre(local)} · ${_dos(local.hour)}:${_dos(local.minute)}';
+}
+
+/// Solo el día: «05/10/2026».
+String dia(DateTime fecha) => '${_dos(fecha.day)}/${_dos(fecha.month)}/${fecha.year}';
+
+/// Hora de 24 horas: «09:00».
+String horaMinuto(int hora, int minuto) => '${_dos(hora)}:${_dos(minuto)}';

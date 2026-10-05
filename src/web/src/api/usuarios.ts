@@ -14,10 +14,11 @@ export const clavesUsuarios = {
   roles: (usuarioId: string) => ['usuarios', usuarioId, 'roles'] as const,
 }
 
-export function useUsuarios() {
+export function useUsuarios(habilitado = true) {
   return useQuery({
     queryKey: clavesUsuarios.todos,
     queryFn: () => solicitar<UsuarioResponse[]>('/usuarios'),
+    enabled: habilitado,
   })
 }
 

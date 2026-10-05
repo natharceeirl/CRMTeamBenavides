@@ -27,6 +27,10 @@ public record CambiarEstadoCitaRequest(
     [Required] EstadoCita NuevoEstado,
     string? Observacion);
 
+/// <summary>La orden que se abrió al recibir la unidad de la cita.</summary>
+public record VincularOrdenCitaRequest(
+    [Required] Guid OrdenServicioId);
+
 public record CancelarCitaRequest(
     [Required] string MotivoCancelacion);
 

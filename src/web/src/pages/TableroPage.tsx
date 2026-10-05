@@ -74,6 +74,8 @@ export function TableroPage() {
   // El vendedor ve el tablero pero no las órdenes del taller.
   const veOrdenes = cumpleAcceso(ACCESO_ORDENES, sesion)
   const puedeCrearOrden = sesion.tienePermiso(PERMISOS.ordenesCrear)
+  // Los montos son de Gerencia (reportes.ver_financieros); el resto ve cuántas ventas hubo.
+  const veMontos = sesion.tienePermiso(PERMISOS.reportesVerFinancieros)
 
   const rango = rangoDelPeriodo(periodo)
   const resumen = useResumenDashboard(rango)
@@ -109,11 +111,13 @@ export function TableroPage() {
           items={[
             { etiqueta: 'En taller', valor: datos ? enTaller(datos) : '—' },
             { etiqueta: 'Listas para entrega', valor: datos?.ordenesServicio.lista ?? '—' },
-            {
-              etiqueta: `Vendido · ${periodo.toLowerCase()}`,
-              valor: datos ? `S/ ${entero(Math.round(datos.ventas.montoConfirmadas))}` : '—',
-              compacto: true,
-            },
+            veMontos
+              ? {
+                  etiqueta: `Vendido · ${periodo.toLowerCase()}`,
+                  valor: datos ? `S/ ${entero(Math.round(datos.ventas.montoConfirmadas))}` : '—',
+                  compacto: true,
+                }
+              : { etiqueta: `Ventas · ${periodo.toLowerCase()}`, valor: datos?.ventas.confirmadas ?? '—' },
             {
               etiqueta: 'Productos con stock bajo',
               valor: datos?.inventario.productosConStockBajo ?? '—',

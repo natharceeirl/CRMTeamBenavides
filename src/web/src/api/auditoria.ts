@@ -5,6 +5,7 @@ import type { EventoAuditoriaResponse } from './tipos'
 export type FiltrosAuditoria = {
   entidad?: string
   accion?: string
+  usuarioId?: string
   fechaDesde?: string
   fechaHasta?: string
   /** El backend devuelve entre 1 y 200; por defecto 50. */
@@ -15,6 +16,7 @@ export function rutaAuditoria(filtros: FiltrosAuditoria): string {
   const parametros = new URLSearchParams()
   if (filtros.entidad) parametros.set('entidad', filtros.entidad)
   if (filtros.accion) parametros.set('accion', filtros.accion)
+  if (filtros.usuarioId) parametros.set('usuarioId', filtros.usuarioId)
   if (filtros.fechaDesde) parametros.set('fechaDesde', filtros.fechaDesde)
   if (filtros.fechaHasta) parametros.set('fechaHasta', filtros.fechaHasta)
   if (filtros.limite) parametros.set('limite', String(filtros.limite))

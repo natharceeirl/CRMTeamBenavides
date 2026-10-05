@@ -34,18 +34,24 @@ public class PortalService : IPortalService
                           && o.Estado != EstadoOrdenServicio.Entregada
                           && o.Estado != EstadoOrdenServicio.Cancelada);
 
+        // Por responder: el presupuesto ya existe (diagnóstico hecho) y sigue sin respuesta.
+        // Una orden que avanzó de Diagnóstico ya no espera nada del cliente.
         var cantidadPresupuestosPendientes = await _context.OrdenesServicio
             .CountAsync(o => (o.ClienteId == clienteId || o.Vehiculo.ClienteId == clienteId)
                           && o.Activo
-                          && o.Estado != EstadoOrdenServicio.Entregada
-                          && o.Estado != EstadoOrdenServicio.Cancelada
+                          && o.Estado == EstadoOrdenServicio.Diagnostico
                           && o.EstadoPresupuestoCliente == EstadoPresupuestoCliente.Pendiente);
 
+        // El saldo es lo que el cliente ya debe: el trabajo comprometido (presupuesto
+        // aprobado, o la orden ya pasó de Diagnóstico) y las ventas confirmadas. Un
+        // presupuesto que todavía no responde no es deuda.
         var ordenes = await _context.OrdenesServicio
             .Include(o => o.Pagos)
             .Where(o => (o.ClienteId == clienteId || o.Vehiculo.ClienteId == clienteId)
                         && o.Activo
-                        && o.Estado != EstadoOrdenServicio.Cancelada)
+                        && o.Estado != EstadoOrdenServicio.Cancelada
+                        && (o.EstadoPresupuestoCliente == EstadoPresupuestoCliente.Aprobado
+                            || (o.Estado != EstadoOrdenServicio.Abierta && o.Estado != EstadoOrdenServicio.Diagnostico)))
             .ToListAsync();
 
         decimal saldoOrdenes = 0m;

@@ -272,6 +272,7 @@ class OrdenServicioApi {
     this.totalPagado = 0,
     this.saldo,
     this.estadoPago = EstadoPago.pendiente,
+    this.ventaId,
   });
 
   factory OrdenServicioApi.desdeJson(Map<String, dynamic> json) => OrdenServicioApi(
@@ -314,6 +315,7 @@ class OrdenServicioApi {
         fechaAprobacionGerencia: _fecha(json['fechaAprobacionGerencia']),
         usuarioAprobacionGerencia: json['usuarioAprobacionGerenciaNombre'] as String?,
         observacionesGerencia: json['observacionesAprobacionGerencia'] as String?,
+        ventaId: json['ventaId'] as String?,
         totalPagado: (json['totalPagado'] as num? ?? 0).toDouble(),
         saldo: (json['saldo'] as num?)?.toDouble(),
         estadoPago: json['estadoPago'] as String? ?? EstadoPago.pendiente,
@@ -358,6 +360,9 @@ class OrdenServicioApi {
   final DateTime? fechaAprobacionGerencia;
   final String? usuarioAprobacionGerencia;
   final String? observacionesGerencia;
+
+  /// La venta vigente de la orden (no anulada), o null si todavía no se liquida.
+  final String? ventaId;
 
   /// Adelantos y pagos, también los de la venta que liquidó la orden.
   final double totalPagado;
@@ -1101,4 +1106,86 @@ class AtencionServicioApi {
   final String? motivoFalla;
   final double total;
   final List<String> trabajos;
+}
+
+/// Una cita del listado (CitaListResponse). Al cliente la API solo le devuelve las suyas.
+class CitaApi {
+  const CitaApi({
+    required this.id,
+    required this.numeroCita,
+    required this.clienteNombre,
+    required this.vehiculoId,
+    required this.vehiculoModelo,
+    required this.fechaHoraProgramada,
+    required this.duracionMinutos,
+    required this.motivo,
+    required this.estado,
+    this.vehiculoPlaca,
+  });
+
+  factory CitaApi.desdeJson(Map<String, dynamic> json) => CitaApi(
+        id: json['id'] as String,
+        numeroCita: json['numeroCita'] as String? ?? '',
+        clienteNombre: json['clienteNombre'] as String? ?? '',
+        vehiculoId: json['vehiculoId'] as String,
+        vehiculoPlaca: json['vehiculoPlaca'] as String?,
+        vehiculoModelo: json['vehiculoModelo'] as String? ?? '',
+        fechaHoraProgramada: DateTime.parse(json['fechaHoraProgramada'] as String),
+        duracionMinutos: json['duracionMinutos'] as int? ?? 60,
+        motivo: json['motivo'] as String? ?? '',
+        estado: json['estado'] as String? ?? EstadoCita.pendiente,
+      );
+
+  final String id;
+  final String numeroCita;
+  final String clienteNombre;
+  final String vehiculoId;
+  final String? vehiculoPlaca;
+  final String vehiculoModelo;
+  final DateTime fechaHoraProgramada;
+  final int duracionMinutos;
+  final String motivo;
+  final String estado;
+
+  String get unidad {
+    final placa = vehiculoPlaca;
+    return placa == null || placa.isEmpty ? vehiculoModelo : '$vehiculoModelo · $placa';
+  }
+}
+
+/// Un pedido de repuestos que llega de Lima (PedidoLimaResponse). Al cliente la
+/// API solo le devuelve los suyos.
+class PedidoLimaApi {
+  const PedidoLimaApi({
+    required this.id,
+    required this.numeroPedido,
+    required this.fecha,
+    required this.estado,
+    required this.total,
+    required this.repuestos,
+    this.fechaEstimadaLlegada,
+  });
+
+  factory PedidoLimaApi.desdeJson(Map<String, dynamic> json) => PedidoLimaApi(
+        id: json['id'] as String,
+        numeroPedido: json['numeroPedido'] as String? ?? '',
+        fecha: DateTime.parse(json['fecha'] as String),
+        estado: json['estado'] as String? ?? EstadoPedidoLima.pendiente,
+        total: (json['total'] as num? ?? 0).toDouble(),
+        fechaEstimadaLlegada: _fecha(json['fechaEstimadaLlegada']),
+        repuestos: [
+          for (final detalle in (json['detalles'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>())
+            '${detalle['cantidad']} × ${detalle['productoNombre']}',
+        ],
+      );
+
+  final String id;
+  final String numeroPedido;
+  final DateTime fecha;
+  final String estado;
+  final double total;
+  final DateTime? fechaEstimadaLlegada;
+
+  /// «2 × Filtro de aceite», uno por línea del pedido.
+  final List<String> repuestos;
 }

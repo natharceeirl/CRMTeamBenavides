@@ -29,7 +29,7 @@ import {
   etiquetaDe,
   motivoBloqueoAprobacion,
   nombresEstado,
-  permiteEditarDetalles,
+  motivoItemsBloqueados,
   useCambiarEstado,
   useEliminarDetalle,
   useOrden,
@@ -114,7 +114,8 @@ export function OrdenDetallePage() {
   }
 
   const datos = orden.data
-  const editableItems = permiteEditarDetalles(datos.estadoId)
+  const itemsBloqueados = motivoItemsBloqueados(datos)
+  const editableItems = itemsBloqueados === null
   const diagnosticoAbierto = puedeDiagnosticar && !esEstadoTerminal(datos.estadoId)
   const destinos = puedeCambiarEstado
     ? (transicionesValidas[datos.estadoId] ?? []).filter(
@@ -362,9 +363,9 @@ export function OrdenDetallePage() {
                 )}
               </>
             )}
-            {!editableItems && (
+            {itemsBloqueados && (
               <p className="texto-secundario" style={{ marginTop: 16 }}>
-                La orden está en «{nombresEstado[datos.estadoId]}» y ya no admite cambios en los ítems.
+                {itemsBloqueados}
               </p>
             )}
 

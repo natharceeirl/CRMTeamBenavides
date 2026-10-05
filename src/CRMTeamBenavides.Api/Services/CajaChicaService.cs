@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using CRMTeamBenavides.Api.Features.CajaChica;
 using CRMTeamBenavides.Data;
@@ -250,6 +251,20 @@ public class CajaChicaService : ICajaChicaService
                 return ServiceResult<MovimientoCajaResponse>.Invalid("No hay ninguna caja chica abierta para registrar movimientos.");
         }
 
+        // La caja se bloquea y se relee: dos egresos simultáneos no deben pasar los
+        // dos el control de saldo.
+        await using var transaccion = await _context.Database.BeginTransactionAsync(ct);
+        await _context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT \"Id\" FROM \"CajasChicas\" WHERE \"Id\" = {caja.Id} FOR UPDATE", ct);
+        await _context.Entry(caja).ReloadAsync(ct);
+
+        if (caja.Estado == EstadoCajaChica.Cerrada)
+            return ServiceResult<MovimientoCajaResponse>.Invalid("No se pueden registrar movimientos en una caja chica cerrada.");
+
+        if (request.Tipo == TipoMovimientoCaja.Egreso && request.Monto > caja.SaldoCalculado)
+            return ServiceResult<MovimientoCajaResponse>.Invalid(
+                $"El egreso (S/ {request.Monto.ToString("0.00", CultureInfo.InvariantCulture)}) supera el saldo de la caja (S/ {caja.SaldoCalculado.ToString("0.00", CultureInfo.InvariantCulture)}).");
+
         if (request.Tipo == TipoMovimientoCaja.Ingreso)
         {
             caja.SaldoCalculado += request.Monto;
@@ -297,6 +312,7 @@ public class CajaChicaService : ICajaChicaService
         });
 
         await _context.SaveChangesAsync(ct);
+        await transaccion.CommitAsync(ct);
 
         Usuario? usuario = null;
         if (usuarioId.HasValue)

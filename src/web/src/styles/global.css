@@ -251,6 +251,7 @@ h4 {
 .seccion-titulo .acciones {
   margin-left: auto;
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -869,5 +870,236 @@ h4 {
 @media (width <= 900px) {
   .grafico-barra-fila {
     grid-template-columns: 110px minmax(0, 1fr) 56px;
+  }
+}
+
+/* Secciones dentro de una pestaña, con el mismo aire que en .pagina */
+.secciones {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+
+/* Agenda: la semana en siete columnas; en pantallas angostas, un día debajo del otro */
+.agenda-filtros {
+  align-items: center;
+}
+
+.agenda-rango {
+  font-family: var(--fuente-titulos);
+  font-size: 18px;
+}
+
+.agenda-semana {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border-top: 2px solid var(--color-divisor);
+}
+
+.agenda-dia {
+  min-height: 180px;
+  padding: 10px 8px 12px;
+  border-right: 1px solid var(--color-divisor-suave);
+}
+
+.agenda-dia:last-child {
+  border-right: 0;
+}
+
+.agenda-dia-titulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-height: 28px;
+  margin-bottom: 8px;
+  font-family: var(--fuente-titulos);
+  font-weight: 700;
+}
+
+.agenda-dia.hoy .agenda-dia-titulo {
+  color: var(--color-acento-700);
+}
+
+.agenda-cita {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  color: inherit;
+  background: var(--color-blanco);
+  border: 1px solid var(--color-divisor-suave);
+  border-left: 3px solid var(--color-texto);
+  cursor: pointer;
+}
+
+.agenda-cita:hover,
+.agenda-cita:focus-visible {
+  border-color: var(--color-acento-600);
+}
+
+.agenda-cita.cerrada {
+  border-left-color: var(--color-neutro-300);
+}
+
+.agenda-cita-hora {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.agenda-cita-cliente {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1000px) {
+  .agenda-semana {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agenda-dia {
+    min-height: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-divisor-suave);
+  }
+}
+
+/* Avance de la orden para el cliente: de «Recibida» a «Entregada» */
+.avance {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.avance-paso {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding-bottom: 18px;
+}
+
+.avance-paso:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  top: 20px;
+  bottom: 0;
+  left: 7px;
+  width: 2px;
+  background: var(--color-divisor-suave);
+}
+
+.avance-paso.hecho:not(:last-child)::before {
+  background: var(--color-texto);
+}
+
+.avance-marca {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  border: 2px solid var(--color-neutro-300);
+  border-radius: 50%;
+  background: var(--color-blanco);
+}
+
+.avance-paso.hecho .avance-marca {
+  border-color: var(--color-texto);
+  background: var(--color-texto);
+}
+
+.avance-paso.actual .avance-marca {
+  border-color: var(--color-acento-600);
+  background: var(--color-acento-600);
+  box-shadow: 0 0 0 4px var(--color-acento-200);
+}
+
+.avance-titulo {
+  font-weight: 600;
+}
+
+.avance-paso.actual .avance-titulo {
+  color: var(--color-acento-700);
+}
+
+.avance-paso.pendiente .avance-titulo {
+  font-weight: 400;
+  color: var(--color-texto-secundario);
+}
+
+/* Órdenes en curso del cliente: una tarjeta por orden */
+.tarjetas-orden {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 16px;
+}
+
+.tarjeta-orden {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 20px;
+  background: var(--color-blanco);
+  border: 1px solid var(--color-divisor-suave);
+  border-top: 3px solid var(--color-acento-600);
+}
+
+.tarjeta-orden-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tarjeta-orden-aviso {
+  font-weight: 600;
+  color: var(--color-acento-700);
+}
+
+.tarjeta-orden .ant-btn {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
+/* Títulos de sección dentro de un modal, del tamaño de los demás bloques */
+.bloque-modal .seccion-titulo h2 {
+  font-size: 16px;
+}
+
+/* Portal del cliente: tres indicadores cortos en una fila; en el teléfono, el
+   saldo baja a su propia fila para que el monto quepa entero. */
+.portal-cliente .indicadores {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.portal-cliente .indicador {
+  padding: 0 24px;
+  border-left: 1px solid var(--color-divisor);
+}
+
+.portal-cliente .indicador:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+@media (max-width: 600px) {
+  .portal-cliente .indicadores {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 20px;
+  }
+
+  .portal-cliente .indicador:nth-child(3) {
+    grid-column: 1 / -1;
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .portal-cliente .indicador-valor,
+  .portal-cliente .indicador-valor.compacto {
+    font-size: 34px;
   }
 }

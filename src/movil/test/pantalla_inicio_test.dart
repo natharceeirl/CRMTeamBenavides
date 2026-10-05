@@ -43,7 +43,16 @@ class SesionCliente extends SesionNotifier {
   EstadoSesion build() => const EstadoSesion(
         usuario: _usuario,
         roles: ['Cliente'],
-        permisos: ['portal.acceso', 'clientes.ver', 'unidades.ver', 'ordenes.ver_asignadas'],
+        permisos: [
+          'portal.acceso',
+          'clientes.ver',
+          'unidades.ver',
+          'ordenes.ver_asignadas',
+          'citas.ver',
+          'citas.crear',
+          'citas.cancelar',
+          'pedidos_lima.ver',
+        ],
         clienteId: '00000000-0000-0000-0000-0000000000c1',
       );
 }
@@ -82,6 +91,8 @@ Future<void> montarInicio(
           ),
         ),
         portalComprobantesProvider.overrideWith((ref) => []),
+        citasProvider.overrideWith((ref) => []),
+        pedidosLimaProvider.overrideWith((ref) => []),
       ],
       child: const MaterialApp(home: PantallaInicio()),
     ),
@@ -146,12 +157,12 @@ void main() {
         findsOneWidget);
   });
 
-  testWidgets('el cliente tiene su app: inicio, sus órdenes y sus documentos', (tester) async {
+  testWidgets('el cliente tiene su app: inicio, sus órdenes, sus citas y sus documentos', (tester) async {
     await montarInicio(tester, sesion: SesionCliente.new);
 
     final barra = find.byType(NavigationBar);
-    expect(tester.widget<NavigationBar>(barra).destinations, hasLength(3));
-    for (final destino in ['Inicio', 'Órdenes', 'Documentos']) {
+    expect(tester.widget<NavigationBar>(barra).destinations, hasLength(4));
+    for (final destino in ['Inicio', 'Órdenes', 'Citas', 'Documentos']) {
       expect(find.descendant(of: barra, matching: find.text(destino)), findsOneWidget);
     }
     expect(find.text('Hola, Luis'), findsOneWidget);

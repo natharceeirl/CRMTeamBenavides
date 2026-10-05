@@ -179,15 +179,17 @@ public class ReporteService : IReporteService
                 .ThenInclude(d => d.Servicio)
             .Where(v => v.Activo && v.Estado == EstadoVenta.Confirmada);
 
+        // Los días son los del taller: una venta de las 20:00 en Arequipa ya es del
+        // día siguiente en UTC, y con el día UTC se contaba en otra fecha.
         if (fechaDesde.HasValue)
         {
-            var desde = DateTime.SpecifyKind(fechaDesde.Value.Date, DateTimeKind.Utc);
+            var desde = HoraPeru.InicioDelDiaUtc(fechaDesde.Value);
             query = query.Where(v => v.Fecha >= desde);
         }
 
         if (fechaHasta.HasValue)
         {
-            var hastaExclusivo = DateTime.SpecifyKind(fechaHasta.Value.Date.AddDays(1), DateTimeKind.Utc);
+            var hastaExclusivo = HoraPeru.InicioDelDiaUtc(fechaHasta.Value.AddDays(1));
             query = query.Where(v => v.Fecha < hastaExclusivo);
         }
 

@@ -43,10 +43,16 @@ const estilos: Record<number, CSSProperties> = {
   },
 }
 
-export function EstadoOrdenApiTag({ estadoId }: Readonly<{ estadoId: number }>) {
+type Props = {
+  estadoId: number
+  /** Otros nombres para los mismos estados, como los del portal del cliente. */
+  nombres?: Record<number, string>
+}
+
+export function EstadoOrdenApiTag({ estadoId, nombres = nombresEstado }: Readonly<Props>) {
   return (
     <Tag style={{ ...estilos[estadoId], marginInlineEnd: 0, fontWeight: 600 }}>
-      {nombresEstado[estadoId] ?? 'Desconocido'}
+      {nombres[estadoId] ?? 'Desconocido'}
     </Tag>
   )
 }
