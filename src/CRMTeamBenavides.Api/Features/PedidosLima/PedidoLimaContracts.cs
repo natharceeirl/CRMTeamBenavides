@@ -26,6 +26,10 @@ public record ActualizarPedidoLimaRequest(
     DateTime? FechaEntrega,
     string? Observaciones);
 
+public record ActualizarPrecioDetallePedidoLimaRequest(
+    [Required] [Range(0, double.MaxValue, ErrorMessage = "El precio debe ser mayor o igual a 0.")] decimal PrecioUnitario,
+    int? Cantidad = null);
+
 public record CambiarEstadoPedidoLimaRequest(
     [Required] EstadoPedidoLima NuevoEstado,
     string? Observacion);

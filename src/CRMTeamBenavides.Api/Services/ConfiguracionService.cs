@@ -319,7 +319,12 @@ public class ConfiguracionService : IConfiguracionService
         else
         {
             var config = await GetOrCreateEntityAsync(ct);
-            tc = config.TipoCambioVigente ?? 3.80m;
+            if (!config.TipoCambioVigente.HasValue || config.TipoCambioVigente.Value <= 0)
+            {
+                return ServiceResult<ConversionMonedaResponse>.Invalid(
+                    "No se ha configurado un tipo de cambio vigente en el sistema. Debe registrar el tipo de cambio del día antes de realizar conversiones.");
+            }
+            tc = config.TipoCambioVigente.Value;
         }
 
         // Regla comercial estricta: Math.Ceiling(montoUsd * tipoCambio)

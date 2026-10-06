@@ -688,6 +688,185 @@ public class VentaService : IVentaService
         }
     }
 
+    public async Task<ServiceResult<VentaDetalleResponse>> ActualizarAsync(
+        Guid id,
+        ActualizarVentaRequest request,
+        bool puedeModificarPrecios = false,
+        bool puedeAplicarDescuentos = false,
+        Guid? soloClienteId = null,
+        Guid? usuarioId = null)
+    {
+        if (request.Detalles is null || request.Detalles.Count == 0)
+        {
+            return ServiceResult<VentaDetalleResponse>.Invalid("La venta debe contener al menos un detalle.");
+        }
+
+        if (request.Detalles.Any(d => d.Cantidad <= 0))
+        {
+            return ServiceResult<VentaDetalleResponse>.Invalid("La cantidad de cada producto debe ser mayor a 0.");
+        }
+
+        var venta = await _context.Ventas
+            .Include(v => v.Cliente)
+            .Include(v => v.Detalles.Where(d => d.Activo))
+            .Include(v => v.Pagos.Where(p => p.Activo))
+            .FirstOrDefaultAsync(v => v.Id == id && v.Activo);
+
+        if (venta is null)
+        {
+            return ServiceResult<VentaDetalleResponse>.NotFound();
+        }
+
+        if (soloClienteId.HasValue && venta.ClienteId != soloClienteId.Value)
+        {
+            return ServiceResult<VentaDetalleResponse>.NotFound();
+        }
+
+        if (venta.Estado != EstadoVenta.Cotizacion)
+        {
+            return ServiceResult<VentaDetalleResponse>.Invalid("Solo se pueden modificar ventas en estado Cotización.");
+        }
+
+        if (venta.Pagos.Any(p => p.Activo))
+        {
+            return ServiceResult<VentaDetalleResponse>.Invalid("No se puede modificar una venta que ya registra pagos.");
+        }
+
+        var config = await _context.ConfiguracionesEmpresa.FirstOrDefaultAsync();
+        var porcentajeIgv = config?.PorcentajeIgv ?? 18.00m;
+
+        var productIds = request.Detalles.Select(d => d.ProductoId).Distinct().ToList();
+        var productos = await _context.Productos
+            .Where(p => productIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id);
+
+        if (productos.Count != productIds.Count || productos.Values.Any(p => !p.Activo))
+        {
+            return ServiceResult<VentaDetalleResponse>.Invalid("Uno o más productos no existen o están inactivos.");
+        }
+
+        foreach (var det in venta.Detalles)
+        {
+            det.Activo = false;
+            det.FechaModificacion = DateTime.UtcNow;
+        }
+
+        bool requiereAprobacion = false;
+        var detallesCambio = new List<object>();
+
+        decimal subtotalGravadoTotal = 0m;
+        decimal subtotalExoneradoTotal = 0m;
+        decimal subtotalInafectoTotal = 0m;
+        decimal montoIgvTotal = 0m;
+
+        foreach (var item in request.Detalles)
+        {
+            var prod = productos[item.ProductoId];
+            var precioBase = prod.PrecioVenta;
+            var precioUnitario = item.PrecioUnitario ?? precioBase;
+
+            bool precioModificado = Math.Abs(precioUnitario - precioBase) > 0.001m;
+            bool tieneDescuento = item.Descuento.HasValue && item.Descuento.Value > 0;
+
+            if (precioModificado || tieneDescuento)
+            {
+                requiereAprobacion = true;
+                detallesCambio.Add(new
+                {
+                    ProductoId = prod.Id,
+                    ProductoNombre = prod.Nombre,
+                    PrecioBase = precioBase,
+                    PrecioSolicitado = precioUnitario,
+                    Descuento = item.Descuento ?? 0m
+                });
+            }
+
+            var afectacion = item.TipoAfectacionIgv ?? TipoAfectacionIgv.Gravado;
+            var subtotalItem = item.Cantidad * precioUnitario;
+            var subtotalGravado = afectacion == TipoAfectacionIgv.Gravado ? subtotalItem : 0m;
+            var igvCalculado = afectacion == TipoAfectacionIgv.Gravado
+                ? decimal.Round(subtotalItem * (porcentajeIgv / 100m), 2, MidpointRounding.AwayFromZero)
+                : 0m;
+            var totalLinea = decimal.Round(subtotalItem + igvCalculado, 2, MidpointRounding.AwayFromZero);
+
+            subtotalGravadoTotal += subtotalGravado;
+            if (afectacion == TipoAfectacionIgv.Exonerado) subtotalExoneradoTotal += subtotalItem;
+            if (afectacion == TipoAfectacionIgv.Inafecto) subtotalInafectoTotal += subtotalItem;
+            montoIgvTotal += igvCalculado;
+
+            var nuevoDetalle = new DetalleVenta
+            {
+                VentaId = venta.Id,
+                ProductoId = prod.Id,
+                Producto = prod,
+                TipoItem = TipoItemServicio.Repuesto,
+                Cantidad = item.Cantidad,
+                PrecioUnitario = precioUnitario,
+                CostoUnitarioHistorico = prod.Costo,
+                TipoAfectacionIgv = afectacion,
+                SubtotalGravado = subtotalGravado,
+                PorcentajeIgvAplicado = afectacion == TipoAfectacionIgv.Gravado ? porcentajeIgv : 0m,
+                MontoIgv = igvCalculado,
+                Total = totalLinea,
+                Activo = true,
+                FechaCreacion = DateTime.UtcNow
+            };
+            venta.Detalles.Add(nuevoDetalle);
+            _context.DetallesVenta.Add(nuevoDetalle);
+        }
+
+        venta.SubtotalGravado = decimal.Round(subtotalGravadoTotal, 2, MidpointRounding.AwayFromZero);
+        venta.SubtotalExonerado = decimal.Round(subtotalExoneradoTotal, 2, MidpointRounding.AwayFromZero);
+        venta.SubtotalInafecto = decimal.Round(subtotalInafectoTotal, 2, MidpointRounding.AwayFromZero);
+        venta.MontoIgv = decimal.Round(montoIgvTotal, 2, MidpointRounding.AwayFromZero);
+        venta.Total = decimal.Round(venta.SubtotalGravado + venta.SubtotalExonerado + venta.SubtotalInafecto + venta.MontoIgv, 2, MidpointRounding.AwayFromZero);
+        venta.FechaModificacion = DateTime.UtcNow;
+
+        if (requiereAprobacion)
+        {
+            venta.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
+            _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
+            {
+                Id = Guid.NewGuid(),
+                Tipo = "CambioPrecio",
+                Entidad = "Venta",
+                EntidadId = venta.Id.ToString(),
+                UsuarioSolicitanteId = usuarioId,
+                FechaSolicitud = DateTime.UtcNow,
+                Estado = EstadoAprobacionGerencia.Pendiente,
+                DetalleCambio = System.Text.Json.JsonSerializer.Serialize(detallesCambio),
+                ValorAnterior = 0m,
+                ValorSolicitado = venta.Total,
+                Motivo = "Modificación de precios en cotización actualizada",
+                FechaCreacion = DateTime.UtcNow,
+                Activo = true
+            });
+        }
+        else
+        {
+            if (venta.EstadoAprobacionGerencia is EstadoAprobacionGerencia.Pendiente or EstadoAprobacionGerencia.Rechazado)
+            {
+                venta.EstadoAprobacionGerencia = EstadoAprobacionGerencia.NoAplica;
+                venta.ObservacionesAprobacionGerencia = null;
+            }
+
+            var solicitudesPendientes = await _context.SolicitudesAprobacion
+                .Where(s => s.Entidad == "Venta" && s.EntidadId == venta.Id.ToString() && s.Estado == EstadoAprobacionGerencia.Pendiente && s.Activo)
+                .ToListAsync();
+
+            foreach (var sol in solicitudesPendientes)
+            {
+                sol.Activo = false;
+                sol.ObservacionesRespuesta = "Retirada automáticamente por restablecimiento de precios a catálogo.";
+                sol.FechaRespuesta = DateTime.UtcNow;
+                sol.FechaModificacion = DateTime.UtcNow;
+            }
+        }
+
+        await _context.SaveChangesAsync();
+        return ServiceResult<VentaDetalleResponse>.Success(MapToDetalleResponse(venta));
+    }
+
     public async Task<ServiceResult<VentaDetalleResponse>> ConfirmarCotizacionAsync(Guid id, Guid? soloClienteId = null)
     {
         var venta = await _context.Ventas
@@ -843,6 +1022,18 @@ public class VentaService : IVentaService
         }
 
         var estadoAnterior = venta.Estado.ToString();
+
+        var solicitudesPendientes = await _context.SolicitudesAprobacion
+            .Where(s => s.Entidad == "Venta" && s.EntidadId == venta.Id.ToString() && s.Estado == EstadoAprobacionGerencia.Pendiente && s.Activo)
+            .ToListAsync();
+
+        foreach (var sol in solicitudesPendientes)
+        {
+            sol.Activo = false;
+            sol.ObservacionesRespuesta = "Cancelada automáticamente por anulación de la venta/cotización.";
+            sol.FechaRespuesta = DateTime.UtcNow;
+            sol.FechaModificacion = DateTime.UtcNow;
+        }
 
         // Si era cotización o proviene de una OS, no reponemos stock en almacén de venta directa
         if (venta.Estado == EstadoVenta.Cotizacion || venta.OrdenServicioId.HasValue)

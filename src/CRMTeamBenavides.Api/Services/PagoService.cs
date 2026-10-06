@@ -35,6 +35,9 @@ public class PagoService : IPagoService
 
         var venta = await _context.Ventas
             .Include(v => v.Pagos)
+            .Include(v => v.Cliente)
+            .Include(v => v.OrdenServicio)
+            .Include(v => v.Comprobante)
             .FirstOrDefaultAsync(v => v.Id == ventaId && v.Activo);
 
         if (venta is null)
@@ -53,6 +56,17 @@ public class PagoService : IPagoService
         if (metodo is null)
         {
             return ServiceResult<PagoResponse>.Invalid("El método de pago indicado no existe o está inactivo.");
+        }
+
+        if (metodo.Codigo.Equals("EFECTIVO", StringComparison.OrdinalIgnoreCase))
+        {
+            var cajaAbierta = await _context.CajasChicas
+                .AnyAsync(c => c.Estado == EstadoCajaChica.Abierta);
+            if (!cajaAbierta)
+            {
+                return ServiceResult<PagoResponse>.Invalid(
+                    "No se puede registrar un cobro en efectivo porque no hay ninguna Caja Chica abierta en este momento.");
+            }
         }
 
         var totalPagado = venta.Pagos.Where(p => p.Activo).Sum(p => p.Monto);
@@ -86,7 +100,26 @@ public class PagoService : IPagoService
         };
 
         _context.Pagos.Add(pago);
-        await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, $"Venta #{venta.Id}", usuarioId);
+
+        string refVenta;
+        if (venta.OrdenServicio != null && !string.IsNullOrWhiteSpace(venta.OrdenServicio.NumeroOrden))
+        {
+            refVenta = $"OS #{venta.OrdenServicio.NumeroOrden}";
+        }
+        else if (venta.Comprobante != null && !string.IsNullOrWhiteSpace(venta.Comprobante.Numero))
+        {
+            refVenta = $"Comprobante {venta.Comprobante.Serie}-{venta.Comprobante.Numero}";
+        }
+        else if (venta.Cliente != null)
+        {
+            refVenta = $"Venta mostrador ({venta.Cliente.NombreCompleto})";
+        }
+        else
+        {
+            refVenta = "Venta mostrador";
+        }
+
+        await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, refVenta, usuarioId);
         await _context.SaveChangesAsync();
 
         await _auditoriaService.RegistrarEventoAsync(
@@ -168,6 +201,17 @@ public class PagoService : IPagoService
             return ServiceResult<PagoResponse>.Invalid("El método de pago indicado no existe o está inactivo.");
         }
 
+        if (metodo.Codigo.Equals("EFECTIVO", StringComparison.OrdinalIgnoreCase))
+        {
+            var cajaAbierta = await _context.CajasChicas
+                .AnyAsync(c => c.Estado == EstadoCajaChica.Abierta);
+            if (!cajaAbierta)
+            {
+                return ServiceResult<PagoResponse>.Invalid(
+                    "No se puede registrar un cobro en efectivo porque no hay ninguna Caja Chica abierta en este momento.");
+            }
+        }
+
         var totalPagado = orden.Pagos.Where(p => p.Activo).Sum(p => p.Monto);
         var saldo = Math.Max(0m, orden.Total - totalPagado);
 
@@ -198,7 +242,8 @@ public class PagoService : IPagoService
         };
 
         _context.Pagos.Add(pago);
-        await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, $"OS #{orden.NumeroOrden ?? orden.Id.ToString()}", usuarioId);
+        var refOrden = !string.IsNullOrWhiteSpace(orden.NumeroOrden) ? $"OS #{orden.NumeroOrden}" : "OS taller";
+        await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, refOrden, usuarioId);
         await _context.SaveChangesAsync();
 
         await _auditoriaService.RegistrarEventoAsync(
@@ -334,6 +379,7 @@ public class PagoService : IPagoService
 
         var pedido = await _context.PedidosLima
             .Include(p => p.Pagos)
+            .Include(p => p.Cliente)
             .FirstOrDefaultAsync(p => p.Id == pedidoLimaId && p.Activo);
 
         if (pedido is null)
@@ -354,12 +400,23 @@ public class PagoService : IPagoService
             return ServiceResult<PagoResponse>.Invalid("El método de pago indicado no existe o está inactivo.");
         }
 
+        if (metodo.Codigo.Equals("EFECTIVO", StringComparison.OrdinalIgnoreCase))
+        {
+            var cajaAbierta = await _context.CajasChicas
+                .AnyAsync(c => c.Estado == EstadoCajaChica.Abierta);
+            if (!cajaAbierta)
+            {
+                return ServiceResult<PagoResponse>.Invalid(
+                    "No se puede registrar un cobro en efectivo porque no hay ninguna Caja Chica abierta en este momento.");
+            }
+        }
+
         var totalPagado = pedido.Pagos.Where(p => p.Activo).Sum(p => p.Monto);
         var saldo = Math.Max(0m, pedido.Total - totalPagado);
 
         if (saldo <= 0)
         {
-            return ServiceResult<PagoResponse>.Invalid("El pedido de Lima ya se encuentra pagado en su totalidad.");
+            return ServiceResult<PagoResponse>.Invalid("El pedido de Lima ya se encuentra pagada en su totalidad.");
         }
 
         if (request.Monto > saldo)
@@ -384,7 +441,8 @@ public class PagoService : IPagoService
         };
 
         _context.Pagos.Add(pago);
-        await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, $"Pedido Lima #{pedido.NumeroPedido ?? pedido.Id.ToString()}", usuarioId);
+        var refPedido = !string.IsNullOrWhiteSpace(pedido.NumeroPedido) ? $"Pedido Lima #{pedido.NumeroPedido}" : $"Pedido Lima ({pedido.Cliente?.NombreCompleto ?? "Cliente"})";
+        await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, refPedido, usuarioId);
         await _context.SaveChangesAsync();
 
         await _auditoriaService.RegistrarEventoAsync(

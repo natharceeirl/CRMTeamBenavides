@@ -352,8 +352,10 @@ public class CajaChicaService : ICajaChicaService
         }
         else
         {
-            var inicioHoy = DateTime.UtcNow.Date;
-            query = query.Where(m => m.Fecha >= inicioHoy);
+            var hoyPeru = HoraPeru.DesdeUtc(DateTime.UtcNow).Date;
+            var inicioHoyUtc = HoraPeru.InicioDelDiaUtc(hoyPeru);
+            var finHoyUtc = inicioHoyUtc.AddDays(1);
+            query = query.Where(m => m.Fecha >= inicioHoyUtc && m.Fecha < finHoyUtc);
         }
 
         var movimientos = await query.ToListAsync(ct);

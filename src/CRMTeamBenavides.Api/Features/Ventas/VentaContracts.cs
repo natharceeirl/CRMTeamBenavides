@@ -15,6 +15,10 @@ public record CreateDetalleVentaRequest(
     decimal? Descuento = null,
     TipoAfectacionIgv? TipoAfectacionIgv = null);
 
+public record ActualizarVentaRequest(
+    List<CreateDetalleVentaRequest> Detalles,
+    string? Observaciones = null);
+
 public record VentaResponse(
     Guid Id,
     Guid ClienteId,

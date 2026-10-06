@@ -275,8 +275,21 @@ public class ClienteService : IClienteService
         }
         else
         {
-            cliente.UsuarioId = existingUser.Id;
-            cliente.Usuario = existingUser;
+            // NUNCA vincular automáticamente a una cuenta de personal.
+            // Solo si el usuario existente es exclusivamente de rol Cliente se puede asociar.
+            var rolesUsuario = await _context.UsuarioRoles
+                .Where(ur => ur.UsuarioId == existingUser.Id && ur.Rol.Activo)
+                .Select(ur => ur.Rol.Nombre)
+                .ToListAsync();
+
+            bool esPersonal = rolesUsuario.Any(r => r != RolesDefinidos.Cliente);
+            bool esCliente = rolesUsuario.Contains(RolesDefinidos.Cliente);
+
+            if (esCliente && !esPersonal)
+            {
+                cliente.UsuarioId = existingUser.Id;
+                cliente.Usuario = existingUser;
+            }
         }
     }
 

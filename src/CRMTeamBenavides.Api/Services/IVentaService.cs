@@ -22,6 +22,14 @@ public interface IVentaService
         Guid? soloClienteId = null,
         Guid? usuarioId = null);
 
+    Task<ServiceResult<VentaDetalleResponse>> ActualizarAsync(
+        Guid id,
+        ActualizarVentaRequest request,
+        bool puedeModificarPrecios = false,
+        bool puedeAplicarDescuentos = false,
+        Guid? soloClienteId = null,
+        Guid? usuarioId = null);
+
     Task<ServiceResult<VentaDetalleResponse>> ConfirmarCotizacionAsync(Guid id, Guid? soloClienteId = null);
     Task<ServiceResult<VentaDetalleResponse>> AnularAsync(Guid id, Guid? usuarioId = null);
     Task<ServiceResult<ComprobanteResponse>> GetComprobanteAsync(Guid ventaId, Guid? soloClienteId = null);

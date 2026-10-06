@@ -164,6 +164,39 @@ public static class PedidoLimaEndpoints
         .RequireAuthorization(PermisosDefinidos.PedidosLimaEditar)
         .WithName("ActualizarPedidoLima");
 
+        group.MapPut("/{id:guid}/detalles/{detalleId:guid}", async (
+            Guid id,
+            Guid detalleId,
+            [FromBody] ActualizarPrecioDetallePedidoLimaRequest request,
+            IPedidoLimaService pedidoLimaService,
+            ApplicationDbContext dbContext,
+            ClaimsPrincipal user,
+            CancellationToken ct) =>
+        {
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext, ct);
+            if (isolation.DebeDenegarAcceso)
+            {
+                return Results.Forbid();
+            }
+
+            var usuarioId = UserIsolationHelper.ObtenerUsuarioId(user);
+            var puedeModificarPrecios = await PuedeModificarPreciosAsync(user, dbContext);
+            var result = await pedidoLimaService.ActualizarPrecioDetalleAsync(
+                id, detalleId, request, usuarioId, isolation.SoloClienteId, puedeModificarPrecios, ct);
+
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(new { mensaje = result.Error }),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { mensaje = result.Error }),
+                ServiceResultStatus.Conflict => Results.Conflict(new { mensaje = result.Error }),
+                ServiceResultStatus.Forbidden => Results.Forbid(),
+                _ => Results.BadRequest(new { mensaje = result.Error })
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.PedidosLimaEditar)
+        .WithName("ActualizarPrecioDetallePedidoLima");
+
         group.MapPut("/{id:guid}/estado", async (
             Guid id,
             [FromBody] CambiarEstadoPedidoLimaRequest request,

@@ -310,6 +310,29 @@ public static class OrdenServicioEndpoints
         .RequireAuthorization(PermisosDefinidos.OrdenesAgregarItems)
         .WithName("AgregarDetalleOrdenServicio");
 
+        group.MapPut("/{id:guid}/detalles/{detalleId:guid}", async (
+            Guid id,
+            Guid detalleId,
+            ActualizarDetalleServicioRequest request,
+            ClaimsPrincipal user,
+            IOrdenServicioService service,
+            ApplicationDbContext dbContext) =>
+        {
+            var puedeModificarPrecios = await PuedeModificarPreciosAsync(user, dbContext);
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.ActualizarDetalleAsync(id, detalleId, request, puedeModificarPrecios, usuarioId);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.Forbidden => Results.Json(new { error = result.Error }, statusCode: StatusCodes.Status403Forbidden),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.OrdenesEditar)
+        .WithName("ActualizarDetalleOrdenServicio");
+
         group.MapDelete("/{id:guid}/detalles/{detalleId:guid}", async (Guid id, Guid detalleId, IOrdenServicioService service) =>
         {
             var result = await service.EliminarDetalleAsync(id, detalleId);

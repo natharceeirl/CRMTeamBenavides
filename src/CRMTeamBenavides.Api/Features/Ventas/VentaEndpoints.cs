@@ -155,6 +155,37 @@ public static class VentaEndpoints
         .RequireAuthorization(PermisosDefinidos.VentasCrear)
         .WithName("CreateVenta");
 
+        group.MapPut("/{id:guid}", async (
+            Guid id,
+            ActualizarVentaRequest request,
+            ClaimsPrincipal user,
+            IVentaService service,
+            ApplicationDbContext dbContext) =>
+        {
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+            if (isolation.DebeDenegarAcceso)
+            {
+                return Results.BadRequest(new { error = "Usuario cliente sin cliente activo asociado." });
+            }
+
+            var puedeModificarPrecios = await PuedeModificarPreciosAsync(user, dbContext);
+            var puedeAplicarDescuentos = await PuedeAplicarDescuentosAsync(user, dbContext);
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.ActualizarAsync(
+                id, request, puedeModificarPrecios, puedeAplicarDescuentos, isolation.SoloClienteId, usuarioId);
+
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                ServiceResultStatus.Forbidden => Results.Json(new { error = result.Error }, statusCode: StatusCodes.Status403Forbidden),
+                _ => Results.Problem()
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.VentasCrear)
+        .WithName("ActualizarVenta");
+
         group.MapPut("/{id:guid}/confirmar", async (
             Guid id,
             ClaimsPrincipal user,

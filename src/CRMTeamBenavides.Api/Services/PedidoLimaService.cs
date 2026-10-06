@@ -379,6 +379,150 @@ public class PedidoLimaService : IPedidoLimaService
         return await GetByIdAsync(pedido.Id, soloClienteId, ct);
     }
 
+    public async Task<ServiceResult<PedidoLimaResponse>> ActualizarPrecioDetalleAsync(
+        Guid id,
+        Guid detalleId,
+        ActualizarPrecioDetallePedidoLimaRequest request,
+        Guid? usuarioId,
+        Guid? soloClienteId = null,
+        bool puedeModificarPrecios = false,
+        CancellationToken ct = default)
+    {
+        var pedido = await _context.PedidosLima
+            .Include(p => p.Detalles)
+                .ThenInclude(d => d.Producto)
+            .FirstOrDefaultAsync(p => p.Id == id && p.Activo, ct);
+
+        if (pedido is null)
+        {
+            return ServiceResult<PedidoLimaResponse>.NotFound("Pedido no encontrado.");
+        }
+
+        if (soloClienteId.HasValue && pedido.ClienteId != soloClienteId.Value)
+        {
+            return ServiceResult<PedidoLimaResponse>.NotFound("Pedido no encontrado.");
+        }
+
+        if (pedido.Estado is EstadoPedidoLima.Cancelado or EstadoPedidoLima.Entregado)
+        {
+            return ServiceResult<PedidoLimaResponse>.Invalid($"No se puede modificar un pedido en estado {pedido.Estado}.");
+        }
+
+        var detalle = pedido.Detalles.FirstOrDefault(d => d.Id == detalleId && d.Activo);
+        if (detalle is null)
+        {
+            return ServiceResult<PedidoLimaResponse>.NotFound("Detalle de pedido no encontrado.");
+        }
+
+        if (request.PrecioUnitario < 0)
+        {
+            return ServiceResult<PedidoLimaResponse>.Invalid("El precio unitario no puede ser negativo.");
+        }
+
+        var prod = detalle.Producto ?? await _context.Productos.FirstOrDefaultAsync(p => p.Id == detalle.ProductoId, ct);
+        if (prod is null)
+        {
+            return ServiceResult<PedidoLimaResponse>.Invalid("El producto asociado al detalle no existe.");
+        }
+
+        var precioBase = prod.PrecioVenta;
+        var nuevoPrecio = request.PrecioUnitario;
+        bool precioDifiere = Math.Abs(nuevoPrecio - precioBase) > 0.001m;
+
+        detalle.PrecioUnitario = nuevoPrecio;
+        if (request.Cantidad.HasValue && request.Cantidad.Value > 0)
+        {
+            detalle.Cantidad = request.Cantidad.Value;
+        }
+
+        var config = await _context.ConfiguracionesEmpresa.FirstOrDefaultAsync(ct);
+        var porcentajeIgv = config?.PorcentajeIgv ?? 18.00m;
+
+        var subtotal = detalle.Cantidad * detalle.PrecioUnitario;
+        if (detalle.TipoAfectacionIgv == TipoAfectacionIgv.Gravado)
+        {
+            detalle.SubtotalGravado = subtotal;
+            detalle.PorcentajeIgvAplicado = porcentajeIgv;
+            detalle.MontoIgv = decimal.Round(subtotal * (porcentajeIgv / 100m), 2, MidpointRounding.AwayFromZero);
+            detalle.Total = decimal.Round(subtotal + detalle.MontoIgv, 2, MidpointRounding.AwayFromZero);
+        }
+        else
+        {
+            detalle.SubtotalGravado = 0m;
+            detalle.PorcentajeIgvAplicado = 0m;
+            detalle.MontoIgv = 0m;
+            detalle.Total = subtotal;
+        }
+        detalle.FechaModificacion = DateTime.UtcNow;
+
+        pedido.SubtotalGravado = pedido.Detalles.Where(d => d.Activo && d.TipoAfectacionIgv == TipoAfectacionIgv.Gravado).Sum(d => d.SubtotalGravado);
+        pedido.SubtotalExonerado = pedido.Detalles.Where(d => d.Activo && d.TipoAfectacionIgv == TipoAfectacionIgv.Exonerado).Sum(d => d.Total);
+        pedido.SubtotalInafecto = pedido.Detalles.Where(d => d.Activo && d.TipoAfectacionIgv == TipoAfectacionIgv.Inafecto).Sum(d => d.Total);
+        pedido.MontoIgv = pedido.Detalles.Where(d => d.Activo).Sum(d => d.MontoIgv);
+        pedido.Total = pedido.SubtotalGravado + pedido.SubtotalExonerado + pedido.SubtotalInafecto + pedido.MontoIgv;
+        pedido.ModificadoPorId = usuarioId;
+        pedido.FechaModificacion = DateTime.UtcNow;
+
+        var prodIds = pedido.Detalles.Where(d => d.Activo).Select(d => d.ProductoId).Distinct().ToList();
+        var productosBase = await _context.Productos
+            .Where(p => prodIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.PrecioVenta, ct);
+
+        bool quedanPreciosModificados = false;
+        foreach (var d in pedido.Detalles.Where(d => d.Activo))
+        {
+            if (productosBase.TryGetValue(d.ProductoId, out var baseP) && Math.Abs(d.PrecioUnitario - baseP) > 0.001m)
+            {
+                quedanPreciosModificados = true;
+                break;
+            }
+        }
+
+        if (quedanPreciosModificados)
+        {
+            pedido.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
+            _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
+            {
+                Id = Guid.NewGuid(),
+                Tipo = "CambioPrecio",
+                Entidad = "PedidoLima",
+                EntidadId = pedido.Id.ToString(),
+                UsuarioSolicitanteId = usuarioId,
+                FechaSolicitud = DateTime.UtcNow,
+                Estado = EstadoAprobacionGerencia.Pendiente,
+                DetalleCambio = $"Actualización de precio en repuesto '{prod.Nombre}': base S/ {precioBase:F2} -> solicitado S/ {nuevoPrecio:F2}",
+                ValorAnterior = precioBase,
+                ValorSolicitado = nuevoPrecio,
+                Motivo = "Modificación de precio de repuesto en Pedido Lima",
+                FechaCreacion = DateTime.UtcNow,
+                Activo = true
+            });
+        }
+        else
+        {
+            if (pedido.EstadoAprobacionGerencia is EstadoAprobacionGerencia.Pendiente or EstadoAprobacionGerencia.Rechazado)
+            {
+                pedido.EstadoAprobacionGerencia = EstadoAprobacionGerencia.NoAplica;
+                pedido.ObservacionesAprobacionGerencia = null;
+            }
+
+            var solicitudesPendientes = await _context.SolicitudesAprobacion
+                .Where(s => s.Entidad == "PedidoLima" && s.EntidadId == pedido.Id.ToString() && s.Estado == EstadoAprobacionGerencia.Pendiente && s.Activo)
+                .ToListAsync(ct);
+
+            foreach (var sol in solicitudesPendientes)
+            {
+                sol.Activo = false;
+                sol.ObservacionesRespuesta = "Retirada automáticamente por restablecimiento de precios a catálogo.";
+                sol.FechaRespuesta = DateTime.UtcNow;
+                sol.FechaModificacion = DateTime.UtcNow;
+            }
+        }
+
+        await _context.SaveChangesAsync(ct);
+        return await GetByIdAsync(pedido.Id, soloClienteId, ct);
+    }
+
     public async Task<ServiceResult<PedidoLimaResponse>> CambiarEstadoAsync(
         Guid id,
         CambiarEstadoPedidoLimaRequest request,
@@ -744,6 +888,18 @@ public class PedidoLimaService : IPedidoLimaService
             FechaCreacion = DateTime.UtcNow,
             Activo = true
         });
+
+        var solicitudesPendientes = await _context.SolicitudesAprobacion
+            .Where(s => s.Entidad == "PedidoLima" && s.EntidadId == pedido.Id.ToString() && s.Estado == EstadoAprobacionGerencia.Pendiente && s.Activo)
+            .ToListAsync(ct);
+
+        foreach (var sol in solicitudesPendientes)
+        {
+            sol.Activo = false;
+            sol.ObservacionesRespuesta = $"Cancelada automáticamente por cancelación del pedido de Lima: {request.MotivoCancelacion.Trim()}";
+            sol.FechaRespuesta = DateTime.UtcNow;
+            sol.FechaModificacion = DateTime.UtcNow;
+        }
 
         await _context.SaveChangesAsync(ct);
         return await GetByIdAsync(pedido.Id, soloClienteId, ct);

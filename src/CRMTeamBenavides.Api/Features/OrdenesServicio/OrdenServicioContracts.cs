@@ -47,6 +47,12 @@ public record AgregarDetalleServicioRequest(
     TipoItemServicio? TipoItem = null,
     TipoAfectacionIgv? TipoAfectacionIgv = null);
 
+public record ActualizarDetalleServicioRequest(
+    decimal? PrecioUnitario = null,
+    int? Cantidad = null,
+    string? Descripcion = null,
+    TipoAfectacionIgv? TipoAfectacionIgv = null);
+
 public record AsignarTecnicoRequest(
     Guid? TecnicoId = null,
     Guid? TecnicoAsignadoId = null,

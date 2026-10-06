@@ -33,6 +33,15 @@ public interface IPedidoLimaService
         Guid? soloClienteId = null,
         CancellationToken ct = default);
 
+    Task<ServiceResult<PedidoLimaResponse>> ActualizarPrecioDetalleAsync(
+        Guid id,
+        Guid detalleId,
+        ActualizarPrecioDetallePedidoLimaRequest request,
+        Guid? usuarioId,
+        Guid? soloClienteId = null,
+        bool puedeModificarPrecios = false,
+        CancellationToken ct = default);
+
     Task<ServiceResult<PedidoLimaResponse>> CambiarEstadoAsync(
         Guid id,
         CambiarEstadoPedidoLimaRequest request,
