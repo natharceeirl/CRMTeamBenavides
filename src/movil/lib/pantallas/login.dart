@@ -13,7 +13,8 @@ class PantallaLogin extends ConsumerStatefulWidget {
 
 class _PantallaLoginState extends ConsumerState<PantallaLogin> {
   final _formulario = GlobalKey<FormState>();
-  final _correo = TextEditingController();
+  // Correo del personal o DNI del cliente: la API acepta cualquiera de los dos.
+  final _usuario = TextEditingController();
   final _contrasena = TextEditingController();
 
   String? _error;
@@ -21,7 +22,7 @@ class _PantallaLoginState extends ConsumerState<PantallaLogin> {
 
   @override
   void dispose() {
-    _correo.dispose();
+    _usuario.dispose();
     _contrasena.dispose();
     super.dispose();
   }
@@ -39,7 +40,7 @@ class _PantallaLoginState extends ConsumerState<PantallaLogin> {
     try {
       await ref
           .read(sesionProvider.notifier)
-          .entrar(_correo.text.trim(), _contrasena.text);
+          .entrar(_usuario.text.trim(), _contrasena.text);
       // La redirección la hace el guardia de rutas al cambiar la sesión.
     } catch (fallo) {
       if (mounted) {
@@ -109,16 +110,19 @@ class _PantallaLoginState extends ConsumerState<PantallaLogin> {
                       const SizedBox(height: 16),
                     ],
                     TextFormField(
-                      controller: _correo,
+                      controller: _usuario,
                       decoration: const InputDecoration(
-                        labelText: 'Correo',
-                        hintText: 'nombre@empresa.pe',
+                        labelText: 'Correo o DNI',
+                        hintText: 'nombre@empresa.pe o 12345678',
                       ),
-                      keyboardType: TextInputType.emailAddress,
+                      // Teclado de texto: el de correo esconde los números
+                      // que necesita quien entra con su DNI.
+                      keyboardType: TextInputType.text,
                       autocorrect: false,
+                      enableSuggestions: false,
                       validator: (valor) =>
                           (valor == null || valor.trim().isEmpty)
-                              ? 'Ingresa tu correo'
+                              ? 'Ingresa tu correo o DNI'
                               : null,
                     ),
                     const SizedBox(height: 16),

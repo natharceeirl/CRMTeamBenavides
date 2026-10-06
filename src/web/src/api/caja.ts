@@ -10,6 +10,7 @@ import {
   type EstadoCajaActualResponse,
   type MovimientoCajaResponse,
   type RegistrarMovimientoCajaRequest,
+  type ResumenMetodosPagoCajaResponse,
 } from './tipos'
 
 export const clavesCaja = {
@@ -17,6 +18,7 @@ export const clavesCaja = {
   actual: ['caja-chica', 'actual'] as const,
   historial: ['caja-chica', 'historial'] as const,
   una: (id: string) => ['caja-chica', id] as const,
+  resumen: (id: string | null) => ['caja-chica', 'resumen-metodos', id ?? 'actual'] as const,
 }
 
 /** La caja abierta con sus movimientos, o que no hay ninguna abierta. */
@@ -44,6 +46,18 @@ export function useCaja(id: string | null) {
   })
 }
 
+/** Ingresos por método de pago de una caja, o de la abierta si no se indica cuál. */
+export function useResumenMetodosCaja(id: string | null, habilitado = true) {
+  return useQuery({
+    queryKey: clavesCaja.resumen(id),
+    queryFn: () =>
+      solicitar<ResumenMetodosPagoCajaResponse>(
+        id ? `/caja-chica/${id}/resumen-metodos` : '/caja-chica/actual/resumen-metodos',
+      ),
+    enabled: habilitado,
+  })
+}
+
 function useMutacionCaja<V, R>(mutationFn: (variables: V) => Promise<R>, exito: Parameters<typeof useMutation>[0]['meta']) {
   const consultas = useQueryClient()
   return useMutation({
@@ -58,14 +72,14 @@ function useMutacionCaja<V, R>(mutationFn: (variables: V) => Promise<R>, exito: 
 export const useAbrirCaja = () =>
   useMutacionCaja(
     (datos: AperturaCajaRequest) =>
-      solicitar<CajaChicaDetalleResponse>('/caja-chica/apertura', { metodo: 'POST', cuerpo: datos }),
+      solicitar<CajaChicaDetalleResponse>('/caja-chica/aperturar', { metodo: 'POST', cuerpo: datos }),
     { exito: 'Caja abierta' },
   )
 
 export const useCerrarCaja = () =>
   useMutacionCaja(
     (datos: CierreCajaRequest) =>
-      solicitar<CajaChicaDetalleResponse>('/caja-chica/cierre', { metodo: 'POST', cuerpo: datos }),
+      solicitar<CajaChicaDetalleResponse>('/caja-chica/cerrar', { metodo: 'POST', cuerpo: datos }),
     { exito: 'Caja cerrada' },
   )
 

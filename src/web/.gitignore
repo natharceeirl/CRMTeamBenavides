@@ -4,3 +4,6 @@ dist
 .vite
 .vercel
 .env*
+
+# Configuración de la demo en Vercel (cambia con cada túnel)
+vercel.json

@@ -938,6 +938,24 @@ export type MovimientoCajaResponse = {
   fecha: string
   usuarioId: string | null
   usuarioNombre: string | null
+  /** Solo en los ingresos que vienen de un cobro: el backend los registra solo. */
+  pagoId: string | null
+  metodoPagoId: string | null
+  metodoPagoNombre: string | null
+}
+
+/**
+ * GET /api/caja-chica/actual/resumen-metodos y /{id}/resumen-metodos: solo ingresos.
+ * Sin caja abierta suma los ingresos del día. `porMetodo` usa el nombre de cada método.
+ */
+export type ResumenMetodosPagoCajaResponse = {
+  cajaChicaId: string | null
+  totalEfectivo: number
+  totalYapePlin: number
+  totalTarjeta: number
+  totalTransferencia: number
+  porMetodo: Record<string, number>
+  totalGeneral: number
 }
 
 type DatosCaja = {

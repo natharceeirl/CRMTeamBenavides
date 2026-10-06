@@ -6,7 +6,8 @@ import { useSesion } from '../auth/sesion'
 import { ErrorApi } from '../api/http'
 
 type Credenciales = {
-  correo: string
+  // Correo del personal o DNI del cliente: la API acepta cualquiera de los dos.
+  usuario: string
   contrasena: string
 }
 
@@ -23,12 +24,12 @@ export function LoginPage() {
     return <Navigate to={destino} replace />
   }
 
-  const ingresar = async ({ correo, contrasena }: Credenciales) => {
+  const ingresar = async ({ usuario, contrasena }: Credenciales) => {
     setError(null)
     setEnviando(true)
 
     try {
-      await entrar(correo, contrasena)
+      await entrar(usuario.trim(), contrasena)
       navigate(destino, { replace: true })
     } catch (fallo) {
       setError(fallo instanceof ErrorApi ? fallo.message : 'No se pudo iniciar sesión.')
@@ -51,8 +52,12 @@ export function LoginPage() {
         </div>
         {error && <Alert type="error" message={error} showIcon />}
         <Form<Credenciales> layout="vertical" requiredMark={false} onFinish={ingresar} disabled={enviando}>
-          <Form.Item label="Correo" name="correo" rules={[{ required: true, message: 'Ingresa tu correo' }]}>
-            <Input type="email" autoComplete="username" placeholder="nombre@empresa.pe" />
+          <Form.Item
+            label="Correo o DNI"
+            name="usuario"
+            rules={[{ required: true, whitespace: true, message: 'Ingresa tu correo o DNI' }]}
+          >
+            <Input autoComplete="username" placeholder="nombre@empresa.pe o 12345678" />
           </Form.Item>
           <Form.Item
             label="Contraseña"

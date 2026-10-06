@@ -4,12 +4,13 @@ import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { Indicadores } from '../components/Indicadores'
 import { ModalAperturaCaja, ModalCierreCaja, ModalMovimientoCaja } from '../components/ModalesCaja'
-import { useCaja, useCajaActual, useHistorialCajas } from '../api/caja'
+import { useCaja, useCajaActual, useHistorialCajas, useResumenMetodosCaja } from '../api/caja'
 import {
   ESTADO_CAJA,
   TIPO_MOVIMIENTO_CAJA,
   type CajaChicaResponse,
   type MovimientoCajaResponse,
+  type ResumenMetodosPagoCajaResponse,
 } from '../api/tipos'
 import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
@@ -43,6 +44,7 @@ const columnasMovimientos: TableProps<MovimientoCajaResponse>['columns'] = [
       </>
     ),
   },
+  { title: 'Método', dataIndex: 'metodoPagoNombre', render: (metodo: string | null) => metodo ?? '—' },
   { title: 'Responsable', dataIndex: 'usuarioNombre', render: (nombre: string | null) => nombre ?? '—' },
   {
     title: 'Monto',
@@ -67,6 +69,41 @@ function TablaMovimientos({ movimientos, cargando }: Readonly<{ movimientos: Mov
   )
 }
 
+// Lo que no es efectivo, Yape o Plin, tarjeta ni transferencia se muestra como «Otros».
+const UMBRAL_OTROS = 0.005
+
+/** Ingresos por método de pago, para cuadrar la caja al cerrar. */
+function IngresosPorMetodo({ resumen }: Readonly<{ resumen: ResumenMetodosPagoCajaResponse | undefined }>) {
+  if (!resumen) {
+    return null
+  }
+
+  const otros =
+    resumen.totalGeneral -
+    resumen.totalEfectivo -
+    resumen.totalYapePlin -
+    resumen.totalTarjeta -
+    resumen.totalTransferencia
+
+  return (
+    <section>
+      <div className="seccion-titulo">
+        <h2>Ingresos por método de pago</h2>
+      </div>
+      <Indicadores
+        tamano="mediano"
+        items={[
+          { etiqueta: 'Efectivo', valor: soles(resumen.totalEfectivo), compacto: true },
+          { etiqueta: 'Yape o Plin', valor: soles(resumen.totalYapePlin), compacto: true },
+          { etiqueta: 'Tarjeta', valor: soles(resumen.totalTarjeta), compacto: true },
+          { etiqueta: 'Transferencia', valor: soles(resumen.totalTransferencia), compacto: true },
+          ...(otros > UMBRAL_OTROS ? [{ etiqueta: 'Otros', valor: soles(otros), compacto: true }] : []),
+        ]}
+      />
+    </section>
+  )
+}
+
 export function CajaPage() {
   const { tienePermiso } = useSesion()
   const puedeAbrir = tienePermiso(PERMISOS.cajaAperturar)
@@ -85,6 +122,8 @@ export function CajaPage() {
 
   const caja = actual.data?.caja ?? null
   const abierta = Boolean(actual.data?.tieneCajaAbierta && caja)
+  const resumenActual = useResumenMetodosCaja(caja?.id ?? null, abierta)
+  const resumenVisto = useResumenMetodosCaja(cajaVista, cajaVista !== null)
 
   const columnasHistorial: TableProps<CajaChicaResponse>['columns'] = [
     { title: 'Apertura', dataIndex: 'fechaApertura', className: 'num', render: (fecha: string) => fechaHora(fecha) },
@@ -177,6 +216,8 @@ export function CajaPage() {
                       {caja.usuarioAperturaNombre ? ` por ${caja.usuarioAperturaNombre}` : ''}.
                       {caja.observacionesApertura ? ` ${caja.observacionesApertura}` : ''}
                     </p>
+                    <AvisoError error={resumenActual.error} />
+                    <IngresosPorMetodo resumen={resumenActual.data} />
                     <TablaMovimientos movimientos={caja.movimientos} />
                   </div>
                 ) : (
@@ -222,8 +263,11 @@ export function CajaPage() {
         width={860}
         destroyOnHidden
       >
-        <AvisoError error={detalleVisto.error} />
-        <TablaMovimientos movimientos={detalleVisto.data?.movimientos ?? []} cargando={detalleVisto.isPending} />
+        <AvisoError error={detalleVisto.error ?? resumenVisto.error} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+          <IngresosPorMetodo resumen={resumenVisto.data} />
+          <TablaMovimientos movimientos={detalleVisto.data?.movimientos ?? []} cargando={detalleVisto.isPending} />
+        </div>
       </Modal>
     </>
   )

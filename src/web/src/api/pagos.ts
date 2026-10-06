@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { solicitar } from './http'
 import { avisoSegun } from './avisos'
+import { clavesCaja } from './caja'
 import { clavesOrdenes } from './ordenes'
 import { clavesVentas } from './ventas'
 import type { MetodoPagoResponse, PagoResponse, RegistrarPagoRequest } from './tipos'
@@ -29,7 +30,10 @@ const avisoDePago = avisoSegun<{ datos: RegistrarPagoRequest }>(({ datos }) =>
   datos.esAnticipo ? 'Adelanto registrado' : 'Pago registrado',
 )
 
-/** Pago o saldo de una venta confirmada. Si la venta liquidó una orden, también cambia su saldo. */
+/**
+ * Pago o saldo de una venta confirmada. Si la venta liquidó una orden, también cambia su saldo.
+ * Todo cobro entra solo a la caja abierta, por eso también se refresca la caja.
+ */
 export function useRegistrarPagoVenta() {
   const consultas = useQueryClient()
 
@@ -41,6 +45,7 @@ export function useRegistrarPagoVenta() {
       await Promise.all([
         consultas.invalidateQueries({ queryKey: clavesVentas.todas }),
         consultas.invalidateQueries({ queryKey: clavesOrdenes.todas }),
+        consultas.invalidateQueries({ queryKey: clavesCaja.todas }),
       ])
     },
   })
@@ -55,7 +60,10 @@ export function useRegistrarPagoOrden() {
     mutationFn: ({ ordenId, datos }: { ordenId: string; datos: RegistrarPagoRequest }) =>
       solicitar<PagoResponse>(`/ordenes-servicio/${ordenId}/pagos`, { metodo: 'POST', cuerpo: datos }),
     onSuccess: async () => {
-      await consultas.invalidateQueries({ queryKey: clavesOrdenes.todas })
+      await Promise.all([
+        consultas.invalidateQueries({ queryKey: clavesOrdenes.todas }),
+        consultas.invalidateQueries({ queryKey: clavesCaja.todas }),
+      ])
     },
   })
 }
