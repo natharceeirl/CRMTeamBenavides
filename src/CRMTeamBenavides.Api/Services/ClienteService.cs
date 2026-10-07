@@ -2,7 +2,6 @@ using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Features.Clientes;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace CRMTeamBenavides.Api.Services;
@@ -10,12 +9,10 @@ namespace CRMTeamBenavides.Api.Services;
 public class ClienteService : IClienteService
 {
     private readonly ApplicationDbContext _context;
-    private readonly UserManager<Usuario> _userManager;
 
-    public ClienteService(ApplicationDbContext context, UserManager<Usuario> userManager)
+    public ClienteService(ApplicationDbContext context)
     {
         _context = context;
-        _userManager = userManager;
     }
 
     public async Task<List<ClienteResponse>> GetAllAsync(Guid? soloClienteId = null)
@@ -90,10 +87,6 @@ public class ClienteService : IClienteService
         };
 
         _context.Clientes.Add(cliente);
-        if (!string.IsNullOrWhiteSpace(numDoc))
-        {
-            await AsegurarUsuarioClienteAsync(cliente, numDoc);
-        }
         await _context.SaveChangesAsync();
 
         return ServiceResult<ClienteResponse>.Success(MapToResponse(cliente));
@@ -225,72 +218,9 @@ public class ClienteService : IClienteService
         };
 
         _context.Clientes.Add(cliente);
-        await AsegurarUsuarioClienteAsync(cliente, numDoc);
         await _context.SaveChangesAsync();
 
         return ServiceResult<ClienteResponse>.Success(MapToResponse(cliente));
-    }
-
-    private async Task AsegurarUsuarioClienteAsync(Cliente cliente, string? passwordDni)
-    {
-        if (string.IsNullOrWhiteSpace(passwordDni) || passwordDni.Trim().Length < 6) return;
-
-        var dni = passwordDni.Trim();
-        var existingUser = await _userManager.FindByNameAsync(dni);
-        if (existingUser == null)
-        {
-            var email = !string.IsNullOrWhiteSpace(cliente.Email) ? cliente.Email.Trim() : $"{dni}@client.teambenavides.pe";
-            existingUser = await _userManager.FindByEmailAsync(email);
-        }
-
-        if (existingUser == null)
-        {
-            var email = !string.IsNullOrWhiteSpace(cliente.Email) ? cliente.Email.Trim() : $"{dni}@client.teambenavides.pe";
-            var user = new Usuario
-            {
-                UserName = dni,
-                Email = email,
-                NombreCompleto = cliente.NombreCompleto,
-                Activo = true,
-                FechaCreacion = DateTime.UtcNow
-            };
-
-            var createRes = await _userManager.CreateAsync(user, dni);
-            if (createRes.Succeeded)
-            {
-                cliente.UsuarioId = user.Id;
-                cliente.Usuario = user;
-
-                var rolCliente = await _context.Roles.FirstOrDefaultAsync(r => r.Nombre == RolesDefinidos.Cliente && r.Activo);
-                if (rolCliente != null)
-                {
-                    _context.UsuarioRoles.Add(new UsuarioRol
-                    {
-                        UsuarioId = user.Id,
-                        RolId = rolCliente.Id
-                    });
-
-                }
-            }
-        }
-        else
-        {
-            // NUNCA vincular automáticamente a una cuenta de personal.
-            // Solo si el usuario existente es exclusivamente de rol Cliente se puede asociar.
-            var rolesUsuario = await _context.UsuarioRoles
-                .Where(ur => ur.UsuarioId == existingUser.Id && ur.Rol.Activo)
-                .Select(ur => ur.Rol.Nombre)
-                .ToListAsync();
-
-            bool esPersonal = rolesUsuario.Any(r => r != RolesDefinidos.Cliente);
-            bool esCliente = rolesUsuario.Contains(RolesDefinidos.Cliente);
-
-            if (esCliente && !esPersonal)
-            {
-                cliente.UsuarioId = existingUser.Id;
-                cliente.Usuario = existingUser;
-            }
-        }
     }
 
     private static (TipoDocumentoCliente? tipo, string? numero, string? error) ValidarYResolverDocumento(

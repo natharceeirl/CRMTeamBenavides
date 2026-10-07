@@ -1297,6 +1297,25 @@ public class OrdenServicioService : IOrdenServicioService
                 orden.FechaCierre       = DateTime.UtcNow;
                 orden.FechaModificacion = DateTime.UtcNow;
 
+                var solicitudesPendientes = await _context.SolicitudesAprobacion
+                    .Where(s => s.Entidad == "OrdenServicio" && s.EntidadId == orden.Id.ToString() && s.Estado == EstadoAprobacionGerencia.Pendiente && s.Activo)
+                    .ToListAsync();
+
+                foreach (var sol in solicitudesPendientes)
+                {
+                    sol.Activo = false;
+                    sol.ObservacionesRespuesta = string.IsNullOrWhiteSpace(request.Observaciones)
+                        ? "Retirada automáticamente por cancelación de la orden de servicio."
+                        : $"Retirada automáticamente por cancelación de la orden de servicio: {request.Observaciones.Trim()}";
+                    sol.FechaRespuesta = DateTime.UtcNow;
+                    sol.FechaModificacion = DateTime.UtcNow;
+                }
+
+                if (orden.EstadoAprobacionGerencia == EstadoAprobacionGerencia.Pendiente)
+                {
+                    orden.EstadoAprobacionGerencia = EstadoAprobacionGerencia.NoAplica;
+                }
+
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
