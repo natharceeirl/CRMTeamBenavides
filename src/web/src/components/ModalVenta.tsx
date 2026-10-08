@@ -127,7 +127,7 @@ export function ModalVenta({ abierto, onCerrar, onCreada }: Readonly<Props>) {
           {(campos, { add, remove }) => (
             <>
               {campos.map((campo) => (
-                <Space key={campo.key} align="baseline" style={{ display: 'flex', marginBottom: 8 }}>
+                <Space key={campo.key} align="baseline" className="linea-detalle" style={{ display: 'flex', marginBottom: 8 }}>
                   <Form.Item
                     name={[campo.name, 'productoId']}
                     rules={[{ required: true, message: 'Elige el producto' }]}

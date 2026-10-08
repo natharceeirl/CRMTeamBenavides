@@ -146,6 +146,11 @@ h4 {
   background: var(--color-acento-600);
 }
 
+/* El botón del menú solo aparece en el celular. */
+.sidebar-alternar {
+  display: none;
+}
+
 .sidebar-pie {
   margin-top: auto;
   padding: 0 24px;
@@ -751,14 +756,187 @@ h4 {
   }
 }
 
+/*
+ * Celular: el menú se pliega bajo un botón y lo que tiene ancho fijo de
+ * escritorio (filtros, acciones, líneas de los modales) ocupa el ancho de la
+ * pantalla, para que nunca aparezca desplazamiento horizontal en la página.
+ */
+@media (max-width: 760px) {
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    flex-wrap: nowrap;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    max-height: 100vh;
+    padding: 0;
+  }
+
+  .sidebar-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 56px;
+    padding: 0 16px;
+    padding-right: 96px;
+  }
+
+  .sidebar-tipo-cambio {
+    margin-top: 0;
+  }
+
+  .sidebar-alternar {
+    display: block;
+    position: absolute;
+    top: 8px;
+    right: 16px;
+    min-height: 40px;
+    padding: 0 16px;
+    border: 1px solid color-mix(in srgb, var(--color-fondo) 40%, transparent);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-fondo);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .sidebar-nav,
+  .sidebar-pie {
+    display: none;
+  }
+
+  /* Abierto, el menú queda por encima del botón del asistente. */
+  .sidebar.abierta {
+    z-index: 1001;
+  }
+
+  .sidebar.abierta .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    order: 0;
+    padding-bottom: 8px;
+  }
+
+  .sidebar.abierta .sidebar-nav a {
+    padding: 12px 16px;
+  }
+
+  .sidebar.abierta .sidebar-pie {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    margin: 0;
+    padding: 12px 16px 16px;
+    border-top: 1px solid color-mix(in srgb, var(--color-fondo) 16%, transparent);
+  }
+
+  .barra-superior {
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  .barra-superior h1 {
+    font-size: 22px;
+  }
+
+  .barra-superior .acciones,
+  .seccion-titulo .acciones {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .barra-superior .acciones > .ant-btn {
+    flex: 1 1 auto;
+  }
+
+  .pagina {
+    padding-top: 20px;
+    padding-bottom: 20px;
+    gap: 28px;
+  }
+
+  .filtros > * {
+    flex: 1 1 100%;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .filtros > .ant-checkbox-wrapper {
+    flex-basis: auto;
+    width: auto !important;
+  }
+
+  .totales {
+    gap: 12px 28px;
+  }
+
+  /* Líneas de producto en los modales de venta y pedido: el producto ocupa la fila. */
+  .linea-detalle {
+    flex-wrap: wrap;
+  }
+
+  .linea-detalle > .ant-space-item:first-child {
+    flex: 1 1 100%;
+  }
+
+  .linea-detalle .ant-form-item {
+    width: 100% !important;
+  }
+
+  .ant-modal {
+    top: 16px;
+    padding-bottom: 16px;
+  }
+
+  /* Al desplazar una tabla de lado, la primera columna (la orden, la venta, el cliente) queda a la vista. */
+  .pagina .ant-table-thead > tr > th:first-child,
+  .pagina .ant-table-tbody > tr > td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--color-fondo);
+  }
+}
+
 @media (max-width: 600px) {
+  /* Dos indicadores por fila, con números más chicos: en una columna cada cifra ocupaba media pantalla. */
   .indicadores {
-    grid-template-columns: minmax(0, 1fr);
+    row-gap: 20px;
   }
 
   .indicador {
-    padding-left: 0;
-    border-left: 0;
+    padding: 0 0 0 16px;
+  }
+
+  .indicador-valor {
+    font-size: 34px;
+  }
+
+  .indicador-valor.compacto {
+    font-size: 22px;
+  }
+
+  .indicador-valor.mediano {
+    font-size: 20px;
+  }
+
+  /* El asistente queda como un botón redondo con su ícono, para no tapar el contenido. */
+  .chatbot-boton.ant-btn {
+    right: 16px;
+    bottom: 16px;
+    width: 52px;
+    height: 52px;
+    padding: 0;
+    border-radius: 50%;
+  }
+
+  .chatbot-boton.ant-btn > span:not(.ant-btn-icon) {
+    display: none;
   }
 
   .chatbot-panel {

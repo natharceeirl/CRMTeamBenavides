@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router'
+import { useEffect, useState } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { Logo } from '../components/Logo'
 import { ChatbotWidget } from '../components/ChatbotWidget'
 import { ModalCambiarPassword } from '../components/ModalCambiarPassword'
@@ -12,7 +12,11 @@ export function AppLayout() {
   const sesion = useSesion()
   const { usuario, roles, salir } = sesion
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const [cambiarPassword, setCambiarPassword] = useState(false)
+  // En el celular el menú se pliega bajo un botón; en pantallas más anchas siempre se ve.
+  const [menuAbierto, setMenuAbierto] = useState(false)
+  useEffect(() => setMenuAbierto(false), [pathname])
   // El tipo de cambio es del personal: el cliente en su portal no lo necesita.
   const tipoCambio = useTipoCambio(sesion.esPersonal)
   const textoTipoCambio = sesion.esPersonal ? resumenTipoCambio(tipoCambio.data) : null
@@ -27,7 +31,7 @@ export function AppLayout() {
 
   return (
     <div className="app">
-      <aside className="sidebar">
+      <aside className={menuAbierto ? 'sidebar abierta' : 'sidebar'}>
         <div className="sidebar-logo">
           <Logo variante="oscuro" alto={26} />
           {textoTipoCambio && (
@@ -36,7 +40,16 @@ export function AppLayout() {
             </div>
           )}
         </div>
-        <nav className="sidebar-nav" aria-label="Menú principal">
+        <button
+          type="button"
+          className="sidebar-alternar"
+          aria-expanded={menuAbierto}
+          aria-controls="menu-principal"
+          onClick={() => setMenuAbierto((abierto) => !abierto)}
+        >
+          {menuAbierto ? 'Cerrar' : 'Menú'}
+        </button>
+        <nav id="menu-principal" className="sidebar-nav" aria-label="Menú principal">
           {enlacesVisibles.map((enlace) => (
             <NavLink key={enlace.ruta} to={enlace.ruta} end={enlace.exacto}>
               {enlace.texto}
