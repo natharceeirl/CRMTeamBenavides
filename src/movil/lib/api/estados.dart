@@ -345,3 +345,29 @@ const nombresEstadoPedidoLima = <String, String>{
 };
 
 bool esPedidoFinal(String estado) => estado == EstadoPedidoLima.entregado || estado == EstadoPedidoLima.cancelado;
+
+/// Enum EtapaFotoOrdenServicio del backend: en qué momento se tomó la foto.
+class EtapaFoto {
+  const EtapaFoto._();
+
+  static const ingreso = 0;
+  static const diagnostico = 1;
+  static const reparacion = 2;
+  static const entrega = 3;
+}
+
+const nombresEtapaFoto = <int, String>{
+  EtapaFoto.ingreso: 'Ingreso',
+  EtapaFoto.diagnostico: 'Diagnóstico',
+  EtapaFoto.reparacion: 'Reparación',
+  EtapaFoto.entrega: 'Entrega',
+};
+
+/// La etapa que corresponde al estado de la orden, para no tener que elegirla
+/// en el caso común.
+int etapaFotoSugerida(int estadoOrden) => switch (estadoOrden) {
+      EstadoOrden.abierta => EtapaFoto.ingreso,
+      EstadoOrden.diagnostico || EstadoOrden.aprobada => EtapaFoto.diagnostico,
+      EstadoOrden.enProceso => EtapaFoto.reparacion,
+      _ => EtapaFoto.entrega,
+    };

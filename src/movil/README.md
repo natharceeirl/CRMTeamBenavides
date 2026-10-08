@@ -5,14 +5,19 @@ App en Flutter para Android e iOS. Consume la misma API que la web
 
 ## Qué hay hoy
 
-- Login contra `POST /api/auth/login`, con renovación automática del token y
-  cierre de sesión cuando el refresh ya no sirve.
+- Login con correo o DNI contra `POST /api/auth/login`, con renovación
+  automática del token y cierre de sesión cuando el refresh ya no sirve.
 - La sesión se guarda en el almacenamiento seguro del dispositivo, así que la app
   no vuelve a pedir la contraseña al reabrirse.
 - Navegación con go_router y guardia de sesión: sin sesión, solo el login.
 - Tablero con el resumen de `/api/dashboard/resumen`.
 - Órdenes: lista con búsqueda, filtro «solo en taller» y ficha de la orden, donde
-  el técnico puede registrar el diagnóstico.
+  el técnico registra el diagnóstico, cambia el estado, agrega repuestos y
+  servicios y sube fotos con la cámara o la galería. El precio de un repuesto o
+  servicio se puede cambiar; si no es el de lista, la orden queda pendiente de
+  aprobación de Gerencia.
+- Portal del cliente: sus órdenes con el avance, el presupuesto para aprobar o
+  rechazar, sus comprobantes, sus citas y sus pedidos a Lima.
 - Tienda, que agrupa las dos caras del mostrador:
   - Repuestos: búsqueda por código, nombre o categoría, filtro de bajo stock,
     filtro por categoría y ficha con los últimos movimientos.
@@ -22,8 +27,8 @@ App en Flutter para Android e iOS. Consume la misma API que la web
 - Unidades: lista con búsqueda.
 - Chatbot: consulta de FAQs y derivación a un asesor.
 
-Salvo el diagnóstico de la orden, todo es de solo lectura. Crear y editar se hace
-desde la web, que es donde vive la operación completa.
+Fuera de la orden y las citas, la app es de consulta. Crear y editar el resto se
+hace desde la web, que es donde vive la operación completa.
 
 ## Cómo correrla
 
@@ -45,6 +50,9 @@ flutter run --dart-define=API_URL=http://192.168.1.50:5021
 
 El teléfono y el PC tienen que estar en la misma red, y el firewall de Windows
 debe dejar pasar el puerto 5021.
+
+Para compilar y probar en iPhone (simulador, iPhone propio y TestFlight) ver
+[docs/guia-iphone.md](../../docs/guia-iphone.md): hace falta una Mac.
 
 ## Estructura
 
@@ -70,9 +78,9 @@ debe dejar pasar el puerto 5021.
   porque después no se pueden cambiar.
 - **Menús por rol:** la app ya recibe los roles desde `/api/auth/me`, pero no
   esconde nada todavía; falta la matriz de permisos del cliente.
-- Agregar repuestos y cambiar el estado de la orden se hacen desde la web. La
-  tienda en la app es consulta: registrar entradas, salidas y ajustes de stock,
-  y crear, confirmar o anular una venta y su comprobante, también.
+- La tienda en la app es consulta: registrar entradas, salidas y ajustes de
+  stock, y crear, confirmar o anular una venta y su comprobante, se hacen desde
+  la web.
 - **Catálogos grandes:** repuestos y ventas traen la lista completa y filtran en
   el dispositivo, como el resto de la app. `GET /api/productos` acepta
   `categoriaId`, `busqueda` y `bajoStock`, y `GET /api/ventas` acepta `estado`,

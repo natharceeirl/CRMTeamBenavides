@@ -10,6 +10,7 @@ import '../formato.dart';
 import '../tema.dart';
 import 'agregar_item.dart';
 import 'comunes.dart';
+import 'fotos_orden.dart';
 
 class PantallaOrdenDetalle extends ConsumerStatefulWidget {
   const PantallaOrdenDetalle({required this.ordenId, super.key});
@@ -413,8 +414,14 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                     style: TextStyle(color: Marca.textoSecundario),
                   ),
                 ),
-              // El cliente sigue el avance arriba; el historial detallado es del personal.
+              // El cliente sigue el avance arriba; las fotos y el historial detallado son del personal.
               if (!esCliente) ...[
+                const _Titulo('Fotos'),
+                SeccionFotosOrden(
+                  ordenId: widget.ordenId,
+                  estadoOrden: datosOrden.estadoId,
+                  puedeSubir: !esEstadoTerminal(datosOrden.estadoId),
+                ),
                 const _Titulo('Historial'),
                 if (datos.historial.isEmpty)
                   const ListaVacia(mensaje: 'Sin cambios de estado registrados.')

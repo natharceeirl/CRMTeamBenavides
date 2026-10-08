@@ -1189,3 +1189,37 @@ class PedidoLimaApi {
   /// «2 × Filtro de aceite», uno por línea del pedido.
   final List<String> repuestos;
 }
+
+/// GET /api/ordenes-servicio/{id}/fotos. El archivo se pide aparte, con el
+/// token, a `urlRelativa`.
+class FotoOrdenApi {
+  const FotoOrdenApi({
+    required this.id,
+    required this.urlRelativa,
+    required this.etapa,
+    required this.etapaNombre,
+    required this.fechaCreacion,
+    this.usuarioNombre,
+    this.observacion,
+  });
+
+  factory FotoOrdenApi.desdeJson(Map<String, dynamic> json) => FotoOrdenApi(
+        id: json['id'] as String,
+        urlRelativa: json['urlRelativa'] as String,
+        etapa: (json['etapa'] as num?)?.toInt() ?? EtapaFoto.ingreso,
+        etapaNombre: json['etapaNombre'] as String? ?? '',
+        fechaCreacion: DateTime.parse(json['fechaCreacion'] as String),
+        usuarioNombre: json['usuarioNombre'] as String?,
+        observacion: json['observacion'] as String?,
+      );
+
+  final String id;
+  final String urlRelativa;
+  final int etapa;
+  final String etapaNombre;
+  final DateTime fechaCreacion;
+  final String? usuarioNombre;
+  final String? observacion;
+
+  String get nombreEtapa => nombresEtapaFoto[etapa] ?? etapaNombre;
+}

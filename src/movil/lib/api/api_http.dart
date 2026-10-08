@@ -206,8 +206,8 @@ class ApiHttp {
     return datos.map(ServicioApi.desdeJson).toList();
   }
 
-  /// POST /api/ordenes-servicio/{id}/detalles. Sin `precios.modificar` el
-  /// backend toma el precio del catálogo y rechaza cambiarlo.
+  /// POST /api/ordenes-servicio/{id}/detalles. Sin precio, el backend usa el
+  /// del catálogo; con otro, deja la orden pendiente de aprobación de Gerencia.
   Future<void> agregarItem(
     String ordenId, {
     required int tipoItem,
@@ -231,6 +231,64 @@ class ApiHttp {
           'tipoAfectacionIgv': tipoAfectacionIgv,
         },
       );
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
+  Future<List<FotoOrdenApi>> fotosOrden(String ordenId) async {
+    final datos = await _lista('/api/ordenes-servicio/$ordenId/fotos');
+    return datos.map(FotoOrdenApi.desdeJson).toList();
+  }
+
+  /// Sube una foto como multipart: `archivo`, `etapa` y `observacion`, igual
+  /// que la web. La API acepta JPG, PNG o WEBP.
+  Future<void> subirFotoOrden(
+    String ordenId, {
+    required List<int> bytes,
+    required String nombreArchivo,
+    required int etapa,
+    String? observacion,
+  }) async {
+    final extension = nombreArchivo.split('.').last.toLowerCase();
+    final tipo = switch (extension) {
+      'png' => 'png',
+      'webp' => 'webp',
+      _ => 'jpeg',
+    };
+    final formulario = FormData.fromMap({
+      'archivo': MultipartFile.fromBytes(
+        bytes,
+        filename: nombreArchivo,
+        contentType: DioMediaType('image', tipo),
+      ),
+      'etapa': etapa.toString(),
+      if (observacion != null && observacion.trim().isNotEmpty) 'observacion': observacion.trim(),
+    });
+    try {
+      await _dio.post<Map<String, dynamic>>('/api/ordenes-servicio/$ordenId/fotos', data: formulario);
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
+  /// El archivo de una foto pide token, así que no se carga con una URL suelta:
+  /// se descarga por aquí, con la renovación del token incluida.
+  Future<List<int>> archivoDeFoto(String urlRelativa) async {
+    try {
+      final respuesta = await _dio.get<List<int>>(
+        urlRelativa,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return respuesta.data ?? const [];
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
+  Future<void> eliminarFotoOrden(String ordenId, String fotoId) async {
+    try {
+      await _dio.delete<void>('/api/ordenes-servicio/$ordenId/fotos/$fotoId');
     } on DioException catch (fallo) {
       throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
     }

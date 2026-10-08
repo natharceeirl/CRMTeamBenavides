@@ -121,8 +121,27 @@ void main() {
     expect(find.widgetWithText(ChoiceChip, 'Mano de obra'), findsNothing);
     expect(find.widgetWithText(ChoiceChip, 'Terceros'), findsNothing);
     expect(find.text('S/ 45.00'), findsNWidgets(2));
-    // No hay campo de precio que el técnico pueda tocar.
+    // Hasta elegir un repuesto o servicio solo está el buscador.
     expect(find.byType(TextField), findsOneWidget);
+  });
+
+  testWidgets('el técnico puede cambiar el precio del repuesto, con aviso de aprobación', (tester) async {
+    final api = await montarHoja(tester, sesion: SesionTecnico.new);
+
+    await tester.tap(find.text('Filtro de aceite'));
+    await tester.pumpAndSettle();
+    // Arranca con el precio de lista y sin aviso.
+    final precio = find.widgetWithText(TextField, 'Precio unitario (S/)');
+    expect(precio, findsOneWidget);
+    expect(find.textContaining('hasta que Gerencia'), findsNothing);
+
+    await tester.enterText(precio, '50');
+    await tester.pump();
+    expect(find.textContaining('hasta que Gerencia lo apruebe'), findsOneWidget);
+
+    await tester.tap(find.text('Agregar'));
+    await tester.pumpAndSettle();
+    expect(api.enviados.single['precioUnitario'], 50);
   });
 
   testWidgets('un repuesto sin stock no se puede elegir', (tester) async {

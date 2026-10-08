@@ -165,6 +165,16 @@ final ordenProvider =
   (ref, id) => ref.watch(apiProvider).orden(id),
 );
 
+final fotosOrdenProvider = FutureProvider.autoDispose.family<List<FotoOrdenApi>, String>(
+  (ref, ordenId) => ref.watch(apiProvider).fotosOrden(ordenId),
+);
+
+/// Los bytes de cada foto se guardan mientras se usan: volver a la orden no
+/// la descarga otra vez.
+final archivoFotoProvider = FutureProvider.autoDispose.family<List<int>, String>(
+  (ref, urlRelativa) => ref.watch(apiProvider).archivoDeFoto(urlRelativa),
+);
+
 final resumenProvider = FutureProvider.autoDispose<ResumenDashboardApi>(
   (ref) => ref.watch(apiProvider).resumenDashboard(),
 );
