@@ -12,6 +12,29 @@ export const clavesConfiguracion = {
   empresa: ['configuracion', 'empresa'] as const,
   tipoCambio: ['configuracion', 'tipo-cambio'] as const,
   historialTipoCambio: ['configuracion', 'tipo-cambio', 'historial'] as const,
+  conversion: (montoUsd: number) => ['configuracion', 'tipo-cambio', 'conversion', montoUsd] as const,
+}
+
+/** GET /api/configuracion/tipo-cambio/convertir */
+export type ConversionMonedaResponse = {
+  montoUsd: number
+  tipoCambio: number
+  montoPen: number
+  formula: string
+}
+
+/**
+ * Dólares a soles con el tipo de cambio vigente, redondeado hacia arriba al sol
+ * entero (127.01 pasa a 128). Sin tipo de cambio registrado, la API responde error.
+ */
+export function useConversionDolares(montoUsd: number | null) {
+  return useQuery({
+    queryKey: clavesConfiguracion.conversion(montoUsd ?? 0),
+    queryFn: () =>
+      solicitar<ConversionMonedaResponse>(`/configuracion/tipo-cambio/convertir?montoUsd=${montoUsd}`),
+    enabled: montoUsd != null && montoUsd > 0,
+    retry: false,
+  })
 }
 
 export function useConfiguracionEmpresa() {

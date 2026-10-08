@@ -12,9 +12,12 @@ import {
   useVenta,
 } from '../api/ventas'
 import { tieneSaldo, useMetodosPago, useRegistrarPagoVenta } from '../api/pagos'
+import { GERENCIA, nombresGerencia } from '../api/ordenes'
 import { useConfiguracionEmpresa } from '../api/configuracion'
 import { nombresTipoItem, type DetalleVentaResponse, type RegistrarComprobanteRequest } from '../api/tipos'
 import { AvisoError } from './AvisoError'
+import { EtiquetaEstado, type TonoEstado } from './EtiquetaEstado'
+import { ModalEditarCotizacion, esCotizacionEditable } from './ModalEditarCotizacion'
 import { ModalRegistrarPago } from './ModalRegistrarPago'
 import { ResumenCobro } from './ResumenCobro'
 import { colores } from '../theme/tokens'
@@ -66,6 +69,12 @@ const columnas: TableProps<DetalleVentaResponse>['columns'] = [
   },
 ]
 
+const tonoGerencia: Record<number, TonoEstado> = {
+  [GERENCIA.pendiente]: 'alerta',
+  [GERENCIA.aprobado]: 'hecho',
+  [GERENCIA.rechazado]: 'suave',
+}
+
 /** Catálogo cerrado: el tipo de comprobante no se escribe a mano. */
 const TIPOS_COMPROBANTE = [
   { value: 'Boleta', label: 'Boleta' },
@@ -78,6 +87,7 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
   const puedeAnular = tienePermiso(PERMISOS.ventasAnular)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [modalPago, setModalPago] = useState(false)
+  const [editandoCotizacion, setEditandoCotizacion] = useState(false)
   const [errorImpresion, setErrorImpresion] = useState<unknown>(null)
   const [formulario] = Form.useForm<RegistrarComprobanteRequest>()
   const venta = useVenta(abierto ? (ventaId ?? undefined) : undefined)
@@ -91,6 +101,7 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
 
   const handleCerrar = () => {
     setMostrarForm(false)
+    setEditandoCotizacion(false)
     setErrorImpresion(null)
     formulario.resetFields()
     registrar.reset()
@@ -128,6 +139,11 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
 
   const confirmada = datos?.estadoId === ESTADO_VENTA.confirmada
   const puedeCobrar = Boolean(datos) && confirmada && puedeRegistrar && tieneSaldo(datos!)
+  const aprobacion = datos?.estadoAprobacionGerenciaId ?? GERENCIA.noAplica
+  // Con un precio pendiente o rechazado, el backend no deja confirmar ni registrar el comprobante.
+  const bloqueadaPorPrecio = aprobacion === GERENCIA.pendiente || aprobacion === GERENCIA.rechazado
+  const puedeEditarCotizacion =
+    Boolean(datos) && datos!.estadoId === ESTADO_VENTA.cotizacion && puedeRegistrar && esCotizacionEditable(datos!)
 
   return (
     <Modal
@@ -165,6 +181,18 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
                 <td>Estado</td>
                 <td>{nombresEstadoVenta[datos.estadoId] ?? datos.estado}</td>
               </tr>
+              {aprobacion !== GERENCIA.noAplica && (
+                <tr>
+                  <td>Precio</td>
+                  <td>
+                    <EtiquetaEstado tono={tonoGerencia[aprobacion] ?? 'neutro'}>
+                      {aprobacion === GERENCIA.pendiente
+                        ? 'Esperando a Gerencia'
+                        : `${nombresGerencia[aprobacion]} por Gerencia`}
+                    </EtiquetaEstado>
+                  </td>
+                </tr>
+              )}
               <tr>
                 <td>Orden de servicio</td>
                 <td>{datos.ordenServicioId ? (numeroOrden ?? referenciaOrden(datos.ordenServicioId)) : '—'}</td>
@@ -180,6 +208,16 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
             loading={venta.isPending}
             style={{ marginTop: 16 }}
           />
+          {puedeEditarCotizacion && (
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <Button onClick={() => setEditandoCotizacion(true)}>Editar cantidades y precios</Button>
+              {aprobacion === GERENCIA.rechazado && (
+                <span className="texto-secundario">
+                  Gerencia rechazó el precio: corrígelo y se pide una aprobación nueva.
+                </span>
+              )}
+            </div>
+          )}
           <div className="totales">
             <div>
               <div className="etiqueta">Op. gravadas</div>
@@ -237,6 +275,7 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
                 {!datos.comprobante &&
                   puedeRegistrar &&
                   !mostrarForm &&
+                  !bloqueadaPorPrecio &&
                   puedeRegistrarComprobante(datos.estadoId, false) && (
                     <Button type="primary" onClick={() => setMostrarForm(true)}>
                       Registrar comprobante
@@ -284,7 +323,9 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
             ) : (
               !mostrarForm && (
                 <p className="texto-secundario">
-                  {confirmada ? 'Sin comprobante registrado.' : 'Solo una venta confirmada lleva comprobante.'}
+                  {confirmada && bloqueadaPorPrecio && 'El comprobante se registra cuando Gerencia apruebe el precio.'}
+                  {confirmada && !bloqueadaPorPrecio && 'Sin comprobante registrado.'}
+                  {!confirmada && 'Solo una venta confirmada lleva comprobante.'}
                 </p>
               )
             )}
@@ -344,6 +385,10 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
               </div>
             )}
           </section>
+
+          {editandoCotizacion && (
+            <ModalEditarCotizacion venta={datos} onCerrar={() => setEditandoCotizacion(false)} />
+          )}
 
           <ModalRegistrarPago
             abierto={modalPago}

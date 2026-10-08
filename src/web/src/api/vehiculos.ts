@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { solicitar } from './http'
-import type { VehiculoRequest, VehiculoResponse } from './tipos'
+import type { AltaRapidaVehiculoRequest, VehiculoRequest, VehiculoResponse } from './tipos'
 
 export const clavesVehiculos = {
   todos: ['vehiculos'] as const,
@@ -25,6 +25,20 @@ export function useGuardarVehiculo() {
       id
         ? solicitar<VehiculoResponse>(`/vehiculos/${id}`, { metodo: 'PUT', cuerpo: datos })
         : solicitar<VehiculoResponse>('/vehiculos', { metodo: 'POST', cuerpo: datos }),
+    onSuccess: async () => {
+      await consultas.invalidateQueries({ queryKey: clavesVehiculos.todos })
+    },
+  })
+}
+
+/** Registro con lo mínimo para abrir la orden: placa, marca, modelo y kilometraje. */
+export function useAltaRapidaVehiculo() {
+  const consultas = useQueryClient()
+
+  return useMutation({
+    meta: { exito: 'Unidad registrada' },
+    mutationFn: (datos: AltaRapidaVehiculoRequest) =>
+      solicitar<VehiculoResponse>('/vehiculos/alta-rapida', { metodo: 'POST', cuerpo: datos }),
     onSuccess: async () => {
       await consultas.invalidateQueries({ queryKey: clavesVehiculos.todos })
     },

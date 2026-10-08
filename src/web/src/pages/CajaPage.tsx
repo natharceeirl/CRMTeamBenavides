@@ -129,7 +129,20 @@ export function CajaPage() {
     { title: 'Apertura', dataIndex: 'fechaApertura', className: 'num', render: (fecha: string) => fechaHora(fecha) },
     { title: 'Cierre', dataIndex: 'fechaCierre', className: 'num', render: (fecha: string | null) => fechaHora(fecha) },
     { title: 'Inicial', dataIndex: 'montoApertura', align: 'right', className: 'num', render: (monto: number) => importe(monto) },
-    { title: 'Ingresos', dataIndex: 'totalIngresos', align: 'right', className: 'num', render: (monto: number) => importe(monto) },
+    {
+      title: 'Ingresos en efectivo',
+      key: 'ingresosEfectivo',
+      align: 'right',
+      className: 'num',
+      render: (_, registro) => importe(registro.totalIngresosEfectivo ?? registro.totalIngresos),
+    },
+    {
+      title: 'Otros métodos',
+      key: 'ingresosOtros',
+      align: 'right',
+      className: 'num',
+      render: (_, registro) => importe(registro.totalIngresosOtrosMetodos ?? 0),
+    },
     { title: 'Egresos', dataIndex: 'totalEgresos', align: 'right', className: 'num', render: (monto: number) => importe(monto) },
     {
       title: 'Saldo final',
@@ -205,9 +218,14 @@ export function CajaPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
                     <Indicadores
                       items={[
-                        { etiqueta: 'Saldo', valor: soles(caja.saldoCalculado), destacado: true, compacto: true },
+                        // Saldo = inicial + ingresos en efectivo − egresos: lo que debe haber en el cajón.
+                        { etiqueta: 'Efectivo en caja', valor: soles(caja.saldoCalculado), destacado: true, compacto: true },
                         { etiqueta: 'Monto inicial', valor: soles(caja.montoApertura), compacto: true },
-                        { etiqueta: 'Ingresos', valor: soles(caja.totalIngresos), compacto: true },
+                        {
+                          etiqueta: 'Ingresos en efectivo',
+                          valor: soles(caja.totalIngresosEfectivo ?? caja.totalIngresos),
+                          compacto: true,
+                        },
                         { etiqueta: 'Egresos', valor: soles(caja.totalEgresos), compacto: true },
                       ]}
                     />

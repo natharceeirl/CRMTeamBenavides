@@ -13,6 +13,7 @@ import {
 import type { HistorialTipoCambioResponse } from '../api/tipos'
 import { fechaHora } from '../utils/formato'
 import { tipoDeCambio } from '../utils/tipoCambio'
+import { ConversorDolares } from '../components/ConversorDolares'
 
 type Campos = {
   nombreEmpresa: string
@@ -189,6 +190,12 @@ export function ConfiguracionPage() {
             </>
           ) : (
             !tipoCambio.isPending && <p className="texto-secundario">Todavía no se registra un tipo de cambio.</p>
+          )}
+          {vigente?.configurado && (
+            <div style={{ marginTop: 24 }}>
+              <h3 style={{ marginTop: 0 }}>Convertir un precio en dólares</h3>
+              <ConversorDolares />
+            </div>
           )}
 
           <Form<CamposTipoCambio>

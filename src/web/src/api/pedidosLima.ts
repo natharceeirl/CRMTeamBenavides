@@ -2,12 +2,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { solicitar } from './http'
 import { avisoSegun, type AvisoExito } from './avisos'
 import { clavesInventario } from './inventario'
+import { clavesCaja } from './caja'
 import {
   ESTADO_PEDIDO_LIMA,
   type EstadoPedidoLima,
   type ActualizarPedidoLimaRequest,
+  type ActualizarPrecioDetallePedidoLimaRequest,
   type CrearPedidoLimaRequest,
+  type PagoResponse,
   type PedidoLimaResponse,
+  type RegistrarPagoRequest,
 } from './tipos'
 
 export const nombresEstadoPedidoLima: Record<EstadoPedidoLima, string> = {
@@ -54,7 +58,7 @@ export function rutaPedidosLima(filtros: FiltrosPedidosLima, base = '/pedidos-li
   return consulta ? `${base}?${consulta}` : base
 }
 
-const claves = {
+export const clavesPedidosLima = {
   todas: ['pedidos-lima'] as const,
   lista: (filtros: FiltrosPedidosLima) => ['pedidos-lima', 'lista', filtros] as const,
   uno: (id: string) => ['pedidos-lima', id] as const,
@@ -62,14 +66,14 @@ const claves = {
 
 export function usePedidosLima(filtros: FiltrosPedidosLima) {
   return useQuery({
-    queryKey: claves.lista(filtros),
+    queryKey: clavesPedidosLima.lista(filtros),
     queryFn: () => solicitar<PedidoLimaResponse[]>(rutaPedidosLima(filtros)),
   })
 }
 
 export function usePedidoLima(id: string | null) {
   return useQuery({
-    queryKey: claves.uno(id ?? ''),
+    queryKey: clavesPedidosLima.uno(id ?? ''),
     queryFn: () => solicitar<PedidoLimaResponse>(`/pedidos-lima/${id}`),
     enabled: Boolean(id),
   })
@@ -83,7 +87,7 @@ function useMutacionPedido<V>(mutationFn: (variables: V) => Promise<PedidoLimaRe
     mutationFn,
     onSuccess: async () => {
       await Promise.all([
-        consultas.invalidateQueries({ queryKey: claves.todas }),
+        consultas.invalidateQueries({ queryKey: clavesPedidosLima.todas }),
         consultas.invalidateQueries({ queryKey: clavesInventario.productos }),
       ])
     },
@@ -116,3 +120,46 @@ export const useCancelarPedidoLima = () =>
       solicitar<PedidoLimaResponse>(`/pedidos-lima/${id}/cancelar`, { metodo: 'PUT', cuerpo: { motivoCancelacion: motivo } }),
     'Pedido cancelado',
   )
+
+/**
+ * Corrige cantidad o precio de un repuesto del pedido. Otro precio que el de lista
+ * deja el pedido pendiente de Gerencia; volver al de lista lo libera. La clave de
+ * aprobaciones se escribe aquí porque api/aprobaciones importa este archivo.
+ */
+export function useActualizarDetallePedidoLima() {
+  const consultas = useQueryClient()
+  return useMutation({
+    meta: { exito: 'Repuesto del pedido actualizado' },
+    mutationFn: ({ id, detalleId, datos }: { id: string; detalleId: string; datos: ActualizarPrecioDetallePedidoLimaRequest }) =>
+      solicitar<PedidoLimaResponse>(`/pedidos-lima/${id}/detalles/${detalleId}`, { metodo: 'PUT', cuerpo: datos }),
+    onSuccess: async () => {
+      await Promise.all([
+        consultas.invalidateQueries({ queryKey: clavesPedidosLima.todas }),
+        consultas.invalidateQueries({ queryKey: ['aprobaciones'] }),
+      ])
+    },
+  })
+}
+
+/** Adelanto mientras el pedido viene en camino, o pago del saldo. Ambos entran solos a la caja abierta. */
+export function useRegistrarPagoPedidoLima() {
+  const consultas = useQueryClient()
+  return useMutation({
+    meta: {
+      exito: avisoSegun<{ datos: RegistrarPagoRequest }>(({ datos }) =>
+        datos.esAnticipo ? 'Adelanto registrado' : 'Pago registrado',
+      ),
+    },
+    mutationFn: ({ id, datos }: { id: string; datos: RegistrarPagoRequest }) =>
+      solicitar<PagoResponse>(`/pedidos-lima/${id}/${datos.esAnticipo ? 'adelanto' : 'pagos'}`, {
+        metodo: 'POST',
+        cuerpo: datos,
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        consultas.invalidateQueries({ queryKey: clavesPedidosLima.todas }),
+        consultas.invalidateQueries({ queryKey: clavesCaja.todas }),
+      ])
+    },
+  })
+}

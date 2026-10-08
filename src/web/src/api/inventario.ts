@@ -4,6 +4,7 @@ import { avisoSegun } from './avisos'
 import type {
   ActualizarProductoRequest,
   AjusteRequest,
+  AltaRapidaProductoRequest,
   CategoriaProductoRequest,
   CategoriaProductoResponse,
   CrearProductoRequest,
@@ -30,6 +31,7 @@ export type FiltrosProductos = {
   categoriaId?: string
   busqueda?: string
   bajoStock?: boolean
+  marca?: string
 }
 
 /** Arma la ruta con los filtros que acepta GET /api/productos. */
@@ -38,6 +40,7 @@ export function rutaProductos(filtros: FiltrosProductos = {}): string {
   if (filtros.categoriaId) parametros.set('categoriaId', filtros.categoriaId)
   if (filtros.busqueda?.trim()) parametros.set('busqueda', filtros.busqueda.trim())
   if (filtros.bajoStock) parametros.set('bajoStock', 'true')
+  if (filtros.marca) parametros.set('marca', filtros.marca)
 
   const consulta = parametros.toString()
   return `/productos${consulta ? `?${consulta}` : ''}`
@@ -46,7 +49,14 @@ export function rutaProductos(filtros: FiltrosProductos = {}): string {
 export const clavesInventario = {
   productos: ['productos'] as const,
   listaProductos: (filtros: FiltrosProductos) =>
-    ['productos', filtros.categoriaId ?? 'todas', filtros.busqueda ?? '', filtros.bajoStock ?? false] as const,
+    [
+      'productos',
+      filtros.categoriaId ?? 'todas',
+      filtros.busqueda ?? '',
+      filtros.bajoStock ?? false,
+      filtros.marca ?? 'todas',
+    ] as const,
+  marcas: ['productos', 'marcas'] as const,
   categorias: ['categorias-producto'] as const,
   movimientos: ['movimientos-inventario'] as const,
   movimientosDeProducto: (productoId: string) => ['movimientos-inventario', productoId] as const,
@@ -56,6 +66,15 @@ export function useProductos(filtros: FiltrosProductos = {}) {
   return useQuery({
     queryKey: clavesInventario.listaProductos(filtros),
     queryFn: () => solicitar<ProductoResponse[]>(rutaProductos(filtros)),
+  })
+}
+
+/** Las marcas que ya tienen repuestos, para filtrar y para sugerir al registrar. */
+export function useMarcasProductos() {
+  return useQuery({
+    queryKey: clavesInventario.marcas,
+    queryFn: () => solicitar<string[]>('/productos/marcas'),
+    staleTime: 5 * 60_000,
   })
 }
 
@@ -98,6 +117,40 @@ export function useGuardarProducto() {
         : solicitar<ProductoResponse>('/productos', { metodo: 'POST', cuerpo: datos }),
     onSuccess: async () => {
       await consultas.invalidateQueries({ queryKey: clavesInventario.productos })
+    },
+  })
+}
+
+/** Registro mínimo de un repuesto desde una venta o una orden; si el código ya existe, devuelve ese. */
+export function useAltaRapidaProducto() {
+  const consultas = useQueryClient()
+
+  return useMutation({
+    meta: { exito: 'Repuesto registrado' },
+    mutationFn: (datos: AltaRapidaProductoRequest) =>
+      solicitar<ProductoResponse>('/productos/alta-rapida', { metodo: 'POST', cuerpo: datos }),
+    onSuccess: async () => {
+      await Promise.all([
+        consultas.invalidateQueries({ queryKey: clavesInventario.productos }),
+        consultas.invalidateQueries({ queryKey: clavesInventario.categorias }),
+      ])
+    },
+  })
+}
+
+/** Una categoría con solo su nombre, desde el registro de un repuesto. */
+export function useAltaRapidaCategoria() {
+  const consultas = useQueryClient()
+
+  return useMutation({
+    meta: { exito: 'Categoría registrada' },
+    mutationFn: (nombre: string) =>
+      solicitar<CategoriaProductoResponse>('/categorias-producto/alta-rapida', {
+        metodo: 'POST',
+        cuerpo: { nombre },
+      }),
+    onSuccess: async () => {
+      await consultas.invalidateQueries({ queryKey: clavesInventario.categorias })
     },
   })
 }

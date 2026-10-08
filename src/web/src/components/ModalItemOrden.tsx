@@ -1,8 +1,13 @@
-import { Form, Input, InputNumber, Modal, Radio, Select } from 'antd'
+import { useState } from 'react'
+import { Button, Form, Input, InputNumber, Modal, Radio, Select } from 'antd'
 import { useProductos } from '../api/inventario'
 import { useServicios } from '../api/servicios'
 import { useAgregarDetalle } from '../api/ordenes'
 import { AvisoError } from './AvisoError'
+import { AvisoPrecioGerencia } from './AvisoPrecioGerencia'
+import { ModalAltaRapidaRepuesto, ModalAltaRapidaServicio } from './ModalesAltaRapida'
+import { useSesion } from '../auth/sesion'
+import { PERMISOS } from '../auth/acceso'
 import { soles } from '../utils/formato'
 import {
   TIPO_AFECTACION_IGV,
@@ -12,6 +17,11 @@ import {
 type Props = {
   abierto: boolean
   ordenId: string
+  /**
+   * Mano de obra y terceros no tienen precio de lista: solo los registra quien tiene
+   * `precios.modificar`. El precio de un repuesto o servicio lo puede cambiar
+   * cualquiera, con la aprobación de Gerencia.
+   */
   puedeModificarPrecios?: boolean
   onCerrar: () => void
 }
@@ -36,13 +46,26 @@ export function ModalItemOrden({
   const productos = useProductos()
   const servicios = useServicios()
   const agregar = useAgregarDetalle()
+  const { tienePermiso } = useSesion()
+  const puedeRegistrarRepuesto = tienePermiso(PERMISOS.inventarioCrear)
+  const puedeRegistrarServicio = tienePermiso(PERMISOS.serviciosCrear)
+  const [altaRepuesto, setAltaRepuesto] = useState(false)
+  const [altaServicio, setAltaServicio] = useState(false)
 
   const tipoItem = Form.useWatch('tipoItem', formulario) ?? TIPO_ITEM_SERVICIO.repuesto
   const productoId = Form.useWatch('productoId', formulario)
   const servicioId = Form.useWatch('servicioId', formulario)
+  const precioUnitario = Form.useWatch('precioUnitario', formulario)
 
   const productoElegido = (productos.data ?? []).find((p) => p.id === productoId)
   const servicioElegido = (servicios.data ?? []).find((s) => s.id === servicioId)
+  const precioDeLista =
+    tipoItem === TIPO_ITEM_SERVICIO.repuesto
+      ? productoElegido?.precioVenta
+      : tipoItem === TIPO_ITEM_SERVICIO.servicio
+        ? servicioElegido?.precioSugerido
+        : undefined
+  const conPrecioDeLista = tipoItem === TIPO_ITEM_SERVICIO.repuesto || tipoItem === TIPO_ITEM_SERVICIO.servicio
 
   const cerrar = () => {
     agregar.reset()
@@ -125,6 +148,13 @@ export function ModalItemOrden({
               label="Repuesto de inventario"
               name="productoId"
               rules={[{ required: true, message: 'Selecciona el repuesto' }]}
+              extra={
+                puedeRegistrarRepuesto && (
+                  <Button type="link" size="small" style={{ paddingInline: 0 }} onClick={() => setAltaRepuesto(true)}>
+                    ¿No está en el catálogo? Registrar repuesto
+                  </Button>
+                )
+              }
             >
               <Select
                 showSearch
@@ -133,7 +163,7 @@ export function ModalItemOrden({
                 placeholder="Buscar por código o nombre"
                 onChange={(pId) => {
                   const p = (productos.data ?? []).find((item) => item.id === pId)
-                  if (p && puedeModificarPrecios) {
+                  if (p) {
                     formulario.setFieldsValue({ precioUnitario: p.precioVenta })
                   }
                 }}
@@ -158,6 +188,13 @@ export function ModalItemOrden({
               label="Servicio de catálogo"
               name="servicioId"
               rules={[{ required: true, message: 'Selecciona el servicio' }]}
+              extra={
+                puedeRegistrarServicio && (
+                  <Button type="link" size="small" style={{ paddingInline: 0 }} onClick={() => setAltaServicio(true)}>
+                    ¿No está en el catálogo? Registrar servicio
+                  </Button>
+                )
+              }
             >
               <Select
                 showSearch
@@ -213,11 +250,12 @@ export function ModalItemOrden({
           <InputNumber min={1} style={{ width: '100%' }} />
         </Form.Item>
 
-        {puedeModificarPrecios && (
+        {(conPrecioDeLista || puedeModificarPrecios) && (
           <Form.Item label="Precio unitario (PEN, sin IGV)" name="precioUnitario">
             <InputNumber min={0} step={0.5} style={{ width: '100%' }} placeholder="Opcional: toma el precio de lista si se deja vacío" />
           </Form.Item>
         )}
+        {conPrecioDeLista && <AvisoPrecioGerencia precio={precioUnitario} deLista={precioDeLista} />}
 
         <Form.Item
           label="Afectación tributaria (SUNAT)"
@@ -233,6 +271,27 @@ export function ModalItemOrden({
           />
         </Form.Item>
       </Form>
+
+      <ModalAltaRapidaRepuesto
+        abierto={altaRepuesto}
+        onCerrar={() => setAltaRepuesto(false)}
+        onRegistrado={(repuesto) => {
+          setAltaRepuesto(false)
+          formulario.setFieldsValue({ productoId: repuesto.id, precioUnitario: repuesto.precioVenta })
+        }}
+      />
+      <ModalAltaRapidaServicio
+        abierto={altaServicio}
+        onCerrar={() => setAltaServicio(false)}
+        onRegistrado={(servicio) => {
+          setAltaServicio(false)
+          formulario.setFieldsValue({
+            servicioId: servicio.id,
+            precioUnitario: servicio.precioSugerido,
+            tipoAfectacionIgv: servicio.tipoAfectacionIgv,
+          })
+        }}
+      />
     </Modal>
   )
 }

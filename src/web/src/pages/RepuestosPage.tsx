@@ -13,6 +13,7 @@ import {
   useCategoriasProducto,
   useEliminarCategoria,
   useEliminarProducto,
+  useMarcasProductos,
   useMovimientos,
   useProductos,
 } from '../api/inventario'
@@ -32,6 +33,7 @@ import { PERMISOS } from '../auth/acceso'
 export function RepuestosPage() {
   const [texto, setTexto] = useState('')
   const [categoriaId, setCategoriaId] = useState<string>()
+  const [marca, setMarca] = useState<string>()
   const [soloBajoStock, setSoloBajoStock] = useState(false)
 
   const [productoEnEdicion, setProductoEnEdicion] = useState<ProductoResponse | null>(null)
@@ -56,8 +58,9 @@ export function RepuestosPage() {
   const puedeEditarServicio = tienePermiso(PERMISOS.serviciosEditar)
   const puedeDarDeBajaServicio = tienePermiso(PERMISOS.serviciosEliminar)
 
-  // La búsqueda, la categoría y el stock bajo los filtra la API.
-  const productos = useProductos({ categoriaId, busqueda: texto, bajoStock: soloBajoStock })
+  // La búsqueda, la categoría, la marca y el stock bajo los filtra la API.
+  const productos = useProductos({ categoriaId, marca, busqueda: texto, bajoStock: soloBajoStock })
+  const marcas = useMarcasProductos()
   const categorias = useCategoriasProducto()
   const servicios = useServicios(true, veServicios)
   const movimientos = useMovimientos()
@@ -73,7 +76,19 @@ export function RepuestosPage() {
 
   const columnasProductos: TableProps<ProductoResponse>['columns'] = [
     { title: 'Código', dataIndex: 'codigo', className: 'num' },
-    { title: 'Repuesto', dataIndex: 'nombre', render: (nombre: string) => <strong>{nombre}</strong> },
+    {
+      title: 'Repuesto',
+      key: 'nombre',
+      render: (_, producto) => (
+        <Space size={12}>
+          {producto.fotoUrl && <img src={producto.fotoUrl} alt="" className="foto-repuesto-mini" />}
+          <div>
+            <strong>{producto.nombre}</strong>
+            {producto.marca && <div className="texto-secundario">{producto.marca}</div>}
+          </div>
+        </Space>
+      ),
+    },
     { title: 'Categoría', dataIndex: 'categoriaNombre' },
     {
       title: 'Stock',
@@ -357,6 +372,17 @@ export function RepuestosPage() {
                         label: categoria.nombre,
                       }))}
                       style={{ width: 220 }}
+                    />
+                    <Select<string>
+                      id="filtro-marca"
+                      allowClear
+                      showSearch
+                      placeholder="Marca"
+                      value={marca}
+                      onChange={setMarca}
+                      loading={marcas.isPending}
+                      options={(marcas.data ?? []).map((nombre) => ({ value: nombre, label: nombre }))}
+                      style={{ width: 180 }}
                     />
                     <Checkbox
                       checked={soloBajoStock}

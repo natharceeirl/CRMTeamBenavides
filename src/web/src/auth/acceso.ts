@@ -129,6 +129,7 @@ export const ACCESO_CHATBOT: Acceso = {
 export const enlaces: EnlaceMenu[] = [
   { ruta: '/portal', texto: 'Mi Portal', exacto: true, permiso: PERMISOS.portalAcceso },
   { ruta: '/', texto: 'Tablero', exacto: true, permiso: PERMISOS.reportesVerOperativos },
+  { ruta: '/aprobaciones', texto: 'Aprobaciones', permiso: PERMISOS.ordenesAprobarGerencia },
   { ruta: '/ordenes', texto: 'Órdenes', ...ACCESO_ORDENES },
   { ruta: '/citas', texto: 'Agenda', permiso: PERMISOS.citasVer },
   { ruta: '/clientes', texto: 'Clientes', permiso: PERMISOS.clientesVer },

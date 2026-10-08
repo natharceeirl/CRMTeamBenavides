@@ -1,7 +1,16 @@
-import { Form, Input, InputNumber, Modal, Select } from 'antd'
-import { useCategoriasProducto, useGuardarProducto } from '../api/inventario'
+import { useState } from 'react'
+import { AutoComplete, Button, Form, Input, InputNumber, Modal, Select } from 'antd'
+import {
+  useAltaRapidaCategoria,
+  useCategoriasProducto,
+  useGuardarProducto,
+  useMarcasProductos,
+} from '../api/inventario'
 import type { ProductoResponse } from '../api/tipos'
+import { useSesion } from '../auth/sesion'
+import { PERMISOS } from '../auth/acceso'
 import { AvisoError } from './AvisoError'
+import { ConversorDolares } from './ConversorDolares'
 
 type Props = {
   abierto: boolean
@@ -19,6 +28,8 @@ type Campos = {
   costo?: number
   stockInicial?: number
   stockMinimo?: number | null
+  marca?: string
+  fotoUrl?: string
 }
 
 const sinVacios = (valor?: string) => (valor && valor.trim() !== '' ? valor.trim() : null)
@@ -26,12 +37,27 @@ const sinVacios = (valor?: string) => (valor && valor.trim() !== '' ? valor.trim
 export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) {
   const [formulario] = Form.useForm<Campos>()
   const categorias = useCategoriasProducto()
+  const marcas = useMarcasProductos()
   const guardar = useGuardarProducto()
+  const nuevaCategoria = useAltaRapidaCategoria()
+  const { tienePermiso } = useSesion()
+  const puedeCrearCategoria = tienePermiso(PERMISOS.inventarioCrear)
+  const [creandoCategoria, setCreandoCategoria] = useState(false)
+  const fotoUrl = Form.useWatch('fotoUrl', formulario)
+
+  const crearCategoria = async (nombre: string) => {
+    if (!nombre.trim()) return
+    const categoria = await nuevaCategoria.mutateAsync(nombre.trim())
+    formulario.setFieldsValue({ categoriaId: categoria.id })
+    setCreandoCategoria(false)
+  }
 
   const editando = Boolean(producto)
 
   const cerrar = () => {
     guardar.reset()
+    nuevaCategoria.reset()
+    setCreandoCategoria(false)
     onCerrar()
   }
 
@@ -45,6 +71,8 @@ export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) 
       precioVenta: campos.precioVenta,
       costo: campos.costo ?? 0,
       stockMinimo: campos.stockMinimo != null && !Number.isNaN(campos.stockMinimo) ? campos.stockMinimo : null,
+      marca: sinVacios(campos.marca),
+      fotoUrl: sinVacios(campos.fotoUrl),
     }
 
     // El stock inicial solo existe al crear: después se mueve por entradas,
@@ -68,7 +96,7 @@ export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) 
       confirmLoading={guardar.isPending}
       destroyOnHidden
     >
-      <AvisoError error={guardar.error} />
+      <AvisoError error={guardar.error ?? nuevaCategoria.error} />
       <Form<Campos>
         form={formulario}
         layout="vertical"
@@ -84,12 +112,31 @@ export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) 
           costo: producto?.costo ?? 0,
           stockInicial: 0,
           stockMinimo: producto?.stockMinimo ?? undefined,
+          marca: producto?.marca ?? '',
+          fotoUrl: producto?.fotoUrl ?? '',
         }}
       >
         <Form.Item
           label="Categoría"
           name="categoriaId"
           rules={[{ required: true, message: 'Elige la categoría' }]}
+          extra={
+            puedeCrearCategoria &&
+            (creandoCategoria ? (
+              <Input.Search
+                autoFocus
+                placeholder="Nombre de la categoría nueva"
+                enterButton="Crear"
+                loading={nuevaCategoria.isPending}
+                onSearch={crearCategoria}
+                style={{ marginTop: 8 }}
+              />
+            ) : (
+              <Button type="link" size="small" style={{ paddingInline: 0 }} onClick={() => setCreandoCategoria(true)}>
+                ¿No está? Crear categoría
+              </Button>
+            ))
+          }
         >
           <Select
             showSearch
@@ -108,6 +155,24 @@ export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) 
         <Form.Item label="Nombre" name="nombre" rules={[{ required: true, message: 'Ingresa el nombre' }]}>
           <Input />
         </Form.Item>
+        <Form.Item label="Marca" name="marca">
+          <AutoComplete
+            placeholder="Yamaha, Motul, NGK…"
+            options={(marcas.data ?? []).map((marca) => ({ value: marca }))}
+            filterOption={(texto, opcion) => (opcion?.value ?? '').toLowerCase().includes(texto.toLowerCase())}
+          />
+        </Form.Item>
+        <Form.Item
+          label="Foto"
+          name="fotoUrl"
+          rules={[{ type: 'url', message: 'Pega el enlace completo de la imagen, con https://' }]}
+          extra="Enlace a una imagen del repuesto, por ejemplo del catálogo del proveedor."
+        >
+          <Input placeholder="https://…" />
+        </Form.Item>
+        {fotoUrl && /^https?:\/\//.test(fotoUrl) && (
+          <img src={fotoUrl} alt="Foto del repuesto" className="foto-repuesto" />
+        )}
         <Form.Item label="Descripción" name="descripcion">
           <Input.TextArea rows={2} />
         </Form.Item>
@@ -120,6 +185,9 @@ export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) 
           rules={[{ required: true, message: 'Ingresa el precio de venta' }]}
         >
           <InputNumber min={0} precision={2} style={{ width: '100%' }} />
+        </Form.Item>
+        <Form.Item label="¿El precio está en dólares?">
+          <ConversorDolares onAplicar={(montoPen) => formulario.setFieldsValue({ precioVenta: montoPen })} />
         </Form.Item>
         <Form.Item
           label="Costo"

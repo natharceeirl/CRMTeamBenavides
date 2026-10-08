@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Button, Popconfirm, Select, Space, Table, Tag, type TableProps } from 'antd'
+import dayjs from 'dayjs'
+import { Button, Popconfirm, Select, Space, Table, Tabs, Tag, type TableProps } from 'antd'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { ModalVenta } from '../components/ModalVenta'
@@ -10,10 +11,14 @@ import {
   nombresEstadoVenta,
   puedeAnular,
   puedeConfirmar,
+  rutaExportarVentas,
   useAnularVenta,
   useConfirmarVenta,
   useVentas,
+  useVentasPendientesComprobante,
 } from '../api/ventas'
+import { GERENCIA } from '../api/ordenes'
+import { descargarArchivo } from '../utils/descarga'
 import type { VentaResponse } from '../api/tipos'
 import { colores } from '../theme/tokens'
 import { fechaHora, referenciaOrden, soles } from '../utils/formato'
@@ -51,8 +56,14 @@ function EstadoVentaTag({ estadoId }: Readonly<{ estadoId: number }>) {
   )
 }
 
+/** Un precio pendiente o rechazado bloquea confirmar la cotización y registrar el comprobante. */
+const precioBloqueado = (venta: VentaResponse) =>
+  venta.estadoAprobacionGerenciaId === GERENCIA.pendiente || venta.estadoAprobacionGerenciaId === GERENCIA.rechazado
+
 export function VentasPage() {
   const [estado, setEstado] = useState<number>()
+  const [vista, setVista] = useState('todas')
+  const [errorDescarga, setErrorDescarga] = useState<unknown>(null)
   const [modalNueva, setModalNueva] = useState(false)
   const [ventaVista, setVentaVista] = useState<string | null>(null)
 
@@ -61,6 +72,14 @@ export function VentasPage() {
   const puedeAnularVentas = tienePermiso(PERMISOS.ventasAnular)
 
   const ventas = useVentas({ estado })
+  const sinComprobante = useVentasPendientesComprobante()
+
+  const exportar = () => {
+    setErrorDescarga(null)
+    descargarArchivo(rutaExportarVentas({ estado }), `ventas-${dayjs().format('YYYY-MM-DD')}.xlsx`).catch(
+      setErrorDescarga,
+    )
+  }
   const confirmar = useConfirmarVenta()
   const anular = useAnularVenta()
 
@@ -81,7 +100,17 @@ export function VentasPage() {
     {
       title: 'Estado',
       key: 'estado',
-      render: (_, venta) => <EstadoVentaTag estadoId={venta.estadoId} />,
+      render: (_, venta) => (
+        <>
+          <EstadoVentaTag estadoId={venta.estadoId} />
+          {venta.estadoAprobacionGerenciaId === GERENCIA.pendiente && (
+            <div className="texto-secundario">Precio esperando a Gerencia</div>
+          )}
+          {venta.estadoAprobacionGerenciaId === GERENCIA.rechazado && (
+            <div className="texto-secundario">Precio rechazado por Gerencia</div>
+          )}
+        </>
+      ),
     },
     { title: 'Ítems', dataIndex: 'cantidadItems', align: 'right', className: 'num' },
     {
@@ -115,7 +144,7 @@ export function VentasPage() {
           <Button type="link" onClick={() => setVentaVista(venta.id)}>
             Ver
           </Button>
-          {puedeVender && puedeConfirmar(venta.estadoId) && (
+          {puedeVender && puedeConfirmar(venta.estadoId) && !precioBloqueado(venta) && (
             <Popconfirm
               title="Confirmar la venta"
               description="Descuenta el stock de los productos."
@@ -151,37 +180,69 @@ export function VentasPage() {
       <BarraSuperior
         titulo="Ventas y cotizaciones"
         acciones={
-          puedeVender && (
-            <Button type="primary" onClick={() => setModalNueva(true)}>
-              Nueva venta
-            </Button>
-          )
+          <>
+            <Button onClick={exportar}>Exportar a Excel</Button>
+            {puedeVender && (
+              <Button type="primary" onClick={() => setModalNueva(true)}>
+                Nueva venta
+              </Button>
+            )}
+          </>
         }
       />
       <div className="pagina">
         <section>
-          <AvisoError error={ventas.error ?? confirmar.error ?? anular.error} />
-          <div className="filtros">
-            <Select<number>
-              id="filtro-estado-venta"
-              allowClear
-              placeholder="Estado"
-              value={estado}
-              onChange={setEstado}
-              options={opcionesEstado}
-              style={{ width: 220 }}
-            />
-          </div>
-          <Table
-            rowKey="id"
-            columns={columnas}
-            dataSource={ventas.data ?? []}
-            pagination={false}
-            loading={ventas.isPending}
-            locale={{ emptyText: 'Todavía no hay ventas ni cotizaciones' }}
+          <AvisoError error={ventas.error ?? sinComprobante.error ?? confirmar.error ?? anular.error ?? errorDescarga} />
+          <Tabs
+            activeKey={vista}
+            onChange={setVista}
+            items={[
+              {
+                key: 'todas',
+                label: 'Todas',
+                children: (
+                  <>
+                    <div className="filtros">
+                      <Select<number>
+                        id="filtro-estado-venta"
+                        allowClear
+                        placeholder="Estado"
+                        value={estado}
+                        onChange={setEstado}
+                        options={opcionesEstado}
+                        style={{ width: 220 }}
+                      />
+                    </div>
+                    <Table
+                      rowKey="id"
+                      columns={columnas}
+                      dataSource={ventas.data ?? []}
+                      pagination={false}
+                      loading={ventas.isPending}
+                      locale={{ emptyText: 'Todavía no hay ventas ni cotizaciones' }}
+                    />
+                  </>
+                ),
+              },
+              {
+                key: 'sin-comprobante',
+                label: `Sin comprobante${sinComprobante.data?.length ? ` (${sinComprobante.data.length})` : ''}`,
+                children: (
+                  <Table
+                    rowKey="id"
+                    columns={columnas}
+                    dataSource={sinComprobante.data ?? []}
+                    pagination={false}
+                    loading={sinComprobante.isPending}
+                    locale={{ emptyText: 'Todas las ventas confirmadas tienen comprobante' }}
+                  />
+                ),
+              },
+            ]}
           />
           <p className="texto-secundario" style={{ marginTop: 16 }}>
-            Los pagos y el comprobante se registran desde el detalle de cada venta confirmada.
+            Los pagos y el comprobante se registran desde el detalle de cada venta confirmada. El comprobante se puede
+            emitir después: no duplica la venta, la caja ni el stock.
           </p>
         </section>
       </div>

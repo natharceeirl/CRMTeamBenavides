@@ -63,6 +63,29 @@ export type ClienteRequest = {
   observaciones: string | null
 }
 
+/** Enum TipoDocumentoCliente del backend. */
+export const TIPO_DOCUMENTO_CLIENTE = { dni: 0, ruc: 1, otro: 2 } as const
+
+/** POST /api/clientes/alta-rapida: si el documento ya está registrado, devuelve ese cliente. */
+export type AltaRapidaClienteRequest = {
+  numeroDocumento: string
+  nombreCompleto: string
+  telefono: string | null
+  email: string | null
+  direccion: string | null
+  tipoDocumento: number | null
+}
+
+/** POST /api/vehiculos/alta-rapida: una unidad con kilometraje; lo demás se completa en su ficha. */
+export type AltaRapidaVehiculoRequest = {
+  clienteId: string
+  placa: string | null
+  marca: string
+  modelo: string
+  kilometraje: number | null
+  color: string | null
+}
+
 export type VehiculoResponse = {
   id: string
   clienteId: string
@@ -387,6 +410,17 @@ export type AgregarDetalleRequest = {
   tipoAfectacionIgv?: number | null
 }
 
+/**
+ * PUT /api/ordenes-servicio/{id}/detalles/{detalleId}: solo se envía lo que cambia.
+ * Un precio distinto al de lista deja la orden pendiente de Gerencia; volver al de lista la libera.
+ */
+export type ActualizarDetalleRequest = {
+  precioUnitario?: number | null
+  cantidad?: number | null
+  descripcion?: string | null
+  tipoAfectacionIgv?: number | null
+}
+
 export type AsignarTecnicoRequest = {
   tecnicoId: string
   observaciones?: string | null
@@ -427,6 +461,19 @@ export type ProductoResponse = {
   categoriaNombre: string
   activo: boolean
   fechaCreacion: string
+  marca?: string | null
+  /** Enlace a una imagen pública del repuesto; la API no recibe archivos. */
+  fotoUrl?: string | null
+}
+
+/** POST /api/productos/alta-rapida: nombre y precio; código y categoría los completa el backend si faltan. */
+export type AltaRapidaProductoRequest = {
+  nombre: string
+  precioVenta: number
+  codigo: string | null
+  marca: string | null
+  categoriaId: string | null
+  stockInicial: number
 }
 
 export type CrearProductoRequest = {
@@ -439,6 +486,8 @@ export type CrearProductoRequest = {
   costo?: number
   stockInicial: number
   stockMinimo?: number | null
+  marca?: string | null
+  fotoUrl?: string | null
 }
 
 /** Al actualizar no se toca el stock: eso va por entradas, salidas o ajustes. */
@@ -451,6 +500,8 @@ export type ActualizarProductoRequest = {
   precioVenta: number
   costo?: number
   stockMinimo?: number | null
+  marca?: string | null
+  fotoUrl?: string | null
 }
 
 export type EntradaRequest = {
@@ -514,7 +565,14 @@ export type VentaResponse = DesgloseIgv &
     total: number
     cantidadItems: number
     activo: boolean
-  }
+  } & EstadosAdicionalesVenta
+
+/** «Pendiente» o «Emitido» para el comprobante; la aprobación usa el enum EstadoAprobacionGerencia. */
+type EstadosAdicionalesVenta = {
+  estadoComprobante?: string
+  estadoAprobacionGerenciaId?: number
+  estadoAprobacionGerencia?: string
+}
 
 export type DetalleVentaResponse = {
   id: string
@@ -553,7 +611,7 @@ export type VentaDetalleResponse = DesgloseIgv &
     activo: boolean
     comprobante?: ComprobanteResponse | null
     pagos?: PagoResponse[] | null
-  }
+  } & EstadosAdicionalesVenta
 
 export type ComprobanteResponse = DesgloseIgv & {
   id: string
@@ -585,11 +643,20 @@ export type RegistrarComprobanteRequest = {
  * ordenServicioId y sin detalles liquida la orden: toma sus ítems, no vuelve a
  * descontar stock y se queda con los adelantos ya pagados.
  */
+/** Sin precio toma el de lista; con otro precio, la venta queda pendiente de Gerencia. */
+export type LineaVentaRequest = { productoId: string; cantidad: number; precioUnitario?: number | null }
+
 export type CrearVentaRequest = {
   clienteId: string
   ordenServicioId: string | null
-  detalles: { productoId: string; cantidad: number }[] | null
+  detalles: LineaVentaRequest[] | null
   esCotizacion: boolean
+}
+
+/** PUT /api/ventas/{id}: solo una cotización sin pagos; reemplaza todas sus líneas. */
+export type ActualizarVentaRequest = {
+  detalles: LineaVentaRequest[]
+  observaciones: string | null
 }
 
 /** GET /api/metodos-pago */
@@ -973,8 +1040,12 @@ type DatosCaja = {
   usuarioAperturaNombre: string | null
   usuarioCierreId: string | null
   usuarioCierreNombre: string | null
+  /** Todos los métodos. El saldo solo cuenta efectivo: inicial + ingresos en efectivo − egresos. */
   totalIngresos: number
   totalEgresos: number
+  totalIngresosEfectivo?: number
+  /** Yape, Plin, tarjeta o transferencia: se registran, pero no entran al cajón. */
+  totalIngresosOtrosMetodos?: number
 }
 
 /** GET /api/caja-chica/historial */
@@ -1227,6 +1298,19 @@ export type PedidoLimaResponse = {
   detalles: DetallePedidoLimaResponse[]
   historial: HistorialEstadoPedidoLimaResponse[]
   fechaCreacion: string
+  /** Adelantos y pagos: cada uno entra solo a la caja abierta. */
+  totalPagado?: number
+  saldo?: number
+  estadoPago?: string
+  estadoAprobacionGerenciaId?: number
+  estadoAprobacionGerencia?: string
+  pagos?: PagoResponse[] | null
+}
+
+/** PUT /api/pedidos-lima/{id}/detalles/{detalleId}: otro precio que el de lista pide aprobación de Gerencia. */
+export type ActualizarPrecioDetallePedidoLimaRequest = {
+  precioUnitario: number
+  cantidad: number | null
 }
 
 export type CrearPedidoLimaRequest = {

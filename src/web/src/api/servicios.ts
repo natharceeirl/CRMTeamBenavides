@@ -43,6 +43,20 @@ export function useCrearServicio() {
   })
 }
 
+/** El mismo registro, por la ruta de alta rápida: se usa desde la orden, sin salir de ella. */
+export function useAltaRapidaServicio() {
+  const consultas = useQueryClient()
+
+  return useMutation({
+    meta: { exito: 'Servicio registrado' },
+    mutationFn: (datos: CrearServicioRequest) =>
+      solicitar<ServicioResponse>('/servicios/alta-rapida', { metodo: 'POST', cuerpo: datos }),
+    onSuccess: async () => {
+      await consultas.invalidateQueries({ queryKey: clavesServicios.todos })
+    },
+  })
+}
+
 export function useActualizarServicio() {
   const consultas = useQueryClient()
 

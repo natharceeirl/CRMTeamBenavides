@@ -23,6 +23,7 @@ import { CajaPage } from './pages/CajaPage'
 import { ConfiguracionPage } from './pages/ConfiguracionPage'
 import { CitasPage } from './pages/CitasPage'
 import { PedidosLimaPage } from './pages/PedidosLimaPage'
+import { AprobacionesPage } from './pages/AprobacionesPage'
 
 export default function App() {
   return (
@@ -69,6 +70,9 @@ export default function App() {
           </Route>
           <Route element={<RutaConPermiso permiso={PERMISOS.usuariosVer} />}>
             <Route path="usuarios" element={<UsuariosPage />} />
+          </Route>
+          <Route element={<RutaConPermiso permiso={PERMISOS.ordenesAprobarGerencia} />}>
+            <Route path="aprobaciones" element={<AprobacionesPage />} />
           </Route>
           <Route element={<RutaConPermiso permiso={PERMISOS.cajaConsultar} />}>
             <Route path="caja" element={<CajaPage />} />

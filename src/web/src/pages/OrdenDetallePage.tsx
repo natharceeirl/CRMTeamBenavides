@@ -7,6 +7,7 @@ import { EstadoOrdenApiTag } from '../components/EstadoOrdenApiTag'
 import { Indicadores } from '../components/Indicadores'
 import { ModalRepuestoOrden } from '../components/ModalRepuestoOrden'
 import { ModalItemOrden } from '../components/ModalItemOrden'
+import { ModalEditarItemOrden } from '../components/ModalEditarItemOrden'
 import { ModalEditarOrden } from '../components/ModalEditarOrden'
 import { ModalAsignarTecnico } from '../components/ModalAsignarTecnico'
 import { PanelAprobaciones } from '../components/PanelAprobaciones'
@@ -58,6 +59,7 @@ export function OrdenDetallePage() {
   const puedeDiagnosticar = tienePermiso(PERMISOS.ordenesDiagnostico)
   const puedeAgregarItems = tienePermiso(PERMISOS.ordenesAgregarItems)
   const puedeFijarPrecios = tienePermiso(PERMISOS.preciosModificar)
+  // Editar y quitar ítems piden `ordenes.editar` en el backend.
   const puedeQuitarItems = tienePermiso(PERMISOS.ordenesEditar)
   const puedeEditarOrden = tienePermiso(PERMISOS.ordenesEditar)
   const puedeAsignar = tienePermiso(PERMISOS.ordenesAsignarTecnico)
@@ -78,6 +80,7 @@ export function OrdenDetallePage() {
   const [estadoDestino, setEstadoDestino] = useState<number | null>(null)
   const [observacionesCambio, setObservacionesCambio] = useState('')
   const [modalRepuesto, setModalRepuesto] = useState(false)
+  const [itemEnEdicion, setItemEnEdicion] = useState<DetalleServicioResponse | null>(null)
   const [modalItem, setModalItem] = useState(false)
   const [modalEditar, setModalEditar] = useState(false)
   const [modalTecnico, setModalTecnico] = useState(false)
@@ -199,15 +202,20 @@ export function OrdenDetallePage() {
       align: 'right',
       render: (_, detalle) =>
         editableItems && puedeQuitarItems ? (
-          <Popconfirm
-            title="Quitar el ítem"
-            description={detalle.esRepuesto ? 'El repuesto vuelve al stock.' : undefined}
-            okText="Quitar"
-            cancelText="Cancelar"
-            onConfirm={() => eliminarDetalle.mutate({ id: datos.id, detalleId: detalle.id })}
-          >
-            <Button type="link">Quitar</Button>
-          </Popconfirm>
+          <span style={{ whiteSpace: 'nowrap' }}>
+            <Button type="link" onClick={() => setItemEnEdicion(detalle)}>
+              Editar
+            </Button>
+            <Popconfirm
+              title="Quitar el ítem"
+              description={detalle.esRepuesto ? 'El repuesto vuelve al stock.' : undefined}
+              okText="Quitar"
+              cancelText="Cancelar"
+              onConfirm={() => eliminarDetalle.mutate({ id: datos.id, detalleId: detalle.id })}
+            >
+              <Button type="link">Quitar</Button>
+            </Popconfirm>
+          </span>
         ) : null,
     },
   ]
@@ -356,11 +364,9 @@ export function OrdenDetallePage() {
                   </Button>
                   <Button onClick={() => setModalRepuesto(true)}>Agregar repuesto rápido</Button>
                 </div>
-                {!puedeFijarPrecios && (
-                  <p className="texto-secundario" style={{ marginTop: 8 }}>
-                    Los precios salen del catálogo; tu usuario no puede cambiarlos.
-                  </p>
-                )}
+                <p className="texto-secundario" style={{ marginTop: 8 }}>
+                  Un precio distinto al de lista deja la orden pendiente hasta que Gerencia lo apruebe.
+                </p>
               </>
             )}
             {itemsBloqueados && (
@@ -580,6 +586,10 @@ export function OrdenDetallePage() {
         ordenId={datos.id}
         onCerrar={() => setModalRepuesto(false)}
       />
+
+      {itemEnEdicion && (
+        <ModalEditarItemOrden ordenId={datos.id} detalle={itemEnEdicion} onCerrar={() => setItemEnEdicion(null)} />
+      )}
 
       <ModalEditarOrden abierto={modalEditar} orden={datos} onCerrar={() => setModalEditar(false)} />
 

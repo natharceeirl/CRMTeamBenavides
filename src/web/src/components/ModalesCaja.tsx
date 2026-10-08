@@ -84,8 +84,8 @@ export function ModalCierreCaja({ abierto, onCerrar, caja }: Readonly<Base & { c
             <td>{soles(caja.montoApertura)}</td>
           </tr>
           <tr>
-            <td>Ingresos</td>
-            <td>{soles(caja.totalIngresos)}</td>
+            <td>Ingresos en efectivo</td>
+            <td>{soles(caja.totalIngresosEfectivo ?? caja.totalIngresos)}</td>
           </tr>
           <tr>
             <td>Egresos</td>
@@ -93,7 +93,7 @@ export function ModalCierreCaja({ abierto, onCerrar, caja }: Readonly<Base & { c
           </tr>
           <tr>
             <td>
-              <strong>Saldo final</strong>
+              <strong>Efectivo al cerrar</strong>
             </td>
             <td>
               <strong>{soles(caja.saldoCalculado)}</strong>
@@ -101,6 +101,12 @@ export function ModalCierreCaja({ abierto, onCerrar, caja }: Readonly<Base & { c
           </tr>
         </tbody>
       </table>
+      {(caja.totalIngresosOtrosMetodos ?? 0) > 0 && (
+        <p className="texto-secundario">
+          Además se cobraron {soles(caja.totalIngresosOtrosMetodos ?? 0)} por Yape, Plin, tarjeta o transferencia: quedan
+          registrados, pero no entran al cajón.
+        </p>
+      )}
       <p className="texto-secundario">Después de cerrarla no se registran más movimientos en esta caja.</p>
       <Form
         form={formulario}

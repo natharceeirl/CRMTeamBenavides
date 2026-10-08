@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react'
-import { Segmented, Select, Table, Tabs, type TableProps } from 'antd'
+import { Button, Segmented, Select, Table, Tabs, type TableProps } from 'antd'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
+import { descargarArchivo } from '../utils/descarga'
 import { EstadoOrdenApiTag } from '../components/EstadoOrdenApiTag'
 import { Indicadores } from '../components/Indicadores'
 import { GraficoArea } from '../components/GraficoArea'
@@ -303,6 +304,25 @@ export function ReportesPage() {
   const rentabilidad = useRentabilidad(rango, veFinancieros, productoRentabilidad)
 
   const datos = resumen.data
+  const [exportando, setExportando] = useState<'ventas' | 'ordenes-servicio' | null>(null)
+  const [errorExportar, setErrorExportar] = useState<unknown>(null)
+
+  // Los Excel salen del mismo periodo que se está viendo.
+  const exportar = async (reporte: 'ventas' | 'ordenes-servicio') => {
+    const parametros = new URLSearchParams({ fechaDesde: rango.fechaDesde, fechaHasta: rango.fechaHasta })
+    setErrorExportar(null)
+    setExportando(reporte)
+    try {
+      await descargarArchivo(
+        `/reportes/${reporte}/excel?${parametros.toString()}`,
+        `${reporte === 'ventas' ? 'ventas' : 'ordenes'}-${periodo.toLowerCase()}.xlsx`,
+      )
+    } catch (fallo) {
+      setErrorExportar(fallo)
+    } finally {
+      setExportando(null)
+    }
+  }
 
   // Las tablas de abajo son la vista completa; los gráficos son la lectura
   // rápida del mismo periodo.
@@ -432,12 +452,22 @@ export function ReportesPage() {
       <BarraSuperior
         titulo="Reportes"
         acciones={
-          <Segmented<Periodo> options={['Hoy', 'Semana', 'Mes']} value={periodo} onChange={setPeriodo} />
+          <>
+            <Button onClick={() => exportar('ordenes-servicio')} loading={exportando === 'ordenes-servicio'}>
+              Exportar órdenes
+            </Button>
+            <Button onClick={() => exportar('ventas')} loading={exportando === 'ventas'}>
+              Exportar ventas
+            </Button>
+            <Segmented<Periodo> options={['Hoy', 'Semana', 'Mes']} value={periodo} onChange={setPeriodo} />
+          </>
         }
       />
       <div className="pagina">
         <AvisoError
-          error={resumen.error ?? ordenes.error ?? ventas.error ?? stockBajo.error ?? rentabilidad.error}
+          error={
+            resumen.error ?? ordenes.error ?? ventas.error ?? stockBajo.error ?? rentabilidad.error ?? errorExportar
+          }
         />
         {veFinancieros ? (
           <Tabs

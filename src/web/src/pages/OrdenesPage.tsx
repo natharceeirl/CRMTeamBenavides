@@ -1,4 +1,5 @@
 import { useEffect, useState, type ComponentProps } from 'react'
+import dayjs from 'dayjs'
 import { Button, DatePicker, Input, Select, Table, type TableProps } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import { Link, useNavigate } from 'react-router'
@@ -11,6 +12,7 @@ import type { OrdenServicioResponse } from '../api/tipos'
 import { fechaHora, referenciaOrden } from '../utils/formato'
 import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
+import { descargarArchivo } from '../utils/descarga'
 
 const opcionesEstado = Object.entries(nombresEstado).map(([valor, etiqueta]) => ({
   value: Number(valor),
@@ -74,6 +76,8 @@ export function OrdenesPage() {
   const [estado, setEstado] = useState<number>()
   const [tecnicoId, setTecnicoId] = useState<string>()
   const [rango, setRango] = useState<RangoFechas>(null)
+  const [exportando, setExportando] = useState(false)
+  const [errorExportar, setErrorExportar] = useState<unknown>(null)
 
   // La búsqueda la resuelve la API: se espera a que el usuario deje de escribir.
   useEffect(() => {
@@ -90,21 +94,48 @@ export function OrdenesPage() {
     fechaHasta: rango?.[1]?.format('YYYY-MM-DD'),
   })
 
+  // El Excel sale con los mismos filtros de la lista; al técnico la API le exporta solo las suyas.
+  const exportar = async () => {
+    const parametros = new URLSearchParams()
+    if (estado !== undefined) parametros.set('estado', String(estado))
+    if (tecnicoId) parametros.set('tecnicoId', tecnicoId)
+    if (rango?.[0]) parametros.set('fechaDesde', rango[0].format('YYYY-MM-DD'))
+    if (rango?.[1]) parametros.set('fechaHasta', rango[1].format('YYYY-MM-DD'))
+    const consulta = parametros.toString()
+    setErrorExportar(null)
+    setExportando(true)
+    try {
+      await descargarArchivo(
+        `/ordenes-servicio/exportar-excel${consulta ? `?${consulta}` : ''}`,
+        `ordenes-${dayjs().format('YYYY-MM-DD')}.xlsx`,
+      )
+    } catch (fallo) {
+      setErrorExportar(fallo)
+    } finally {
+      setExportando(false)
+    }
+  }
+
   return (
     <>
       <BarraSuperior
         titulo={veTodas ? 'Órdenes de servicio' : 'Mis órdenes'}
         acciones={
-          puedeCrear && (
-            <Button type="primary" onClick={() => navigate('/ordenes/nueva')}>
-              Crear orden
+          <>
+            <Button onClick={exportar} loading={exportando}>
+              Exportar a Excel
             </Button>
-          )
+            {puedeCrear && (
+              <Button type="primary" onClick={() => navigate('/ordenes/nueva')}>
+                Crear orden
+              </Button>
+            )}
+          </>
         }
       />
       <div className="pagina">
         <section>
-          <AvisoError error={ordenes.error} />
+          <AvisoError error={ordenes.error ?? errorExportar} />
           <div className="filtros">
             <Input
               id="buscar-ordenes"

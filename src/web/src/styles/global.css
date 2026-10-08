@@ -501,6 +501,40 @@ h4 {
   grid-column: 1 / -1;
 }
 
+/* Aviso de que un precio fuera de lista necesita la aprobación de Gerencia. */
+.aviso-precio {
+  margin: -8px 0 16px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--color-acento-600);
+  background: var(--color-acento-100);
+  color: var(--color-texto);
+}
+
+/* Foto de un repuesto: vista previa en el formulario y miniatura en la lista. */
+.foto-repuesto {
+  display: block;
+  max-width: 160px;
+  max-height: 120px;
+  margin: -8px 0 16px;
+  object-fit: contain;
+  border: 1px solid var(--color-divisor);
+  background: var(--color-blanco);
+}
+
+.foto-repuesto-mini {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  border: 1px solid var(--color-divisor);
+  background: var(--color-blanco);
+}
+
+/* Lista breve bajo un campo, como las atenciones anteriores de una unidad. */
+.lista-simple {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
 .subir-foto {
   display: flex;
   flex-direction: column;

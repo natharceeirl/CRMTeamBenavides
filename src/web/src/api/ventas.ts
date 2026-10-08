@@ -4,6 +4,7 @@ import { avisoSegun } from './avisos'
 import { clavesInventario } from './inventario'
 import { clavesOrdenes } from './ordenes'
 import type {
+  ActualizarVentaRequest,
   ComprobanteResponse,
   CrearVentaRequest,
   RegistrarComprobanteRequest,
@@ -54,8 +55,13 @@ export function rutaVentas(filtros: FiltrosVentas = {}): string {
   return `/ventas${consulta ? `?${consulta}` : ''}`
 }
 
+/** GET /api/ventas/exportar-excel con los mismos filtros de la lista. */
+export const rutaExportarVentas = (filtros: FiltrosVentas = {}) =>
+  rutaVentas(filtros).replace('/ventas', '/ventas/exportar-excel')
+
 export const clavesVentas = {
   todas: ['ventas'] as const,
+  pendientesComprobante: ['ventas', 'pendientes-comprobante'] as const,
   lista: (filtros: FiltrosVentas) =>
     ['ventas', filtros.estado ?? 'todos', filtros.clienteId ?? 'todos', filtros.ordenServicioId ?? 'todas'] as const,
   una: (id: string) => ['ventas', id] as const,
@@ -65,6 +71,15 @@ export function useVentas(filtros: FiltrosVentas = {}) {
   return useQuery({
     queryKey: clavesVentas.lista(filtros),
     queryFn: () => solicitar<VentaResponse[]>(rutaVentas(filtros)),
+  })
+}
+
+/** Ventas confirmadas que todavía no tienen comprobante: se emite después sin duplicar venta, caja ni stock. */
+export function useVentasPendientesComprobante(habilitado = true) {
+  return useQuery({
+    queryKey: clavesVentas.pendientesComprobante,
+    queryFn: () => solicitar<VentaResponse[]>('/ventas/pendientes-comprobante'),
+    enabled: habilitado,
   })
 }
 
@@ -86,7 +101,24 @@ function refrescarVentasEInventario(consultas: ReturnType<typeof useQueryClient>
     consultas.invalidateQueries({ queryKey: clavesInventario.productos }),
     consultas.invalidateQueries({ queryKey: clavesInventario.movimientos }),
     consultas.invalidateQueries({ queryKey: clavesOrdenes.todas }),
+    // Un precio fuera de lista abre una solicitud a Gerencia. La clave se escribe
+    // aquí porque api/aprobaciones importa este archivo.
+    consultas.invalidateQueries({ queryKey: ['aprobaciones'] }),
   ])
+}
+
+/** Corrige las líneas de una cotización, por ejemplo después de un rechazo de Gerencia. */
+export function useActualizarVenta() {
+  const consultas = useQueryClient()
+
+  return useMutation({
+    meta: { exito: 'Cotización actualizada' },
+    mutationFn: ({ id, datos }: { id: string; datos: ActualizarVentaRequest }) =>
+      solicitar<VentaDetalleResponse>(`/ventas/${id}`, { metodo: 'PUT', cuerpo: datos }),
+    onSuccess: async () => {
+      await refrescarVentasEInventario(consultas)
+    },
+  })
 }
 
 export function useCrearVenta() {

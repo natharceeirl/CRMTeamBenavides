@@ -1,18 +1,23 @@
 import { useState } from 'react'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
-import { Button, DatePicker, Form, Input, Modal, Space, Table, type TableProps } from 'antd'
+import { Button, DatePicker, Form, Input, InputNumber, Modal, Space, Table, type TableProps } from 'antd'
 import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
 import {
   esPedidoFinal,
   nombresEstadoPedidoLima,
   siguienteEstadoPedido,
+  useActualizarDetallePedidoLima,
   useActualizarPedidoLima,
   useCambiarEstadoPedidoLima,
   useCancelarPedidoLima,
   usePedidoLima,
+  useRegistrarPagoPedidoLima,
 } from '../api/pedidosLima'
+import { GERENCIA, nombresGerencia } from '../api/ordenes'
+import { useProductos } from '../api/inventario'
+import { tieneSaldo } from '../api/pagos'
 import {
   ESTADO_PEDIDO_LIMA,
   type DetallePedidoLimaResponse,
@@ -20,6 +25,10 @@ import {
   type PedidoLimaResponse,
 } from '../api/tipos'
 import { AvisoError } from './AvisoError'
+import { AvisoPrecioGerencia } from './AvisoPrecioGerencia'
+import { EtiquetaEstado, type TonoEstado } from './EtiquetaEstado'
+import { ModalRegistrarPago } from './ModalRegistrarPago'
+import { ResumenCobro } from './ResumenCobro'
 import { HistorialEstados } from './HistorialEstados'
 import { EstadoPedidoLimaTag } from './EstadoPedidoLimaTag'
 import { colores } from '../theme/tokens'
@@ -39,6 +48,12 @@ type CamposEnvio = {
 
 /** Lo que se confirma en el modal chico: avanzar al estado siguiente o cancelar. */
 type Paso = { tipo: 'avanzar'; destino: EstadoPedidoLima } | { tipo: 'cancelar' }
+
+const tonoGerencia: Record<number, TonoEstado> = {
+  [GERENCIA.pendiente]: 'alerta',
+  [GERENCIA.aprobado]: 'hecho',
+  [GERENCIA.rechazado]: 'suave',
+}
 
 const columnas: TableProps<DetallePedidoLimaResponse>['columns'] = [
   {
@@ -103,6 +118,74 @@ function Totales({ pedido }: Readonly<{ pedido: PedidoLimaResponse }>) {
         <div className="valor total">{soles(pedido.total)}</div>
       </div>
     </div>
+  )
+}
+
+type CamposLinea = { cantidad: number; precioUnitario: number }
+
+/** Cantidad y precio de un repuesto del pedido, con el aviso cuando el precio sale de la lista. */
+function ModalEditarLineaPedido({
+  pedidoId,
+  detalle,
+  onCerrar,
+}: Readonly<{ pedidoId: string; detalle: DetallePedidoLimaResponse; onCerrar: () => void }>) {
+  const [formulario] = Form.useForm<CamposLinea>()
+  const productos = useProductos()
+  const actualizar = useActualizarDetallePedidoLima()
+  const precioUnitario = Form.useWatch('precioUnitario', formulario)
+  const deLista = (productos.data ?? []).find((producto) => producto.id === detalle.productoId)?.precioVenta
+
+  const cerrar = () => {
+    actualizar.reset()
+    onCerrar()
+  }
+
+  const guardar = async (campos: CamposLinea) => {
+    await actualizar.mutateAsync({
+      id: pedidoId,
+      detalleId: detalle.id,
+      datos: {
+        precioUnitario: campos.precioUnitario,
+        cantidad: campos.cantidad === detalle.cantidad ? null : campos.cantidad,
+      },
+    })
+    cerrar()
+  }
+
+  return (
+    <Modal
+      title={detalle.productoNombre}
+      open
+      onCancel={cerrar}
+      onOk={() => formulario.submit()}
+      okText="Guardar"
+      cancelText="Cancelar"
+      confirmLoading={actualizar.isPending}
+      destroyOnHidden
+    >
+      <AvisoError error={actualizar.error} />
+      <Form<CamposLinea>
+        form={formulario}
+        layout="vertical"
+        requiredMark={false}
+        onFinish={guardar}
+        initialValues={{ cantidad: detalle.cantidad, precioUnitario: detalle.precioUnitario }}
+      >
+        <div className="formulario-grid">
+          <Form.Item label="Cantidad" name="cantidad" rules={[{ required: true, message: 'Indica la cantidad' }]}>
+            <InputNumber min={1} precision={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            label="Precio unitario (PEN, sin IGV)"
+            name="precioUnitario"
+            rules={[{ required: true, message: 'Indica el precio' }]}
+          >
+            <InputNumber min={0} step={0.5} style={{ width: '100%' }} />
+          </Form.Item>
+        </div>
+        <AvisoPrecioGerencia precio={precioUnitario} deLista={deLista} />
+      </Form>
+    </Modal>
   )
 }
 
@@ -172,12 +255,17 @@ export function ModalDetallePedidoLima({ pedidoId, onCerrar }: Readonly<Props>) 
   const puedeEditar = tienePermiso(PERMISOS.pedidosLimaEditar)
   const puedeDespachar = tienePermiso(PERMISOS.pedidosLimaDespachar)
   const puedeCancelar = tienePermiso(PERMISOS.pedidosLimaCancelar)
+  const puedeCobrar = tienePermiso(PERMISOS.ventasCrear)
 
   const pedido = usePedidoLima(pedidoId)
   const cambiarEstado = useCambiarEstadoPedidoLima()
   const cancelar = useCancelarPedidoLima()
+  const pagar = useRegistrarPagoPedidoLima()
 
   const [editandoEnvio, setEditandoEnvio] = useState(false)
+  const [lineaEnEdicion, setLineaEnEdicion] = useState<DetallePedidoLimaResponse | null>(null)
+  // null: sin modal; true: adelanto; false: pago del saldo.
+  const [cobro, setCobro] = useState<boolean | null>(null)
   const [paso, setPaso] = useState<Paso | null>(null)
   const [nota, setNota] = useState('')
 
@@ -188,6 +276,29 @@ export function ModalDetallePedidoLima({ pedidoId, onCerrar }: Readonly<Props>) 
   const abierto = datos ? !esPedidoFinal(datos.estado) : false
   const tituloPaso =
     paso?.tipo === 'avanzar' ? `Pasar a «${nombresEstadoPedidoLima[paso.destino]}»` : 'Cancelar pedido'
+  const aprobacion = datos?.estadoAprobacionGerenciaId ?? GERENCIA.noAplica
+  // Con un precio pendiente o rechazado, el backend no deja confirmar ni entregar el pedido.
+  const bloqueadoPorPrecio =
+    (aprobacion === GERENCIA.pendiente || aprobacion === GERENCIA.rechazado) &&
+    (destino === ESTADO_PEDIDO_LIMA.confirmado || destino === ESTADO_PEDIDO_LIMA.entregado)
+  const cancelado = datos?.estado === ESTADO_PEDIDO_LIMA.cancelado
+  const saldoPendiente = datos ? tieneSaldo({ total: datos.total, saldo: datos.saldo ?? datos.total }) : false
+  const columnasConAcciones: TableProps<DetallePedidoLimaResponse>['columns'] =
+    abierto && puedeEditar
+      ? [
+          ...(columnas ?? []),
+          {
+            title: '',
+            key: 'editar',
+            align: 'right',
+            render: (_, detalle) => (
+              <Button type="link" onClick={() => setLineaEnEdicion(detalle)}>
+                Editar
+              </Button>
+            ),
+          },
+        ]
+      : columnas
 
   const cerrarPaso = () => {
     setPaso(null)
@@ -199,6 +310,9 @@ export function ModalDetallePedidoLima({ pedidoId, onCerrar }: Readonly<Props>) 
   const cerrar = () => {
     cerrarPaso()
     setEditandoEnvio(false)
+    setLineaEnEdicion(null)
+    setCobro(null)
+    pagar.reset()
     onCerrar()
   }
 
@@ -250,6 +364,18 @@ export function ModalDetallePedidoLima({ pedidoId, onCerrar }: Readonly<Props>) 
                   <EstadoPedidoLimaTag estado={datos.estado} />
                 </td>
               </tr>
+              {aprobacion !== GERENCIA.noAplica && (
+                <tr>
+                  <td>Precio</td>
+                  <td>
+                    <EtiquetaEstado tono={tonoGerencia[aprobacion] ?? 'neutro'}>
+                      {aprobacion === GERENCIA.pendiente
+                        ? 'Esperando a Gerencia'
+                        : `${nombresGerencia[aprobacion]} por Gerencia`}
+                    </EtiquetaEstado>
+                  </td>
+                </tr>
+              )}
               {datos.motivoCancelacion && (
                 <tr>
                   <td>Motivo de cancelación</td>
@@ -261,12 +387,40 @@ export function ModalDetallePedidoLima({ pedidoId, onCerrar }: Readonly<Props>) 
 
           <Table
             rowKey="id"
-            columns={columnas}
+            columns={columnasConAcciones}
             dataSource={datos.detalles}
             pagination={false}
             style={{ marginTop: 16 }}
           />
           <Totales pedido={datos} />
+          {aprobacion === GERENCIA.rechazado && abierto && (
+            <p className="texto-secundario" style={{ marginTop: 8 }}>
+              Gerencia rechazó el precio: corrígelo en el repuesto y se pide una aprobación nueva.
+            </p>
+          )}
+
+          {!cancelado && (
+            <section style={{ marginTop: 28 }}>
+              <div className="seccion-titulo">
+                <h2>Cobro</h2>
+                {puedeCobrar && saldoPendiente && (
+                  <div className="acciones">
+                    {abierto && <Button onClick={() => setCobro(true)}>Registrar adelanto</Button>}
+                    <Button type="primary" onClick={() => setCobro(false)}>
+                      Registrar pago
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <ResumenCobro
+                total={datos.total}
+                totalPagado={datos.totalPagado ?? 0}
+                saldo={datos.saldo ?? datos.total}
+                estadoPago={datos.estadoPago}
+                pagos={datos.pagos ?? []}
+              />
+            </section>
+          )}
 
           <section style={{ marginTop: 28 }}>
             <div className="seccion-titulo">
@@ -321,19 +475,46 @@ export function ModalDetallePedidoLima({ pedidoId, onCerrar }: Readonly<Props>) 
                     <Button onClick={() => setPaso({ tipo: 'cancelar' })}>Cancelar pedido</Button>
                   )}
                   {destino !== null && puedeEditar && (!entregar || puedeDespachar) && (
-                    <Button type="primary" onClick={() => setPaso({ tipo: 'avanzar', destino })}>
+                    <Button
+                      type="primary"
+                      disabled={bloqueadoPorPrecio}
+                      onClick={() => setPaso({ tipo: 'avanzar', destino })}
+                    >
                       {entregar ? 'Entregar al cliente' : `Marcar ${nombresEstadoPedidoLima[destino].toLowerCase()}`}
                     </Button>
                   )}
                 </div>
               )}
             </div>
+            {bloqueadoPorPrecio && (
+              <p className="texto-secundario">El pedido sigue cuando Gerencia apruebe el precio.</p>
+            )}
             {entregar && !puedeDespachar && (
               <p className="texto-secundario">La entrega descuenta stock: la registra quien tiene permiso de despacho.</p>
             )}
             <HistorialEstados cambios={datos.historial} nombres={nombresEstadoPedidoLima} />
           </section>
         </>
+      )}
+
+      {datos && lineaEnEdicion && (
+        <ModalEditarLineaPedido pedidoId={datos.id} detalle={lineaEnEdicion} onCerrar={() => setLineaEnEdicion(null)} />
+      )}
+
+      {datos && (
+        <ModalRegistrarPago
+          abierto={cobro !== null}
+          titulo={cobro ? 'Registrar adelanto del pedido' : 'Registrar pago del pedido'}
+          saldo={datos.saldo ?? datos.total}
+          esAnticipo={cobro === true}
+          guardando={pagar.isPending}
+          error={pagar.error}
+          onRegistrar={(pago) => pagar.mutateAsync({ id: datos.id, datos: pago })}
+          onCerrar={() => {
+            pagar.reset()
+            setCobro(null)
+          }}
+        />
       )}
 
       <Modal

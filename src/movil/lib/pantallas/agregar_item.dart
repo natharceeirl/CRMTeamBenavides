@@ -19,9 +19,10 @@ Future<bool?> abrirAgregarItem(BuildContext context, String ordenId) {
   );
 }
 
-/// Repuestos y servicios salen del catálogo con su precio: el técnico no lo
-/// cambia. La mano de obra y los terceros llevan precio libre y solo aparecen
-/// con `precios.modificar`.
+/// Repuestos y servicios salen del catálogo con su precio, que se puede
+/// cambiar: otro precio, suba o baje, deja la orden pendiente hasta que
+/// Gerencia lo apruebe. La mano de obra y los terceros llevan precio libre y
+/// solo aparecen con `precios.modificar`.
 class HojaAgregarItem extends ConsumerStatefulWidget {
   const HojaAgregarItem({required this.ordenId, super.key});
 
@@ -55,9 +56,25 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
 
   double? get _precioManual => double.tryParse(_precio.text.replaceAll(',', '.'));
 
+  /// Precio de lista del repuesto o servicio elegido.
+  double? get _precioCatalogo => switch (_tipo) {
+        TipoItem.repuesto => _producto?.precioVenta,
+        TipoItem.servicio => _servicio?.precioSugerido,
+        _ => null,
+      };
+
+  /// Diferencias menores a medio céntimo son el mismo precio.
+  bool get _fueraDeLista {
+    final catalogo = _precioCatalogo;
+    final elegido = _precioManual;
+    return catalogo != null && elegido != null && (elegido - catalogo).abs() > 0.005;
+  }
+
+  void _ponerPrecioDeLista(double precio) => _precio.text = precio.toStringAsFixed(2);
+
   bool get _listo => switch (_tipo) {
-        TipoItem.repuesto => _producto != null,
-        TipoItem.servicio => _servicio != null,
+        TipoItem.repuesto => _producto != null && (_precioManual ?? -1) >= 0,
+        TipoItem.servicio => _servicio != null && (_precioManual ?? -1) >= 0,
         _ => _descripcion.text.trim().isNotEmpty && (_precioManual ?? -1) >= 0,
       };
 
@@ -69,6 +86,7 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
       _servicio = null;
       _cantidad = 1;
       _error = null;
+      _precio.clear();
     });
   }
 
@@ -86,7 +104,9 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
             productoId: _producto?.id,
             servicioId: _servicio?.id,
             descripcion: _esManual ? _descripcion.text.trim() : null,
-            precioUnitario: _esManual ? _precioManual : null,
+            // Del catálogo solo se envía el precio si cambió: así la API usa el
+            // de lista y no abre una solicitud a Gerencia.
+            precioUnitario: _esManual || _fueraDeLista ? _precioManual : null,
             tipoAfectacionIgv: _esManual ? _afectacion : null,
           );
       if (mounted) {
@@ -156,6 +176,7 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
               ),
             ),
             Expanded(child: _cuerpo()),
+            if (!_esManual && _precioCatalogo != null) _precioDelCatalogo(),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -200,6 +221,40 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
     );
   }
 
+  /// Precio del repuesto o servicio elegido, con el aviso cuando sale de la lista.
+  Widget _precioDelCatalogo() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _precio,
+            onChanged: (_) => setState(() {}),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: 'Precio unitario (S/)',
+              helperText: 'De lista: ${soles(_precioCatalogo!)}',
+            ),
+          ),
+          if (_fueraDeLista)
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Marca.acento.withValues(alpha: 0.08),
+                border: const Border(left: BorderSide(color: Marca.acento, width: 3)),
+              ),
+              child: const Text(
+                'Con otro precio, la orden queda pendiente hasta que Gerencia lo apruebe.',
+                style: TextStyle(color: Marca.texto),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _cuerpo() {
     switch (_tipo) {
       case TipoItem.repuesto:
@@ -216,6 +271,7 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
           alElegir: (producto) => setState(() {
             _producto = producto;
             _cantidad = 1;
+            _ponerPrecioDeLista(producto.precioVenta);
           }),
           disponible: (producto) => !producto.agotado,
           titulo: (producto) => producto.nombre,
@@ -233,7 +289,10 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
           vacio: 'Todavía no hay servicios en el catálogo.',
           coincide: (servicio, texto) => servicio.nombre.toLowerCase().contains(texto),
           elegido: (servicio) => servicio.id == _servicio?.id,
-          alElegir: (servicio) => setState(() => _servicio = servicio),
+          alElegir: (servicio) => setState(() {
+            _servicio = servicio;
+            _ponerPrecioDeLista(servicio.precioSugerido);
+          }),
           disponible: (_) => true,
           titulo: (servicio) => servicio.nombre,
           detalle: (servicio) => nombresAfectacionIgv[servicio.tipoAfectacionIgv] ?? 'Gravado',

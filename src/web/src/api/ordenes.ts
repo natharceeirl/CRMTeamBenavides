@@ -5,6 +5,7 @@ import { avisoSegun, type AvisoExito } from './avisos'
 import { clavesPortal } from './portal'
 import type {
   ActualizarOrdenRequest,
+  ActualizarDetalleRequest,
   AgregarDetalleRequest,
   AperturaOrdenRequest,
   AprobacionGerenciaRequest,
@@ -362,6 +363,18 @@ export function useRegistrarDiagnostico() {
   })
 }
 
+/**
+ * Un precio fuera de lista abre una solicitud a Gerencia y volver al de lista la
+ * cierra: los ítems refrescan la orden y la bandeja. La clave se escribe aquí
+ * porque api/aprobaciones importa este archivo.
+ */
+function refrescarOrdenYAprobaciones(consultas: ReturnType<typeof useQueryClient>) {
+  return Promise.all([
+    consultas.invalidateQueries({ queryKey: clavesOrdenes.todas }),
+    consultas.invalidateQueries({ queryKey: ['aprobaciones'] }),
+  ])
+}
+
 export function useAgregarDetalle() {
   const consultas = useQueryClient()
 
@@ -372,9 +385,21 @@ export function useAgregarDetalle() {
         metodo: 'POST',
         cuerpo: datos,
       }),
-    onSuccess: async () => {
-      await consultas.invalidateQueries({ queryKey: clavesOrdenes.todas })
-    },
+    onSuccess: () => refrescarOrdenYAprobaciones(consultas),
+  })
+}
+
+export function useActualizarDetalle() {
+  const consultas = useQueryClient()
+
+  return useMutation({
+    meta: { exito: 'Ítem actualizado' },
+    mutationFn: ({ id, detalleId, datos }: { id: string; detalleId: string; datos: ActualizarDetalleRequest }) =>
+      solicitar<DetalleServicioResponse>(`/ordenes-servicio/${id}/detalles/${detalleId}`, {
+        metodo: 'PUT',
+        cuerpo: datos,
+      }),
+    onSuccess: () => refrescarOrdenYAprobaciones(consultas),
   })
 }
 
@@ -387,9 +412,7 @@ export function useEliminarDetalle() {
       solicitar<{ message: string }>(`/ordenes-servicio/${id}/detalles/${detalleId}`, {
         metodo: 'DELETE',
       }),
-    onSuccess: async () => {
-      await consultas.invalidateQueries({ queryKey: clavesOrdenes.todas })
-    },
+    onSuccess: () => refrescarOrdenYAprobaciones(consultas),
   })
 }
 

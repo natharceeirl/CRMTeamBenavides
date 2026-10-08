@@ -6,7 +6,8 @@ import { EstadoPedidoLimaTag } from '../components/EstadoPedidoLimaTag'
 import { ModalPedidoLima } from '../components/ModalPedidoLima'
 import { ModalDetallePedidoLima } from '../components/ModalDetallePedidoLima'
 import { nombresEstadoPedidoLima, rutaPedidosLima, usePedidosLima } from '../api/pedidosLima'
-import type { EstadoPedidoLima, PedidoLimaResponse } from '../api/tipos'
+import { ESTADO_PEDIDO_LIMA, type EstadoPedidoLima, type PedidoLimaResponse } from '../api/tipos'
+import { GERENCIA } from '../api/ordenes'
 import { useSesion } from '../auth/sesion'
 import { useClientes } from '../api/clientes'
 import { PERMISOS } from '../auth/acceso'
@@ -63,8 +64,18 @@ export function PedidosLimaPage() {
     },
     {
       title: 'Estado',
-      dataIndex: 'estado',
-      render: (valor: EstadoPedidoLima) => <EstadoPedidoLimaTag estado={valor} />,
+      key: 'estado',
+      render: (_, pedido) => (
+        <>
+          <EstadoPedidoLimaTag estado={pedido.estado} />
+          {pedido.estadoAprobacionGerenciaId === GERENCIA.pendiente && (
+            <div className="texto-secundario">Precio esperando a Gerencia</div>
+          )}
+          {pedido.estadoAprobacionGerenciaId === GERENCIA.rechazado && (
+            <div className="texto-secundario">Precio rechazado por Gerencia</div>
+          )}
+        </>
+      ),
     },
     {
       title: 'Llegada estimada',
@@ -85,6 +96,14 @@ export function PedidosLimaPage() {
       align: 'right',
       className: 'num',
       render: (total: number) => soles(total),
+    },
+    {
+      title: 'Saldo',
+      key: 'saldo',
+      align: 'right',
+      className: 'num',
+      render: (_, pedido) =>
+        pedido.estado === ESTADO_PEDIDO_LIMA.cancelado ? '—' : soles(pedido.saldo ?? pedido.total),
     },
     {
       title: '',
