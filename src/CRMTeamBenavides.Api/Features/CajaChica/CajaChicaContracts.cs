@@ -63,7 +63,11 @@ public record CajaChicaResponse(
     decimal TotalIngresos,
     decimal TotalEgresos,
     int CantidadMovimientos,
-    DateTime FechaCreacion
+    DateTime FechaCreacion,
+    // TotalIngresos suma todos los métodos; el saldo solo cuenta efectivo:
+    // SaldoCalculado = MontoApertura + TotalIngresosEfectivo - TotalEgresos.
+    decimal TotalIngresosEfectivo = 0m,
+    decimal TotalIngresosOtrosMetodos = 0m
 );
 
 public record CajaChicaDetalleResponse(
@@ -83,7 +87,11 @@ public record CajaChicaDetalleResponse(
     string? UsuarioCierreNombre,
     decimal TotalIngresos,
     decimal TotalEgresos,
-    List<MovimientoCajaResponse> Movimientos
+    List<MovimientoCajaResponse> Movimientos,
+    // TotalIngresos suma todos los métodos; el saldo solo cuenta efectivo:
+    // SaldoCalculado = MontoApertura + TotalIngresosEfectivo - TotalEgresos.
+    decimal TotalIngresosEfectivo = 0m,
+    decimal TotalIngresosOtrosMetodos = 0m
 );
 
 public record EstadoCajaActualResponse(

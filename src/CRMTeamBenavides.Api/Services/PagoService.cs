@@ -7,6 +7,9 @@ namespace CRMTeamBenavides.Api.Services;
 
 public class PagoService : IPagoService
 {
+    private const string MensajeEfectivoSinCaja =
+        "No se puede registrar un cobro en efectivo porque no hay ninguna Caja Chica abierta en este momento.";
+
     private readonly ApplicationDbContext _context;
     private readonly IAuditoriaService _auditoriaService;
 
@@ -58,14 +61,14 @@ public class PagoService : IPagoService
             return ServiceResult<PagoResponse>.Invalid("El método de pago indicado no existe o está inactivo.");
         }
 
-        if (metodo.Codigo.Equals("EFECTIVO", StringComparison.OrdinalIgnoreCase))
+        if (CajaChicaService.EsCodigoEfectivo(metodo.Codigo))
         {
             var cajaAbierta = await _context.CajasChicas
                 .AnyAsync(c => c.Estado == EstadoCajaChica.Abierta);
             if (!cajaAbierta)
             {
                 return ServiceResult<PagoResponse>.Invalid(
-                    "No se puede registrar un cobro en efectivo porque no hay ninguna Caja Chica abierta en este momento.");
+                    MensajeEfectivoSinCaja);
             }
         }
 
@@ -119,8 +122,13 @@ public class PagoService : IPagoService
             refVenta = "Venta mostrador";
         }
 
-        await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, refVenta, usuarioId);
+        await using var transaccion = await _context.Database.BeginTransactionAsync();
+        if (!await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, refVenta, usuarioId))
+        {
+            return ServiceResult<PagoResponse>.Invalid(MensajeEfectivoSinCaja);
+        }
         await _context.SaveChangesAsync();
+        await transaccion.CommitAsync();
 
         await _auditoriaService.RegistrarEventoAsync(
             usuarioId,
@@ -201,14 +209,14 @@ public class PagoService : IPagoService
             return ServiceResult<PagoResponse>.Invalid("El método de pago indicado no existe o está inactivo.");
         }
 
-        if (metodo.Codigo.Equals("EFECTIVO", StringComparison.OrdinalIgnoreCase))
+        if (CajaChicaService.EsCodigoEfectivo(metodo.Codigo))
         {
             var cajaAbierta = await _context.CajasChicas
                 .AnyAsync(c => c.Estado == EstadoCajaChica.Abierta);
             if (!cajaAbierta)
             {
                 return ServiceResult<PagoResponse>.Invalid(
-                    "No se puede registrar un cobro en efectivo porque no hay ninguna Caja Chica abierta en este momento.");
+                    MensajeEfectivoSinCaja);
             }
         }
 
@@ -243,8 +251,13 @@ public class PagoService : IPagoService
 
         _context.Pagos.Add(pago);
         var refOrden = !string.IsNullOrWhiteSpace(orden.NumeroOrden) ? $"OS #{orden.NumeroOrden}" : "OS taller";
-        await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, refOrden, usuarioId);
+        await using var transaccion = await _context.Database.BeginTransactionAsync();
+        if (!await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, refOrden, usuarioId))
+        {
+            return ServiceResult<PagoResponse>.Invalid(MensajeEfectivoSinCaja);
+        }
         await _context.SaveChangesAsync();
+        await transaccion.CommitAsync();
 
         await _auditoriaService.RegistrarEventoAsync(
             usuarioId,
@@ -400,14 +413,14 @@ public class PagoService : IPagoService
             return ServiceResult<PagoResponse>.Invalid("El método de pago indicado no existe o está inactivo.");
         }
 
-        if (metodo.Codigo.Equals("EFECTIVO", StringComparison.OrdinalIgnoreCase))
+        if (CajaChicaService.EsCodigoEfectivo(metodo.Codigo))
         {
             var cajaAbierta = await _context.CajasChicas
                 .AnyAsync(c => c.Estado == EstadoCajaChica.Abierta);
             if (!cajaAbierta)
             {
                 return ServiceResult<PagoResponse>.Invalid(
-                    "No se puede registrar un cobro en efectivo porque no hay ninguna Caja Chica abierta en este momento.");
+                    MensajeEfectivoSinCaja);
             }
         }
 
@@ -442,8 +455,13 @@ public class PagoService : IPagoService
 
         _context.Pagos.Add(pago);
         var refPedido = !string.IsNullOrWhiteSpace(pedido.NumeroPedido) ? $"Pedido Lima #{pedido.NumeroPedido}" : $"Pedido Lima ({pedido.Cliente?.NombreCompleto ?? "Cliente"})";
-        await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, refPedido, usuarioId);
+        await using var transaccion = await _context.Database.BeginTransactionAsync();
+        if (!await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, refPedido, usuarioId))
+        {
+            return ServiceResult<PagoResponse>.Invalid(MensajeEfectivoSinCaja);
+        }
         await _context.SaveChangesAsync();
+        await transaccion.CommitAsync();
 
         await _auditoriaService.RegistrarEventoAsync(
             usuarioId,
@@ -529,38 +547,67 @@ public class PagoService : IPagoService
         return ServiceResult<List<PagoResponse>>.Success(pagos);
     }
 
-    private async Task RegistrarMovimientoCajaChicaAutomaticoAsync(
+    /// <summary>
+    /// Todo cobro entra como ingreso a la caja abierta; solo el efectivo suma al
+    /// saldo. Se llama dentro de la transacción del pago: la caja se bloquea con
+    /// FOR UPDATE, como en los movimientos manuales y el cierre, para que dos cobros
+    /// simultáneos no pisen el saldo ni un cobro entre a una caja que se está cerrando.
+    /// Devuelve false si el cobro es en efectivo y no hay caja abierta.
+    /// </summary>
+    private async Task<bool> RegistrarMovimientoCajaChicaAutomaticoAsync(
         Pago pago, MetodoPago metodo, string referenciaTexto, Guid? usuarioId)
     {
-        var cajaAbierta = await _context.CajasChicas
-            .FirstOrDefaultAsync(c => c.Estado == EstadoCajaChica.Abierta);
+        var esEfectivo = CajaChicaService.EsCodigoEfectivo(metodo.Codigo);
 
-        if (cajaAbierta != null)
+        var cajaAbiertaId = await _context.CajasChicas
+            .Where(c => c.Estado == EstadoCajaChica.Abierta)
+            .Select(c => (Guid?)c.Id)
+            .FirstOrDefaultAsync();
+
+        CajaChica? cajaAbierta = null;
+        if (cajaAbiertaId != null)
         {
-            var movCaja = new MovimientoCajaChica
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT \"Id\" FROM \"CajasChicas\" WHERE \"Id\" = {cajaAbiertaId.Value} FOR UPDATE");
+            cajaAbierta = await _context.CajasChicas.FirstAsync(c => c.Id == cajaAbiertaId.Value);
+            // Puede venir del rastreo de antes del bloqueo: se relee el saldo y el estado vigentes.
+            await _context.Entry(cajaAbierta).ReloadAsync();
+            if (cajaAbierta.Estado != EstadoCajaChica.Abierta)
             {
-                Id = Guid.NewGuid(),
-                CajaChicaId = cajaAbierta.Id,
-                Tipo = TipoMovimientoCaja.Ingreso,
-                Monto = pago.Monto,
-                Concepto = $"Cobro {metodo.Nombre} - {referenciaTexto}",
-                Referencia = pago.Referencia,
-                Fecha = DateTime.UtcNow,
-                UsuarioId = usuarioId,
-                PagoId = pago.Id,
-                MetodoPagoId = metodo.Id,
-                MetodoPagoNombre = metodo.Nombre,
-                Activo = true,
-                FechaCreacion = DateTime.UtcNow
-            };
-
-            if (metodo.Codigo.Equals("EFECTIVO", StringComparison.OrdinalIgnoreCase))
-            {
-                cajaAbierta.SaldoCalculado += pago.Monto;
-                cajaAbierta.FechaModificacion = DateTime.UtcNow;
+                cajaAbierta = null;
             }
-
-            _context.MovimientosCajaChica.Add(movCaja);
         }
+
+        if (cajaAbierta == null)
+        {
+            // El efectivo necesita una caja donde quedar; los demás métodos se
+            // registran igual en el pago, sin movimiento de caja.
+            return !esEfectivo;
+        }
+
+        _context.MovimientosCajaChica.Add(new MovimientoCajaChica
+        {
+            Id = Guid.NewGuid(),
+            CajaChicaId = cajaAbierta.Id,
+            Tipo = TipoMovimientoCaja.Ingreso,
+            Monto = pago.Monto,
+            Concepto = $"Cobro {metodo.Nombre} - {referenciaTexto}",
+            Referencia = pago.Referencia,
+            Fecha = DateTime.UtcNow,
+            UsuarioId = usuarioId,
+            PagoId = pago.Id,
+            MetodoPagoId = metodo.Id,
+            MetodoPagoNombre = metodo.Nombre,
+            Activo = true,
+            FechaCreacion = DateTime.UtcNow
+        });
+
+        if (esEfectivo)
+        {
+            cajaAbierta.SaldoCalculado += pago.Monto;
+            cajaAbierta.FechaModificacion = DateTime.UtcNow;
+        }
+
+        return true;
     }
 }

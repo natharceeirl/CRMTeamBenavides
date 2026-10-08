@@ -16,6 +16,29 @@ public class CajaChicaService : ICajaChicaService
         _context = context;
     }
 
+    /// <summary>Código del método de pago que entra físicamente al cajón.</summary>
+    public const string CodigoEfectivo = "EFECTIVO";
+
+    public static bool EsCodigoEfectivo(string? codigo) =>
+        string.Equals(codigo?.Trim(), CodigoEfectivo, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Un ingreso manual no tiene método de pago y cuenta como efectivo; uno que
+    /// viene de un cobro cuenta solo si se cobró en efectivo. Requiere MetodoPago cargado.
+    /// </summary>
+    private static bool EsEfectivo(MovimientoCajaChica m) =>
+        m.MetodoPagoId == null || EsCodigoEfectivo(m.MetodoPago?.Codigo);
+
+    private static (decimal Todos, decimal Efectivo, decimal Egresos) Totales(IEnumerable<MovimientoCajaChica> movimientos)
+    {
+        var lista = movimientos.Where(m => m.Activo).ToList();
+        var ingresos = lista.Where(m => m.Tipo == TipoMovimientoCaja.Ingreso).ToList();
+        return (
+            ingresos.Sum(m => m.Monto),
+            ingresos.Where(EsEfectivo).Sum(m => m.Monto),
+            lista.Where(m => m.Tipo == TipoMovimientoCaja.Egreso).Sum(m => m.Monto));
+    }
+
     public async Task<EstadoCajaActualResponse> ObtenerCajaActualAsync(CancellationToken ct = default)
     {
         var caja = await _context.CajasChicas
@@ -24,6 +47,8 @@ public class CajaChicaService : ICajaChicaService
             .Include(c => c.UsuarioCierre)
             .Include(c => c.Movimientos.OrderByDescending(m => m.Fecha))
                 .ThenInclude(m => m.Usuario)
+            .Include(c => c.Movimientos.OrderByDescending(m => m.Fecha))
+                .ThenInclude(m => m.MetodoPago)
             .FirstOrDefaultAsync(c => c.Estado == EstadoCajaChica.Abierta, ct);
 
         if (caja == null)
@@ -42,6 +67,8 @@ public class CajaChicaService : ICajaChicaService
             .Include(c => c.UsuarioCierre)
             .Include(c => c.Movimientos.OrderByDescending(m => m.Fecha))
                 .ThenInclude(m => m.Usuario)
+            .Include(c => c.Movimientos.OrderByDescending(m => m.Fecha))
+                .ThenInclude(m => m.MetodoPago)
             .FirstOrDefaultAsync(c => c.Id == id, ct);
 
         return caja == null ? null : MapearDetalle(caja);
@@ -54,13 +81,13 @@ public class CajaChicaService : ICajaChicaService
             .Include(c => c.UsuarioApertura)
             .Include(c => c.UsuarioCierre)
             .Include(c => c.Movimientos)
+                .ThenInclude(m => m.MetodoPago)
             .OrderByDescending(c => c.FechaApertura)
             .ToListAsync(ct);
 
         return cajas.Select(c =>
         {
-            var ingresos = c.Movimientos.Where(m => m.Tipo == TipoMovimientoCaja.Ingreso).Sum(m => m.Monto);
-            var egresos = c.Movimientos.Where(m => m.Tipo == TipoMovimientoCaja.Egreso).Sum(m => m.Monto);
+            var (ingresos, ingresosEfectivo, egresos) = Totales(c.Movimientos);
 
             return new CajaChicaResponse(
                 c.Id,
@@ -80,7 +107,9 @@ public class CajaChicaService : ICajaChicaService
                 ingresos,
                 egresos,
                 c.Movimientos.Count,
-                c.FechaCreacion
+                c.FechaCreacion,
+                ingresosEfectivo,
+                ingresos - ingresosEfectivo
             );
         }).ToList();
     }
@@ -177,19 +206,38 @@ public class CajaChicaService : ICajaChicaService
         Guid? usuarioId,
         CancellationToken ct = default)
     {
+        // La caja se bloquea antes de leer sus movimientos: un cobro que llegue
+        // mientras se cierra espera, y después ya no la encuentra abierta.
+        await using var transaccion = await _context.Database.BeginTransactionAsync(ct);
+
+        var cajaAbiertaId = await _context.CajasChicas
+            .Where(c => c.Estado == EstadoCajaChica.Abierta)
+            .Select(c => (Guid?)c.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (cajaAbiertaId == null)
+            return ServiceResult<CajaChicaDetalleResponse>.NotFound("No hay ninguna caja chica abierta para cerrar.");
+
+        await _context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT \"Id\" FROM \"CajasChicas\" WHERE \"Id\" = {cajaAbiertaId.Value} FOR UPDATE", ct);
+
         var caja = await _context.CajasChicas
             .Include(c => c.UsuarioApertura)
             .Include(c => c.UsuarioCierre)
             .Include(c => c.Movimientos)
                 .ThenInclude(m => m.Usuario)
-            .FirstOrDefaultAsync(c => c.Estado == EstadoCajaChica.Abierta, ct);
+            .Include(c => c.Movimientos)
+                .ThenInclude(m => m.MetodoPago)
+            .FirstOrDefaultAsync(c => c.Id == cajaAbiertaId.Value && c.Estado == EstadoCajaChica.Abierta, ct);
 
         if (caja == null)
             return ServiceResult<CajaChicaDetalleResponse>.NotFound("No hay ninguna caja chica abierta para cerrar.");
 
-        var totalIngresos = caja.Movimientos.Where(m => m.Tipo == TipoMovimientoCaja.Ingreso).Sum(m => m.Monto);
-        var totalEgresos = caja.Movimientos.Where(m => m.Tipo == TipoMovimientoCaja.Egreso).Sum(m => m.Monto);
-        var saldoFinal = caja.MontoApertura + totalIngresos - totalEgresos;
+        // El cierre es el efectivo que debe haber en el cajón. Los cobros por Yape,
+        // tarjeta o transferencia quedan como ingreso informativo y no suman al
+        // saldo, igual que durante el día.
+        var (totalIngresos, totalIngresosEfectivo, totalEgresos) = Totales(caja.Movimientos);
+        var saldoFinal = caja.MontoApertura + totalIngresosEfectivo - totalEgresos;
 
         caja.SaldoCalculado = saldoFinal;
         caja.MontoCierre = saldoFinal;
@@ -212,12 +260,14 @@ public class CajaChicaService : ICajaChicaService
                 MontoApertura = caja.MontoApertura,
                 MontoCierre = saldoFinal,
                 TotalIngresos = totalIngresos,
+                TotalIngresosEfectivo = totalIngresosEfectivo,
                 TotalEgresos = totalEgresos,
                 Observaciones = caja.ObservacionesCierre
             })
         });
 
         await _context.SaveChangesAsync(ct);
+        await transaccion.CommitAsync(ct);
 
         return ServiceResult<CajaChicaDetalleResponse>.Success(MapearDetalle(caja));
     }
@@ -421,8 +471,7 @@ public class CajaChicaService : ICajaChicaService
 
     private static CajaChicaDetalleResponse MapearDetalle(CajaChica c)
     {
-        var ingresos = c.Movimientos.Where(m => m.Tipo == TipoMovimientoCaja.Ingreso).Sum(m => m.Monto);
-        var egresos = c.Movimientos.Where(m => m.Tipo == TipoMovimientoCaja.Egreso).Sum(m => m.Monto);
+        var (ingresos, ingresosEfectivo, egresos) = Totales(c.Movimientos);
 
         return new CajaChicaDetalleResponse(
             c.Id,
@@ -441,7 +490,9 @@ public class CajaChicaService : ICajaChicaService
             c.UsuarioCierre?.NombreCompleto,
             ingresos,
             egresos,
-            c.Movimientos.OrderByDescending(m => m.Fecha).Select(MapearMovimiento).ToList()
+            c.Movimientos.OrderByDescending(m => m.Fecha).Select(MapearMovimiento).ToList(),
+            ingresosEfectivo,
+            ingresos - ingresosEfectivo
         );
     }
 }
