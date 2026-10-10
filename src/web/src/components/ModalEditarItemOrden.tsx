@@ -19,8 +19,15 @@ type Campos = {
 export function ModalEditarItemOrden({
   ordenId,
   detalle,
+  pideAprobacion = true,
   onCerrar,
-}: Readonly<{ ordenId: string; detalle: DetalleServicioResponse; onCerrar: () => void }>) {
+}: Readonly<{
+  ordenId: string
+  detalle: DetalleServicioResponse
+  /** Falso para Gerencia y Recepción: su precio no espera aprobación. */
+  pideAprobacion?: boolean
+  onCerrar: () => void
+}>) {
   const [formulario] = Form.useForm<Campos>()
   const actualizar = useActualizarDetalle()
   const esRepuesto = detalle.tipoItem === TIPO_ITEM_SERVICIO.repuesto || detalle.esRepuesto
@@ -102,7 +109,7 @@ export function ModalEditarItemOrden({
             <InputNumber min={0} step={0.5} style={{ width: '100%' }} />
           </Form.Item>
         </div>
-        <AvisoPrecioGerencia precio={precioUnitario} deLista={precioDeLista} />
+        {pideAprobacion && <AvisoPrecioGerencia precio={precioUnitario} deLista={precioDeLista} />}
       </Form>
     </Modal>
   )

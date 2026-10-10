@@ -436,6 +436,8 @@ class DetalleServicioApi {
     required this.precioUnitario,
     required this.subtotal,
     required this.esRepuesto,
+    this.productoId,
+    this.servicioId,
     this.productoCodigo,
     this.tipoItem,
     this.tipoItemNombre,
@@ -453,6 +455,8 @@ class DetalleServicioApi {
         precioUnitario: (json['precioUnitario'] as num? ?? 0).toDouble(),
         subtotal: (json['subtotal'] as num? ?? 0).toDouble(),
         esRepuesto: json['esRepuesto'] as bool? ?? false,
+        productoId: json['productoId'] as String?,
+        servicioId: json['servicioId'] as String?,
         productoCodigo: json['productoCodigo'] as String?,
         tipoItem: json['tipoItem'] as int?,
         tipoItemNombre: json['tipoItemNombre'] as String?,
@@ -469,6 +473,10 @@ class DetalleServicioApi {
   final double precioUnitario;
   final double subtotal;
   final bool esRepuesto;
+
+  /// Del catálogo: con ellos se busca el precio de lista al corregir el ítem.
+  final String? productoId;
+  final String? servicioId;
   final String? productoCodigo;
   final int? tipoItem;
   final String? tipoItemNombre;

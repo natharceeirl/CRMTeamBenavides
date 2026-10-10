@@ -81,6 +81,15 @@ type SesionAcceso = {
 
 const ROLES_PERSONAL = ['Gerencia/Admin', 'Admin', 'Recepcion', 'Recepción', 'Tecnico', 'Técnico', 'Vendedor']
 
+/**
+ * En la orden de servicio, Gerencia, Recepción y quien tiene `precios.modificar`
+ * fijan un precio fuera de lista sin pedir aprobación, igual que el backend. En
+ * ventas y pedidos a Lima la aprobación sigue siendo para todos.
+ */
+export function fijaPreciosDeOrdenSinAprobacion(sesion: SesionAcceso & { esRecepcion: boolean }): boolean {
+  return sesion.esGerencia || sesion.esRecepcion || sesion.tienePermiso(PERMISOS.preciosModificar)
+}
+
 export function esSoloCliente(sesion: SesionAcceso): boolean {
   return sesion.roles.includes('Cliente') && !sesion.roles.some((rol) => ROLES_PERSONAL.includes(rol))
 }

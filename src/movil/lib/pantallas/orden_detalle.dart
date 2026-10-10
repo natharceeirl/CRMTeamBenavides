@@ -10,6 +10,7 @@ import '../formato.dart';
 import '../tema.dart';
 import 'agregar_item.dart';
 import 'comunes.dart';
+import 'editar_item.dart';
 import 'fotos_orden.dart';
 
 class PantallaOrdenDetalle extends ConsumerStatefulWidget {
@@ -50,6 +51,18 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
     ref.invalidate(productosProvider);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Agregado a la orden')),
+    );
+  }
+
+  Future<void> _editarItem(DetalleServicioApi detalle) async {
+    final cambio = await abrirEditarItem(context, widget.ordenId, detalle);
+    if (cambio != true || !mounted) return;
+
+    _refrescar();
+    // Una cantidad distinta o un repuesto quitado mueve el stock.
+    ref.invalidate(productosProvider);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Orden actualizada')),
     );
   }
 
@@ -204,6 +217,8 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
               posibles.contains(EstadoOrden.aprobada);
 
           final esCliente = sesion.soloCliente;
+          final puedeEditarItems = sesion.tieneAlgunPermiso(Permisos.editarItems) &&
+              permiteEditarItems(datosOrden.estadoId, liquidada: datosOrden.ventaId != null);
 
           return ListView(
             padding: const EdgeInsets.only(bottom: 32),
@@ -323,7 +338,16 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                         soles(detalle.total ?? detalle.subtotal),
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
+                      onTap: puedeEditarItems && !_guardando ? () => _editarItem(detalle) : null,
                     ),
+                  ),
+                ),
+              if (puedeEditarItems && datos.detalles.isNotEmpty)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 4, 20, 0),
+                  child: Text(
+                    'Toca un ítem para corregir la cantidad o el precio, o para quitarlo.',
+                    style: TextStyle(color: Marca.textoSecundario),
                   ),
                 ),
               Padding(

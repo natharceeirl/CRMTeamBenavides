@@ -4,6 +4,7 @@ import '../api/almacen_sesion.dart';
 import '../api/api_http.dart';
 import '../api/modelos.dart';
 import 'jwt.dart';
+import 'permisos.dart';
 
 class EstadoSesion {
   const EstadoSesion({
@@ -49,6 +50,11 @@ class EstadoSesion {
   /// El backend trata como técnico a quien lo es sin ser Gerencia ni Recepción:
   /// no aprueba, no entrega ni anula órdenes.
   bool get soloTecnico => esTecnico && !esGerencia && !esRecepcion;
+
+  /// En la orden, Gerencia, Recepción y quien tiene `precios.modificar` fijan un
+  /// precio fuera de lista sin pedir aprobación, igual que el backend.
+  bool get fijaPreciosDeOrdenSinAprobacion =>
+      esGerencia || esRecepcion || permisos.contains(Permisos.preciosModificar);
 
   bool tienePermiso(String permiso) {
     if (esGerencia) return true;

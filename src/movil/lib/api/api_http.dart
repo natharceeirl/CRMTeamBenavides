@@ -236,6 +236,36 @@ class ApiHttp {
     }
   }
 
+  /// PUT /api/ordenes-servicio/{id}/detalles/{detalleId}: se manda solo lo que
+  /// cambia. Otro precio que el de lista deja la orden pendiente de Gerencia.
+  Future<void> actualizarItem(
+    String ordenId,
+    String detalleId, {
+    int? cantidad,
+    double? precioUnitario,
+  }) async {
+    try {
+      await _dio.put<Map<String, dynamic>>(
+        '/api/ordenes-servicio/$ordenId/detalles/$detalleId',
+        data: {
+          'cantidad': ?cantidad,
+          'precioUnitario': ?precioUnitario,
+        },
+      );
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
+  /// Un repuesto quitado vuelve al stock.
+  Future<void> quitarItem(String ordenId, String detalleId) async {
+    try {
+      await _dio.delete<void>('/api/ordenes-servicio/$ordenId/detalles/$detalleId');
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
   Future<List<FotoOrdenApi>> fotosOrden(String ordenId) async {
     final datos = await _lista('/api/ordenes-servicio/$ordenId/fotos');
     return datos.map(FotoOrdenApi.desdeJson).toList();

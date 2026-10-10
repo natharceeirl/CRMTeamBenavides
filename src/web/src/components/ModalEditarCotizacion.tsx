@@ -1,6 +1,7 @@
 import { Form, InputNumber, Modal, Table, type TableProps } from 'antd'
 import { useProductos } from '../api/inventario'
-import { useActualizarVenta } from '../api/ventas'
+import { ESTADO_VENTA, useActualizarVenta } from '../api/ventas'
+import { GERENCIA } from '../api/ordenes'
 import type { DetalleVentaResponse, VentaDetalleResponse } from '../api/tipos'
 import { AvisoError } from './AvisoError'
 import { precioDistintoAlDeLista } from './AvisoPrecioGerencia'
@@ -9,13 +10,27 @@ import { soles } from '../utils/formato'
 type Linea = { detalleId: string; productoId: string; cantidad: number; precioUnitario: number }
 type Campos = { lineas: Linea[] }
 
-/** Solo se editan cotizaciones de mostrador: todas sus líneas son productos. */
-export const esCotizacionEditable = (venta: VentaDetalleResponse) =>
-  venta.detalles.length > 0 && venta.detalles.every((detalle) => detalle.productoId) && (venta.pagos ?? []).length === 0
+/**
+ * Se editan las ventas de mostrador (todas sus líneas son productos) sin pagos ni
+ * comprobante: una cotización, o una venta confirmada cuyo precio sigue esperando
+ * a Gerencia o fue rechazado.
+ */
+export const esVentaEditable = (venta: VentaDetalleResponse) => {
+  const lineasDeMostrador = venta.detalles.length > 0 && venta.detalles.every((detalle) => detalle.productoId)
+  const sinCobroNiComprobante = (venta.pagos ?? []).length === 0 && !venta.comprobante
+  const aprobacion = venta.estadoAprobacionGerenciaId ?? GERENCIA.noAplica
+  const confirmadaPorCorregir =
+    venta.estadoId === ESTADO_VENTA.confirmada &&
+    (aprobacion === GERENCIA.pendiente || aprobacion === GERENCIA.rechazado)
+  return (
+    lineasDeMostrador && sinCobroNiComprobante && (venta.estadoId === ESTADO_VENTA.cotizacion || confirmadaPorCorregir)
+  )
+}
 
 /**
- * Corrige cantidades y precios de una cotización. El backend reemplaza todas las
- * líneas, así que se envían todas, cambien o no.
+ * Corrige cantidades y precios de una cotización o de una venta confirmada con el
+ * precio por corregir. El backend reemplaza todas las líneas, así que se envían
+ * todas, cambien o no; en una venta confirmada también ajusta el stock.
  */
 export function ModalEditarCotizacion({
   venta,
@@ -96,9 +111,12 @@ export function ModalEditarCotizacion({
     },
   ]
 
+  const confirmada = venta.estadoId === ESTADO_VENTA.confirmada
+  const operacion = confirmada ? 'venta' : 'cotización'
+
   return (
     <Modal
-      title="Editar cotización"
+      title={confirmada ? 'Corregir la venta' : 'Editar cotización'}
       open
       onCancel={cerrar}
       onOk={() => formulario.submit()}
@@ -129,10 +147,15 @@ export function ModalEditarCotizacion({
           pagination={false}
         />
       </Form>
+      {confirmada && (
+        <p className="texto-secundario" style={{ marginTop: 16 }}>
+          La venta ya descontó el stock: si cambias una cantidad, el stock se ajusta a la diferencia.
+        </p>
+      )}
       {fueraDeLista > 0 && (
         <p className="aviso-precio" style={{ marginTop: 16 }}>
-          {fueraDeLista === 1 ? 'Una línea tiene' : `${fueraDeLista} líneas tienen`} un precio distinto al de lista: la
-          cotización queda pendiente hasta que Gerencia lo apruebe. Con todos los precios de lista, queda libre.
+          {fueraDeLista === 1 ? 'Una línea tiene' : `${fueraDeLista} líneas tienen`} un precio distinto al de lista: la{' '}
+          {operacion} queda pendiente hasta que Gerencia lo apruebe. Con todos los precios de lista, queda libre.
         </p>
       )}
     </Modal>

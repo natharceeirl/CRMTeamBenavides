@@ -237,7 +237,7 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
               helperText: 'De lista: ${soles(_precioCatalogo!)}',
             ),
           ),
-          if (_fueraDeLista)
+          if (_fueraDeLista && !ref.watch(sesionProvider).fijaPreciosDeOrdenSinAprobacion)
             Container(
               margin: const EdgeInsets.only(top: 8),
               padding: const EdgeInsets.all(10),

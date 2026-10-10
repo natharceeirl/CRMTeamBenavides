@@ -17,7 +17,7 @@ import { useConfiguracionEmpresa } from '../api/configuracion'
 import { nombresTipoItem, type DetalleVentaResponse, type RegistrarComprobanteRequest } from '../api/tipos'
 import { AvisoError } from './AvisoError'
 import { EtiquetaEstado, type TonoEstado } from './EtiquetaEstado'
-import { ModalEditarCotizacion, esCotizacionEditable } from './ModalEditarCotizacion'
+import { ModalEditarCotizacion, esVentaEditable } from './ModalEditarCotizacion'
 import { ModalRegistrarPago } from './ModalRegistrarPago'
 import { ResumenCobro } from './ResumenCobro'
 import { colores } from '../theme/tokens'
@@ -142,8 +142,7 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
   const aprobacion = datos?.estadoAprobacionGerenciaId ?? GERENCIA.noAplica
   // Con un precio pendiente o rechazado, el backend no deja confirmar ni registrar el comprobante.
   const bloqueadaPorPrecio = aprobacion === GERENCIA.pendiente || aprobacion === GERENCIA.rechazado
-  const puedeEditarCotizacion =
-    Boolean(datos) && datos!.estadoId === ESTADO_VENTA.cotizacion && puedeRegistrar && esCotizacionEditable(datos!)
+  const puedeEditarCotizacion = Boolean(datos) && puedeRegistrar && esVentaEditable(datos!)
 
   return (
     <Modal

@@ -41,7 +41,6 @@ export function ModalVenta({ abierto, onCerrar, onCreada }: Readonly<Props>) {
   const [altaRepuesto, setAltaRepuesto] = useState(false)
 
   const lineas = Form.useWatch('detalles', formulario) ?? []
-  const esCotizacion = Form.useWatch('esCotizacion', formulario) ?? true
   const precioDeLista = (productoId?: string) =>
     (productos.data ?? []).find((item) => item.id === productoId)?.precioVenta
 
@@ -179,7 +178,6 @@ export function ModalVenta({ abierto, onCerrar, onCreada }: Readonly<Props>) {
           <p className="aviso-precio" style={{ marginTop: 16 }}>
             {lineasFueraDeLista === 1 ? 'Una línea tiene' : `${lineasFueraDeLista} líneas tienen`} un precio distinto al
             de lista: la venta queda pendiente hasta que Gerencia lo apruebe.
-            {!esCotizacion && ' Guárdala como cotización para poder corregir el precio si Gerencia lo rechaza.'}
           </p>
         )}
 

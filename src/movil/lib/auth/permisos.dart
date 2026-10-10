@@ -19,6 +19,10 @@ class Permisos {
 
   /// Quienes pueden registrar la respuesta al presupuesto (PoliticaAprobacionCliente).
   static const responderPresupuesto = [ordenesEditar, ventasCrear, portalAcceso];
+
+  /// Corregir o quitar un ítem de la orden: al técnico el backend se lo permite
+  /// en sus órdenes con `ordenes.agregar_items`.
+  static const editarItems = [ordenesEditar, ordenesAgregarItems];
   static const preciosModificar = 'precios.modificar';
   static const inventarioVer = 'inventario.ver';
   static const serviciosVer = 'servicios.ver';

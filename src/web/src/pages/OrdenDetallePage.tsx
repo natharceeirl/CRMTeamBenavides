@@ -46,7 +46,7 @@ import {
 import { fechaHora, importe, referenciaOrden, soles } from '../utils/formato'
 import { lecturaIngresoOrden } from '../utils/unidades'
 import { useSesion } from '../auth/sesion'
-import { PERMISOS } from '../auth/acceso'
+import { PERMISOS, fijaPreciosDeOrdenSinAprobacion } from '../auth/acceso'
 
 const porFecha = (a: HistorialEstadoOrdenResponse, b: HistorialEstadoOrdenResponse) =>
   new Date(a.fechaCambio).getTime() - new Date(b.fechaCambio).getTime()
@@ -59,8 +59,11 @@ export function OrdenDetallePage() {
   const puedeDiagnosticar = tienePermiso(PERMISOS.ordenesDiagnostico)
   const puedeAgregarItems = tienePermiso(PERMISOS.ordenesAgregarItems)
   const puedeFijarPrecios = tienePermiso(PERMISOS.preciosModificar)
-  // Editar y quitar ítems piden `ordenes.editar` en el backend.
-  const puedeQuitarItems = tienePermiso(PERMISOS.ordenesEditar)
+  // Gerencia y Recepción fijan precios de la orden sin pedir aprobación.
+  const pideAprobacion = !fijaPreciosDeOrdenSinAprobacion(sesion)
+  // Editar y quitar ítems piden `ordenes.editar` o `ordenes.agregar_items`; al
+  // técnico el backend se lo permite solo en sus órdenes, que son las que ve.
+  const puedeQuitarItems = sesion.tieneAlgunPermiso([PERMISOS.ordenesEditar, PERMISOS.ordenesAgregarItems])
   const puedeEditarOrden = tienePermiso(PERMISOS.ordenesEditar)
   const puedeAsignar = tienePermiso(PERMISOS.ordenesAsignarTecnico)
   const puedeCobrar = tienePermiso(PERMISOS.ventasCrear)
@@ -364,9 +367,11 @@ export function OrdenDetallePage() {
                   </Button>
                   <Button onClick={() => setModalRepuesto(true)}>Agregar repuesto rápido</Button>
                 </div>
-                <p className="texto-secundario" style={{ marginTop: 8 }}>
-                  Un precio distinto al de lista deja la orden pendiente hasta que Gerencia lo apruebe.
-                </p>
+                {pideAprobacion && (
+                  <p className="texto-secundario" style={{ marginTop: 8 }}>
+                    Un precio distinto al de lista deja la orden pendiente hasta que Gerencia lo apruebe.
+                  </p>
+                )}
               </>
             )}
             {itemsBloqueados && (
@@ -578,6 +583,7 @@ export function OrdenDetallePage() {
         abierto={modalItem}
         ordenId={datos.id}
         puedeModificarPrecios={puedeFijarPrecios}
+        pideAprobacion={pideAprobacion}
         onCerrar={() => setModalItem(false)}
       />
 
@@ -588,7 +594,12 @@ export function OrdenDetallePage() {
       />
 
       {itemEnEdicion && (
-        <ModalEditarItemOrden ordenId={datos.id} detalle={itemEnEdicion} onCerrar={() => setItemEnEdicion(null)} />
+        <ModalEditarItemOrden
+          ordenId={datos.id}
+          detalle={itemEnEdicion}
+          pideAprobacion={pideAprobacion}
+          onCerrar={() => setItemEnEdicion(null)}
+        />
       )}
 
       <ModalEditarOrden abierto={modalEditar} orden={datos} onCerrar={() => setModalEditar(false)} />

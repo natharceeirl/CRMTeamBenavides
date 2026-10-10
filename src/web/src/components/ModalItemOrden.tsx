@@ -23,6 +23,8 @@ type Props = {
    * cualquiera, con la aprobación de Gerencia.
    */
   puedeModificarPrecios?: boolean
+  /** Falso para Gerencia y Recepción: su precio no espera aprobación. */
+  pideAprobacion?: boolean
   onCerrar: () => void
 }
 
@@ -40,6 +42,7 @@ export function ModalItemOrden({
   abierto,
   ordenId,
   puedeModificarPrecios = true,
+  pideAprobacion = true,
   onCerrar,
 }: Readonly<Props>) {
   const [formulario] = Form.useForm<Campos>()
@@ -255,7 +258,7 @@ export function ModalItemOrden({
             <InputNumber min={0} step={0.5} style={{ width: '100%' }} placeholder="Opcional: toma el precio de lista si se deja vacío" />
           </Form.Item>
         )}
-        {conPrecioDeLista && <AvisoPrecioGerencia precio={precioUnitario} deLista={precioDeLista} />}
+        {conPrecioDeLista && pideAprobacion && <AvisoPrecioGerencia precio={precioUnitario} deLista={precioDeLista} />}
 
         <Form.Item
           label="Afectación tributaria (SUNAT)"
