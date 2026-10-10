@@ -4,6 +4,100 @@ namespace CRMTeamBenavides.Api.Services.Exportacion;
 
 public class ExportacionExcelService : IExportacionExcelService
 {
+    public byte[] GenerarExcelCompras(IEnumerable<CompraExcelDto> compras)
+    {
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Compras");
+
+        string[] headers =
+        {
+            "N° Compra",
+            "Emisión",
+            "Comprobante",
+            "Proveedor",
+            "Documento",
+            "Moneda",
+            "Tipo de cambio",
+            "Total",
+            "Total (S/)",
+            "Pagado",
+            "Saldo",
+            "Estado",
+            "Vencimiento",
+            "Pedido a Lima"
+        };
+
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = ws.Cell(1, i + 1);
+            cell.Value = headers[i];
+            cell.Style.Font.Bold = true;
+            cell.Style.Font.FontColor = XLColor.White;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#1F4E79");
+            cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+        }
+
+        int row = 2;
+        foreach (var c in compras)
+        {
+            // Total, pagado y saldo van en la moneda de la compra.
+            var formatoMoneda = c.Moneda == "USD" ? "\"US$\" #,##0.00" : "\"S/\" #,##0.00";
+
+            ws.Cell(row, 1).Value = c.NumeroCompra;
+            ws.Cell(row, 2).Value = c.FechaEmision.ToString("yyyy-MM-dd");
+            ws.Cell(row, 3).Value = c.Comprobante;
+            ws.Cell(row, 4).Value = c.ProveedorNombre;
+            ws.Cell(row, 5).Value = c.ProveedorDocumento;
+            ws.Cell(row, 6).Value = c.Moneda;
+
+            var cTipoCambio = ws.Cell(row, 7);
+            cTipoCambio.Value = c.TipoCambio;
+            cTipoCambio.Style.NumberFormat.Format = "0.0000";
+
+            var cTotal = ws.Cell(row, 8);
+            cTotal.Value = c.Total;
+            cTotal.Style.NumberFormat.Format = formatoMoneda;
+
+            var cTotalSoles = ws.Cell(row, 9);
+            cTotalSoles.Value = c.TotalSoles;
+            cTotalSoles.Style.NumberFormat.Format = "\"S/\" #,##0.00";
+
+            var cPagado = ws.Cell(row, 10);
+            cPagado.Value = c.TotalPagado;
+            cPagado.Style.NumberFormat.Format = formatoMoneda;
+
+            var cSaldo = ws.Cell(row, 11);
+            cSaldo.Value = c.Saldo;
+            cSaldo.Style.NumberFormat.Format = formatoMoneda;
+
+            ws.Cell(row, 12).Value = c.Estado;
+            ws.Cell(row, 13).Value = c.FechaVencimiento?.ToString("yyyy-MM-dd") ?? string.Empty;
+            ws.Cell(row, 14).Value = c.NumeroPedidoLima ?? string.Empty;
+
+            for (int col = 1; col <= headers.Length; col++)
+            {
+                var cell = ws.Cell(row, col);
+                cell.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+                cell.Style.Border.BottomBorderColor = XLColor.FromHtml("#E0E0E0");
+            }
+
+            ws.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Cell(row, 6).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Cell(row, 12).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Cell(row, 13).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            row++;
+        }
+
+        ws.Columns().AdjustToContents();
+
+        using var ms = new MemoryStream();
+        workbook.SaveAs(ms);
+        return ms.ToArray();
+    }
+
     public byte[] GenerarExcelCitas(IEnumerable<CitaExcelDto> citas)
     {
         using var workbook = new XLWorkbook();

@@ -59,8 +59,26 @@ public record OrdenServicioExcelDto(
     decimal? Utilidad = null,
     decimal? MargenPorcentaje = null);
 
+/// <summary>Total, pagado y saldo en la moneda de la compra; TotalSoles con su tipo de cambio.</summary>
+public record CompraExcelDto(
+    string NumeroCompra,
+    DateOnly FechaEmision,
+    string Comprobante,
+    string ProveedorNombre,
+    string ProveedorDocumento,
+    string Moneda,
+    decimal TipoCambio,
+    decimal Total,
+    decimal TotalSoles,
+    decimal TotalPagado,
+    decimal Saldo,
+    string Estado,
+    DateOnly? FechaVencimiento,
+    string? NumeroPedidoLima);
+
 public interface IExportacionExcelService
 {
+    byte[] GenerarExcelCompras(IEnumerable<CompraExcelDto> compras);
     byte[] GenerarExcelCitas(IEnumerable<CitaExcelDto> citas);
     byte[] GenerarExcelPedidosLima(IEnumerable<PedidoLimaExcelDto> pedidos);
     byte[] GenerarExcelVentas(IEnumerable<VentaExcelDto> ventas, bool incluirFinanciero = false);

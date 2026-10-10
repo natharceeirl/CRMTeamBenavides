@@ -237,13 +237,20 @@ type CamposRepuesto = {
 /**
  * Registro mínimo de un repuesto que no está en el catálogo. Sin código, el
  * backend genera uno; sin categoría, usa la general. Si el código ya existe,
- * devuelve ese repuesto.
+ * devuelve ese repuesto. Desde una compra no se pide stock inicial: lo suma la
+ * compra, y escribirlo aquí lo haría entrar dos veces.
  */
 export function ModalAltaRapidaRepuesto({
   abierto,
+  sinStockInicial = false,
   onCerrar,
   onRegistrado,
-}: Readonly<{ abierto: boolean; onCerrar: () => void; onRegistrado: (repuesto: ProductoResponse) => void }>) {
+}: Readonly<{
+  abierto: boolean
+  sinStockInicial?: boolean
+  onCerrar: () => void
+  onRegistrado: (repuesto: ProductoResponse) => void
+}>) {
   const [formulario] = Form.useForm<CamposRepuesto>()
   const marcas = useMarcasProductos()
   const registrar = useAltaRapidaProducto()
@@ -260,7 +267,7 @@ export function ModalAltaRapidaRepuesto({
       marca: sinVacios(campos.marca),
       precioVenta: campos.precioVenta,
       categoriaId: null,
-      stockInicial: campos.stockInicial ?? 0,
+      stockInicial: sinStockInicial ? 0 : (campos.stockInicial ?? 0),
     })
     registrar.reset()
     onRegistrado(repuesto)
@@ -309,9 +316,11 @@ export function ModalAltaRapidaRepuesto({
           >
             <InputNumber min={0} precision={2} style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item label="Stock inicial" name="stockInicial">
-            <InputNumber min={0} precision={0} style={{ width: '100%' }} />
-          </Form.Item>
+          {!sinStockInicial && (
+            <Form.Item label="Stock inicial" name="stockInicial">
+              <InputNumber min={0} precision={0} style={{ width: '100%' }} />
+            </Form.Item>
+          )}
         </div>
         <Form.Item label="¿El precio está en dólares?">
           <ConversorDolares onAplicar={(montoPen) => formulario.setFieldsValue({ precioVenta: montoPen })} />

@@ -77,7 +77,10 @@ public static class RolSeeder
             [PermisosDefinidos.PedidosLimaCrear] = "Registrar nuevos pedidos de repuestos a Lima",
             [PermisosDefinidos.PedidosLimaEditar] = "Actualizar estado, seguimiento y datos de pedidos Lima",
             [PermisosDefinidos.PedidosLimaDespachar] = "Despachar o entregar repuestos de pedidos Lima con afectación de stock",
-            [PermisosDefinidos.PedidosLimaCancelar] = "Cancelar pedidos de repuestos de Lima"
+            [PermisosDefinidos.PedidosLimaCancelar] = "Cancelar pedidos de repuestos de Lima",
+            [PermisosDefinidos.ComprasVer] = "Consultar compras, pagos a proveedores y costos",
+            [PermisosDefinidos.ComprasRegistrar] = "Registrar compras, pagar a proveedores y administrar proveedores",
+            [PermisosDefinidos.ComprasAnular] = "Anular compras y pagos a proveedores"
         };
 
         var nuevosPermisos = new List<Permiso>();

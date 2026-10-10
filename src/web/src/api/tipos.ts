@@ -227,6 +227,8 @@ export type ConfiguracionEmpresaResponse = {
   monedaBase: string
   tipoCambioVigente: number | null
   fechaActualizacionTipoCambio: string | null
+  /** Cómo una compra actualiza el costo del repuesto. */
+  metodoCosteo: MetodoCosteo
 }
 
 /** Lo que no se manda (o va en null) queda como estaba. */
@@ -240,6 +242,7 @@ export type ActualizarConfiguracionEmpresaRequest = {
   porcentajeIgv?: number | null
   monedaBase?: string | null
   tipoCambioVigente?: number | null
+  metodoCosteo?: MetodoCosteo | null
 }
 
 export type DetalleServicioResponse = {
@@ -1372,4 +1375,180 @@ export type RentabilidadReporteResponse = {
     utilidadBruta: number
     margenPorcentual: number
   }[]
+}
+
+// ---------------------------------------------------------------------------
+// Compras a proveedores: las reglas están en docs/modulo-compras.md
+// ---------------------------------------------------------------------------
+/** Enum TipoComprobanteCompra. Solo la factura da crédito fiscal: con otro comprobante el IGV es costo. */
+export const TIPO_COMPROBANTE_COMPRA = {
+  factura: 0,
+  boleta: 1,
+  ticket: 2,
+  notaVenta: 3,
+  reciboHonorarios: 4,
+  otro: 5,
+} as const
+
+export type TipoComprobanteCompra = (typeof TIPO_COMPROBANTE_COMPRA)[keyof typeof TIPO_COMPROBANTE_COMPRA]
+
+export const MONEDA_COMPRA = { pen: 0, usd: 1 } as const
+export type MonedaCompra = (typeof MONEDA_COMPRA)[keyof typeof MONEDA_COMPRA]
+
+export const ESTADO_COMPRA = { registrada: 0, anulada: 1 } as const
+export type EstadoCompra = (typeof ESTADO_COMPRA)[keyof typeof ESTADO_COMPRA]
+
+export const METODO_COSTEO = { promedioPonderado: 0, ultimoCosto: 1 } as const
+export type MetodoCosteo = (typeof METODO_COSTEO)[keyof typeof METODO_COSTEO]
+
+export type ProveedorResponse = {
+  id: string
+  /** Mismo enum que el cliente: TIPO_DOCUMENTO_CLIENTE. */
+  tipoDocumento: number
+  numeroDocumento: string
+  razonSocial: string
+  telefono: string | null
+  email: string | null
+  direccion: string | null
+  contacto: string | null
+  fechaCreacion: string
+}
+
+export type GuardarProveedorRequest = {
+  tipoDocumento: number
+  numeroDocumento: string
+  razonSocial: string
+  telefono: string | null
+  email: string | null
+  direccion: string | null
+  contacto: string | null
+}
+
+/** Un repuesto (productoId) o un concepto libre (descripcion), como un flete. */
+export type DetalleCompraRequest = {
+  productoId: string | null
+  descripcion: string | null
+  cantidad: number
+  precioUnitario: number
+  tipoAfectacionIgv: number
+}
+
+/** El monto va en la moneda de la compra. */
+export type RegistrarPagoCompraRequest = {
+  monto: number
+  metodoPagoId: string
+  referencia: string | null
+  observaciones: string | null
+}
+
+/** Las fechas viajan como AAAA-MM-DD, sin hora. */
+export type CrearCompraRequest = {
+  proveedorId: string
+  tipoComprobante: TipoComprobanteCompra
+  serie: string
+  numero: string
+  fechaEmision: string
+  fechaVencimiento: string | null
+  moneda: MonedaCompra
+  tipoCambio: number | null
+  porcentajeIgv: number | null
+  preciosIncluyenIgv: boolean
+  pedidoLimaId: string | null
+  guiaRemision: string | null
+  observaciones: string | null
+  detalles: DetalleCompraRequest[]
+  pagos: RegistrarPagoCompraRequest[]
+}
+
+/** Solo datos del comprobante: lo que movió stock y costo no se edita. */
+export type ActualizarCompraRequest = {
+  proveedorId: string
+  serie: string
+  numero: string
+  fechaEmision: string
+  fechaVencimiento: string | null
+  guiaRemision: string | null
+  observaciones: string | null
+}
+
+export type AnularRequest = { motivo: string }
+
+/** Total, pagado y saldo van en la moneda de la compra; totalSoles con su tipo de cambio. */
+export type CompraResumenResponse = {
+  id: string
+  numeroCompra: string
+  proveedorId: string
+  proveedorNombre: string
+  proveedorDocumento: string
+  tipoComprobante: TipoComprobanteCompra
+  serie: string
+  numero: string
+  fechaEmision: string
+  fechaVencimiento: string | null
+  moneda: MonedaCompra
+  tipoCambio: number
+  total: number
+  totalSoles: number
+  totalPagado: number
+  saldo: number
+  /** Pendiente, Parcial o Pagada; null si la compra está anulada. */
+  estadoPago: string | null
+  vencida: boolean
+  estado: EstadoCompra
+  pedidoLimaId: string | null
+  numeroPedidoLima: string | null
+  cantidadLineas: number
+  fechaCreacion: string
+}
+
+export type DetalleCompraResponse = {
+  id: string
+  productoId: string | null
+  productoCodigo: string | null
+  descripcion: string
+  cantidad: number
+  precioUnitario: number
+  tipoAfectacionIgv: number
+  subtotal: number
+  montoIgv: number
+  total: number
+  costoUnitarioSoles: number
+  /** Falso en conceptos libres y en compras de un pedido a Lima. */
+  mueveStock: boolean
+}
+
+export type PagoCompraResponse = {
+  id: string
+  monto: number
+  montoSoles: number
+  metodoPagoId: string
+  metodoPagoNombre: string
+  metodoPagoCodigo: string
+  fecha: string
+  referencia: string | null
+  observaciones: string | null
+  usuarioNombre: string | null
+  /** Pagado en efectivo desde la caja chica. */
+  salioDeCaja: boolean
+  anulado: boolean
+  fechaAnulacion: string | null
+  motivoAnulacion: string | null
+  usuarioAnulacionNombre: string | null
+}
+
+export type CompraResponse = Omit<CompraResumenResponse, 'cantidadLineas'> & {
+  porcentajeIgv: number
+  preciosIncluyenIgv: boolean
+  subtotalGravado: number
+  subtotalExonerado: number
+  subtotalInafecto: number
+  montoIgv: number
+  guiaRemision: string | null
+  observaciones: string | null
+  usuarioNombre: string | null
+  fechaAnulacion: string | null
+  motivoAnulacion: string | null
+  usuarioAnulacionNombre: string | null
+  detalles: DetalleCompraResponse[]
+  pagos: PagoCompraResponse[]
 }

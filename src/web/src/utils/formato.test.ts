@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diaLocal, entero, fechaCorta, fechaHora, importe, porcentaje, referenciaOrden, soles } from './formato'
+import { diaLocal, entero, fechaCorta, fechaDia, fechaHora, importe, porcentaje, referenciaOrden, soles } from './formato'
 
 describe('formato', () => {
   it('escribe los montos en soles con dos decimales', () => {
@@ -40,5 +40,12 @@ describe('formato', () => {
     expect(diaLocal(new Date(2026, 9, 2, 21, 0))).toBe('2026-10-02')
     expect(fechaCorta(new Date(2026, 9, 2, 21, 0).toISOString())).toBe('02/10/2026')
     expect(fechaCorta(null)).toBe('—')
+  })
+
+  it('una fecha sin hora sale con su mismo día, sin correrse por la zona horaria', () => {
+    expect(fechaDia('2026-10-10')).toBe('10/10/2026')
+    expect(fechaDia('2026-01-01')).toBe('01/01/2026')
+    expect(fechaDia(null)).toBe('—')
+    expect(fechaDia('no es fecha')).toBe('—')
   })
 })

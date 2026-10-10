@@ -85,6 +85,11 @@ public static class PermisosDefinidos
     public const string PedidosLimaDespachar = "pedidos_lima.despachar";
     public const string PedidosLimaCancelar = "pedidos_lima.cancelar";
 
+    // Compras a proveedores
+    public const string ComprasVer = "compras.ver";
+    public const string ComprasRegistrar = "compras.registrar";
+    public const string ComprasAnular = "compras.anular";
+
     public static readonly IReadOnlyList<string> Todos = new[]
     {
         UsuariosVer, UsuariosCrear, UsuariosEditar, UsuariosEliminar, UsuariosResetPassword,
@@ -102,7 +107,8 @@ public static class PermisosDefinidos
         ConfiguracionEditar, AuditoriaVer,
         PortalAcceso,
         CitasVer, CitasCrear, CitasEditar, CitasCancelar,
-        PedidosLimaVer, PedidosLimaCrear, PedidosLimaEditar, PedidosLimaDespachar, PedidosLimaCancelar
+        PedidosLimaVer, PedidosLimaCrear, PedidosLimaEditar, PedidosLimaDespachar, PedidosLimaCancelar,
+        ComprasVer, ComprasRegistrar, ComprasAnular
     };
 }
 

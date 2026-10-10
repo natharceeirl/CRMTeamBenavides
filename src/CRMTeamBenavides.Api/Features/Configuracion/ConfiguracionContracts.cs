@@ -1,3 +1,5 @@
+using CRMTeamBenavides.Domain.Entities;
+
 namespace CRMTeamBenavides.Api.Features.Configuracion;
 
 public record ConfiguracionEmpresaResponse(
@@ -11,7 +13,8 @@ public record ConfiguracionEmpresaResponse(
     decimal PorcentajeIgv,
     string MonedaBase,
     decimal? TipoCambioVigente,
-    DateTime? FechaActualizacionTipoCambio
+    DateTime? FechaActualizacionTipoCambio,
+    MetodoCosteo MetodoCosteo
 );
 
 public record ActualizarConfiguracionEmpresaRequest(
@@ -23,7 +26,8 @@ public record ActualizarConfiguracionEmpresaRequest(
     string? Email,
     decimal? PorcentajeIgv,
     string? MonedaBase,
-    decimal? TipoCambioVigente
+    decimal? TipoCambioVigente,
+    MetodoCosteo? MetodoCosteo = null
 );
 
 public record TipoCambioResponse(

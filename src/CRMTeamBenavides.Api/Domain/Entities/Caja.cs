@@ -61,4 +61,8 @@ public class MovimientoCajaChica : BaseEntity
     public MetodoPago? MetodoPago { get; set; }
 
     public string? MetodoPagoNombre { get; set; }
+
+    /// <summary>Pago en efectivo a un proveedor (egreso) o su anulación (ingreso).</summary>
+    public Guid? PagoCompraId { get; set; }
+    public PagoCompra? PagoCompra { get; set; }
 }

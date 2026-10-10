@@ -72,6 +72,11 @@ export function ModalMovimientoStock({ abierto, tipo, producto, onCerrar }: Read
       <p className="texto-secundario">
         Stock actual: {producto?.stockActual ?? 0} {producto?.unidad ?? ''}
       </p>
+      {tipo === 'entradas' && (
+        <p className="texto-secundario" style={{ marginTop: 8 }}>
+          Lo que se compra a un proveedor va en Compras: ahí queda el comprobante, el costo y el pago.
+        </p>
+      )}
       <Form<Campos>
         form={formulario}
         layout="vertical"
@@ -120,7 +125,7 @@ export function ModalMovimientoStock({ abierto, tipo, producto, onCerrar }: Read
           name="motivo"
           rules={[{ required: true, message: 'El motivo queda en el kardex' }]}
         >
-          <Input placeholder="Compra a proveedor, merma, conteo físico…" />
+          <Input placeholder="Merma, conteo físico, devolución…" />
         </Form.Item>
       </Form>
     </Modal>

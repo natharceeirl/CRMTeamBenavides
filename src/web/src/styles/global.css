@@ -1315,3 +1315,132 @@ h4 {
     font-size: 34px;
   }
 }
+
+/* Líneas de una compra: repuesto o concepto, IGV, cantidad, precio, total y quitar. */
+.linea-compra {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 130px 90px 130px 130px 32px;
+  gap: 0 12px;
+  align-items: start;
+}
+
+.linea-compra .ant-form-item {
+  margin-bottom: 12px;
+}
+
+/* En escritorio los rótulos van en la cabecera de columnas; en celular, sobre cada campo. */
+.linea-compra .ant-form-item-label,
+.linea-compra-total .etiqueta {
+  display: none;
+}
+
+.linea-compra-cabecera .num {
+  text-align: right;
+}
+
+.linea-compra-cabecera {
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--color-divisor);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-texto-secundario);
+}
+
+.linea-compra-total {
+  padding-top: 5px;
+  text-align: right;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Pagos al registrar la compra: monto, método, referencia y quitar. */
+.linea-pago-compra {
+  display: grid;
+  grid-template-columns: 170px 210px minmax(0, 1fr) 32px;
+  gap: 0 12px;
+  align-items: start;
+}
+
+.linea-pago-compra .ant-form-item {
+  margin-bottom: 12px;
+}
+
+@media (max-width: 760px) {
+  .linea-compra-cabecera {
+    display: none;
+  }
+
+  /* En celular: el repuesto con el botón de quitar, y debajo IGV, cantidad, precio y total de a dos. */
+  .linea-compra {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px;
+    grid-template-areas:
+      'item item quitar'
+      'igv cant cant'
+      'precio total total';
+    margin-bottom: 12px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--color-divisor);
+  }
+
+  .linea-compra .ant-form-item-label,
+  .linea-compra-total .etiqueta {
+    display: block;
+  }
+
+  .linea-compra .lc-item {
+    grid-area: item;
+  }
+
+  .linea-compra .lc-igv {
+    grid-area: igv;
+  }
+
+  .linea-compra .lc-cant {
+    grid-area: cant;
+  }
+
+  .linea-compra .lc-precio {
+    grid-area: precio;
+  }
+
+  .linea-compra .lc-total {
+    grid-area: total;
+    padding-top: 0;
+  }
+
+  .linea-compra .lc-quitar {
+    grid-area: quitar;
+    align-self: end;
+    margin-bottom: 12px;
+  }
+
+  .linea-compra-total .etiqueta {
+    margin-bottom: 14px;
+  }
+
+  .linea-pago-compra {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px;
+    grid-template-areas:
+      'monto metodo metodo'
+      'ref ref quitar';
+  }
+
+  .linea-pago-compra .lp-monto {
+    grid-area: monto;
+  }
+
+  .linea-pago-compra .lp-metodo {
+    grid-area: metodo;
+  }
+
+  .linea-pago-compra .lp-referencia {
+    grid-area: ref;
+  }
+
+  .linea-pago-compra .lp-quitar {
+    grid-area: quitar;
+  }
+}

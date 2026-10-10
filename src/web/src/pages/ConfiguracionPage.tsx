@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Button, Form, Input, InputNumber, Table, type TableProps } from 'antd'
+import { Button, Form, Input, InputNumber, Select, Table, type TableProps } from 'antd'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { Indicadores } from '../components/Indicadores'
@@ -10,7 +10,7 @@ import {
   useRegistrarTipoCambio,
   useTipoCambio,
 } from '../api/configuracion'
-import type { HistorialTipoCambioResponse } from '../api/tipos'
+import { METODO_COSTEO, type HistorialTipoCambioResponse, type MetodoCosteo } from '../api/tipos'
 import { fechaHora } from '../utils/formato'
 import { tipoDeCambio } from '../utils/tipoCambio'
 import { ConversorDolares } from '../components/ConversorDolares'
@@ -23,6 +23,7 @@ type Campos = {
   telefono?: string
   email?: string
   porcentajeIgv: number
+  metodoCosteo: MetodoCosteo
 }
 
 type CamposTipoCambio = {
@@ -71,6 +72,7 @@ export function ConfiguracionPage() {
         telefono: datos.telefono ?? '',
         email: datos.email ?? '',
         porcentajeIgv: datos.porcentajeIgv,
+        metodoCosteo: datos.metodoCosteo,
       })
     }
   }, [configuracion.data, formulario])
@@ -85,6 +87,7 @@ export function ConfiguracionPage() {
       telefono: sinVacios(campos.telefono),
       email: sinVacios(campos.email),
       porcentajeIgv: campos.porcentajeIgv,
+      metodoCosteo: campos.metodoCosteo,
     })
   }
 
@@ -164,6 +167,24 @@ export function ConfiguracionPage() {
                 extra="Se aplica a los ítems que se agreguen desde ahora. Las líneas ya registradas conservan el IGV con el que se calcularon."
               >
                 <InputNumber min={0} max={100} precision={2} style={{ width: '100%' }} />
+              </Form.Item>
+            </div>
+          </section>
+
+          <section className="bloque">
+            <h2>Costo de los repuestos</h2>
+            <div className="formulario-grid">
+              <Form.Item
+                label="Cómo una compra actualiza el costo"
+                name="metodoCosteo"
+                extra="Promedio: mezcla el costo de lo que ya hay en stock con el de la compra. Último costo: toma el de la compra. Afecta a las compras que se registren desde ahora."
+              >
+                <Select
+                  options={[
+                    { value: METODO_COSTEO.promedioPonderado, label: 'Promedio ponderado' },
+                    { value: METODO_COSTEO.ultimoCosto, label: 'Último costo de compra' },
+                  ]}
+                />
               </Form.Item>
             </div>
           </section>

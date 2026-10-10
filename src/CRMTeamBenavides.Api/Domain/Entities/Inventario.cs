@@ -77,4 +77,5 @@ public class MovimientoInventario : BaseEntity
     public Guid? OrdenServicioId { get; set; }
     public Guid? VentaId { get; set; }
     public Guid? PedidoLimaId { get; set; }
+    public Guid? CompraId { get; set; }
 }

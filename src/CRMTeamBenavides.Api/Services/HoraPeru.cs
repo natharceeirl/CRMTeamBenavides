@@ -17,6 +17,9 @@ public static class HoraPeru
     public static DateTime InicioDelDiaUtc(DateTime dia) =>
         DateTime.SpecifyKind(dia.Date.Subtract(Desfase), DateTimeKind.Utc);
 
+    /// <summary>El día de hoy en Perú, para fechas sin hora como la emisión de un comprobante.</summary>
+    public static DateOnly Hoy() => DateOnly.FromDateTime(DesdeUtc(DateTime.UtcNow));
+
     /// <summary>«03/10/2026 16:30», en hora de Perú.</summary>
     public static string Texto(DateTime utc) => DesdeUtc(utc).ToString("dd/MM/yyyy HH:mm");
 }

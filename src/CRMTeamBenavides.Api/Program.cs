@@ -6,6 +6,7 @@ using CRMTeamBenavides.Api.Features.Auth;
 using CRMTeamBenavides.Api.Features.CajaChica;
 using CRMTeamBenavides.Api.Features.CategoriasProducto;
 using CRMTeamBenavides.Api.Features.Clientes;
+using CRMTeamBenavides.Api.Features.Compras;
 using CRMTeamBenavides.Api.Features.Configuracion;
 using CRMTeamBenavides.Api.Features.Inventario;
 using CRMTeamBenavides.Api.Features.OrdenesServicio;
@@ -187,6 +188,8 @@ builder.Services.AddScoped<ICitaService, CitaService>();
 builder.Services.AddScoped<IPedidoLimaService, PedidoLimaService>();
 builder.Services.AddScoped<IAuditoriaService, AuditoriaService>();
 builder.Services.AddScoped<IAprobacionService, AprobacionService>();
+builder.Services.AddScoped<IProveedorService, ProveedorService>();
+builder.Services.AddScoped<ICompraService, CompraService>();
 
 // ---------------------------------------------------------------------------
 // Yamaha API — infraestructura del conector
@@ -275,5 +278,6 @@ app.MapYamahaEndpoints();
 app.MapCitaEndpoints();
 app.MapPedidoLimaEndpoints();
 app.MapAprobacionEndpoints();
+app.MapCompraEndpoints();
 
 app.Run();

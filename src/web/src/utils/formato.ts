@@ -49,6 +49,16 @@ export const fechaCorta = (iso: string | null | undefined) => {
 }
 
 /**
+ * Una fecha sin hora de la API («2026-10-10», como la emisión de un comprobante)
+ * en «10/10/2026». No pasa por Date: lo leería como medianoche UTC y en Perú
+ * mostraría el día anterior.
+ */
+export const fechaDia = (dia: string | null | undefined) => {
+  const partes = /^(\d{4})-(\d{2})-(\d{2})/.exec(dia ?? '')
+  return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : '—'
+}
+
+/**
  * El día local en formato AAAA-MM-DD, para filtros por día y nombres de archivo.
  * No sale de toISOString: en Perú, desde las 19:00 la fecha UTC ya es la del día siguiente.
  */

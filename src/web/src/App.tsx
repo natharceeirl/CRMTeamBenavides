@@ -24,6 +24,8 @@ import { ConfiguracionPage } from './pages/ConfiguracionPage'
 import { CitasPage } from './pages/CitasPage'
 import { PedidosLimaPage } from './pages/PedidosLimaPage'
 import { AprobacionesPage } from './pages/AprobacionesPage'
+import { ComprasPage } from './pages/ComprasPage'
+import { NuevaCompraPage } from './pages/NuevaCompraPage'
 
 export default function App() {
   return (
@@ -55,6 +57,12 @@ export default function App() {
           </Route>
           <Route element={<RutaConPermiso permiso={PERMISOS.inventarioVer} />}>
             <Route path="repuestos" element={<RepuestosPage />} />
+          </Route>
+          <Route element={<RutaConPermiso permiso={PERMISOS.comprasVer} />}>
+            <Route path="compras" element={<ComprasPage />} />
+          </Route>
+          <Route element={<RutaConPermiso permiso={PERMISOS.comprasRegistrar} />}>
+            <Route path="compras/nueva" element={<NuevaCompraPage />} />
           </Route>
           <Route element={<RutaConPermiso permiso={PERMISOS.pedidosLimaVer} />}>
             <Route path="pedidos-lima" element={<PedidosLimaPage />} />

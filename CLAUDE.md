@@ -66,7 +66,7 @@ El detalle por módulo está en [docs/resumen-cambios-reunion.md](docs/resumen-c
 
 ### Fuera de alcance
 
-No se construye sin aprobación del cliente: emisión electrónica ante SUNAT, chatbot con IA generativa, campañas de marketing, venta de unidades nuevas, pagos en línea, compras a proveedores, integración con un ERP externo e integración de correo. La agenda de citas estaba en esta lista y entró con los cambios del 25/09.
+No se construye sin aprobación del cliente: emisión electrónica ante SUNAT, chatbot con IA generativa, campañas de marketing, venta de unidades nuevas, pagos en línea, integración con un ERP externo e integración de correo. La agenda de citas estaba en esta lista y entró con los cambios del 25/09. Las compras a proveedores también estaban: se construyeron el 10/10 con autorización de Paolo y falta registrarlas con el cliente como cambio de alcance; las reglas están en [docs/modulo-compras.md](docs/modulo-compras.md).
 
 Una funcionalidad que no esté en el alcance se marca «por confirmar» y se registra como cambio de alcance antes de construirla.
 
@@ -198,6 +198,7 @@ De lo pedido el 15/09, la matriz de roles y el flujo de estados quedaron resuelt
 
 - Plan de implementación: [docs/plan-implementacion.md](docs/plan-implementacion.md). Versión visual: https://claude.ai/artifact/UyERKrdu6H5VUbopk3GTXT. Las páginas de claude.ai son privadas hasta que su dueño las comparte, así que la referencia del equipo es la copia del repositorio.
 - Resumen de cambios de la reunión del 25/09: [docs/resumen-cambios-reunion.md](docs/resumen-cambios-reunion.md).
+- Reglas del módulo de compras: [docs/modulo-compras.md](docs/modulo-compras.md).
 - Referencia visual del portal del cliente: [docs/referencias/app-cliente.html](docs/referencias/app-cliente.html). Versión publicada: https://claude.ai/artifact/JqzMRP5fjiEZXdRDvFmjDL
 - Documento técnico: `Team_Benavides_Resumen Técnico.pdf` (no está en el repositorio).
 - Guía día a día original, con el Go Live del 02/10: `guia.pdf` (no está en el repositorio). La reemplaza el plan de implementación.

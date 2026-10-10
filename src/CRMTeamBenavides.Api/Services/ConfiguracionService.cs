@@ -96,6 +96,9 @@ public class ConfiguracionService : IConfiguracionService
         if (request.TipoCambioVigente.HasValue && request.TipoCambioVigente.Value <= 0)
             return ServiceResult<ConfiguracionEmpresaResponse>.Invalid("El tipo de cambio vigente debe ser mayor a cero.");
 
+        if (request.MetodoCosteo.HasValue && !Enum.IsDefined(request.MetodoCosteo.Value))
+            return ServiceResult<ConfiguracionEmpresaResponse>.Invalid("El método de costeo no es válido.");
+
         var config = await GetOrCreateEntityAsync(ct);
 
         var valoresAnteriores = new
@@ -108,7 +111,8 @@ public class ConfiguracionService : IConfiguracionService
             config.Email,
             config.PorcentajeIgv,
             config.MonedaBase,
-            config.TipoCambioVigente
+            config.TipoCambioVigente,
+            MetodoCosteo = config.MetodoCosteo.ToString()
         };
 
         if (!string.IsNullOrWhiteSpace(request.NombreEmpresa))
@@ -141,6 +145,9 @@ public class ConfiguracionService : IConfiguracionService
             config.FechaActualizacionTipoCambio = DateTime.UtcNow;
         }
 
+        if (request.MetodoCosteo.HasValue)
+            config.MetodoCosteo = request.MetodoCosteo.Value;
+
         config.FechaModificacion = DateTime.UtcNow;
 
         var valoresNuevos = new
@@ -153,7 +160,8 @@ public class ConfiguracionService : IConfiguracionService
             config.Email,
             config.PorcentajeIgv,
             config.MonedaBase,
-            config.TipoCambioVigente
+            config.TipoCambioVigente,
+            MetodoCosteo = config.MetodoCosteo.ToString()
         };
 
         _context.EventosAuditoria.Add(new EventoAuditoria
@@ -352,7 +360,8 @@ public class ConfiguracionService : IConfiguracionService
             config.PorcentajeIgv,
             config.MonedaBase ?? "PEN",
             config.TipoCambioVigente,
-            config.FechaActualizacionTipoCambio
+            config.FechaActualizacionTipoCambio,
+            config.MetodoCosteo
         );
     }
 }

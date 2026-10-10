@@ -1,5 +1,12 @@
 namespace CRMTeamBenavides.Domain.Entities;
 
+/// <summary>Cómo una compra actualiza el costo del repuesto.</summary>
+public enum MetodoCosteo
+{
+    PromedioPonderado,
+    UltimoCosto
+}
+
 /// <summary>Configuración general de la empresa y parámetros fiscales (IGV, etc.).</summary>
 public class ConfiguracionEmpresa : BaseEntity
 {
@@ -13,4 +20,5 @@ public class ConfiguracionEmpresa : BaseEntity
     public string MonedaBase { get; set; } = "PEN";
     public decimal? TipoCambioVigente { get; set; }
     public DateTime? FechaActualizacionTipoCambio { get; set; }
+    public MetodoCosteo MetodoCosteo { get; set; } = MetodoCosteo.PromedioPonderado;
 }
