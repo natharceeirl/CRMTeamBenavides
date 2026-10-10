@@ -661,7 +661,8 @@ public class OrdenServicioService : IOrdenServicioService
                     orden.Detalles.Add(detalle);
                 }
 
-                if (precioModificado)
+                // Gerencia, Recepción y quien tiene precios.modificar fijan el precio sin pedir aprobación.
+                if (precioModificado && !puedeModificarPrecios)
                 {
                     orden.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
                     _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
@@ -673,7 +674,9 @@ public class OrdenServicioService : IOrdenServicioService
                         UsuarioSolicitanteId = usuarioId,
                         FechaSolicitud = DateTime.UtcNow,
                         Estado = EstadoAprobacionGerencia.Pendiente,
-                        DetalleCambio = $"Modificación de precio en repuesto '{producto.Nombre}' [Detalle:{detalle.Id}]: base S/ {precioBase:F2} -> solicitado S/ {precioFinal:F2}",
+                        DetalleCambio = $"Modificación de precio en repuesto '{producto.Nombre}': base S/ {precioBase:F2} -> solicitado S/ {precioFinal:F2}",
+                        DetalleId = detalle.Id,
+                        ClaveObjetivo = AprobacionService.ClaveDeDetalle(detalle.Id),
                         ValorAnterior = precioBase,
                         ValorSolicitado = precioFinal,
                         Motivo = "Modificación de precio de repuesto en Orden de Servicio",
@@ -770,7 +773,8 @@ public class OrdenServicioService : IOrdenServicioService
                 orden.Detalles.Add(detalle);
             }
 
-            if (precioModificadoServ)
+            // Gerencia, Recepción y quien tiene precios.modificar fijan el precio sin pedir aprobación.
+            if (precioModificadoServ && !puedeModificarPrecios)
             {
                 orden.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
                 _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
@@ -782,7 +786,9 @@ public class OrdenServicioService : IOrdenServicioService
                     UsuarioSolicitanteId = usuarioId,
                     FechaSolicitud = DateTime.UtcNow,
                     Estado = EstadoAprobacionGerencia.Pendiente,
-                    DetalleCambio = $"Modificación de precio en servicio '{servicio.Nombre}' [Detalle:{detalle.Id}]: base S/ {precioBaseServ:F2} -> solicitado S/ {precioFinal:F2}",
+                    DetalleCambio = $"Modificación de precio en servicio '{servicio.Nombre}': base S/ {precioBaseServ:F2} -> solicitado S/ {precioFinal:F2}",
+                    DetalleId = detalle.Id,
+                    ClaveObjetivo = AprobacionService.ClaveDeDetalle(detalle.Id),
                     ValorAnterior = precioBaseServ,
                     ValorSolicitado = precioFinal,
                     Motivo = "Modificación de precio de servicio en Orden de Servicio",
@@ -1050,7 +1056,7 @@ public class OrdenServicioService : IOrdenServicioService
             {
                 if (!puedeModificarPrecios)
                 {
-                    var claveDetalle = $"detalle_{detalle.Id}".ToLowerInvariant();
+                    var claveDetalle = AprobacionService.ClaveDeDetalle(detalle.Id);
                     await AprobacionService.RetirarSolicitudesPendientesPorObjetivoAsync(
                         _context,
                         "OrdenServicio",
@@ -1068,7 +1074,9 @@ public class OrdenServicioService : IOrdenServicioService
                         UsuarioSolicitanteId = usuarioId,
                         FechaSolicitud = DateTime.UtcNow,
                         Estado = EstadoAprobacionGerencia.Pendiente,
-                        DetalleCambio = $"Actualización de precio en '{nombreItem}' [Detalle:{detalle.Id}]: base S/ {precioBase:F2} -> solicitado S/ {nuevoPrecio:F2}",
+                        DetalleCambio = $"Actualización de precio en '{nombreItem}': base S/ {precioBase:F2} -> solicitado S/ {nuevoPrecio:F2}",
+                        DetalleId = detalle.Id,
+                        ClaveObjetivo = AprobacionService.ClaveDeDetalle(detalle.Id),
                         ValorAnterior = precioBase,
                         ValorSolicitado = nuevoPrecio,
                         Motivo = "Modificación de precio de ítem existente en Orden de Servicio",
@@ -1078,6 +1086,12 @@ public class OrdenServicioService : IOrdenServicioService
                 }
                 else
                 {
+                    // Quien puede fijar precios no pide aprobación: lo que se pidió o se
+                    // rechazó para este ítem queda superado por su precio.
+                    await RetirarSolicitudesDelDetalleAsync(
+                        orden,
+                        detalle.Id,
+                        "Superada: el precio lo fijó un usuario autorizado a modificar precios.");
                     await ReevaluarAprobacionOrdenAsync(orden);
                 }
             }
@@ -1700,7 +1714,7 @@ public class OrdenServicioService : IOrdenServicioService
             _context,
             "OrdenServicio",
             orden.Id.ToString(),
-            "entidad_ordenservicio",
+            AprobacionService.ClaveEntidadOrdenServicio,
             "Superada automáticamente por nueva solicitud de aprobación de la orden.");
 
         var solicitud = new SolicitudAprobacion
@@ -1714,6 +1728,7 @@ public class OrdenServicioService : IOrdenServicioService
             FechaSolicitud = DateTime.UtcNow,
             Estado = EstadoAprobacionGerencia.Pendiente,
             DetalleCambio = $"Solicitud de aprobación para OS #{orden.NumeroOrden ?? orden.Id.ToString()}",
+            ClaveObjetivo = AprobacionService.ClaveEntidadOrdenServicio,
             ValorAnterior = orden.Total,
             ValorSolicitado = orden.Total,
             Motivo = request.Observaciones.Trim(),
@@ -1910,6 +1925,32 @@ public class OrdenServicioService : IOrdenServicioService
             : null;
     }
 
+    /// <summary>
+    /// Retira las solicitudes pendientes o rechazadas de un ítem. Una pendiente queda
+    /// con el motivo; a una rechazada se le conserva la respuesta de Gerencia.
+    /// </summary>
+    private async Task RetirarSolicitudesDelDetalleAsync(OrdenServicio orden, Guid detalleId, string motivo)
+    {
+        var clave = AprobacionService.ClaveDeDetalle(detalleId);
+        var solicitudes = await _context.SolicitudesAprobacion
+            .Where(s => s.Activo
+                && s.Entidad == "OrdenServicio"
+                && s.EntidadId == orden.Id.ToString()
+                && (s.Estado == EstadoAprobacionGerencia.Pendiente || s.Estado == EstadoAprobacionGerencia.Rechazado))
+            .ToListAsync();
+
+        foreach (var solicitud in solicitudes.Where(s => AprobacionService.ObtenerClaveObjetivo(s) == clave))
+        {
+            solicitud.Activo = false;
+            solicitud.FechaModificacion = DateTime.UtcNow;
+            if (solicitud.Estado == EstadoAprobacionGerencia.Pendiente)
+            {
+                solicitud.ObservacionesRespuesta = motivo;
+                solicitud.FechaRespuesta = DateTime.UtcNow;
+            }
+        }
+    }
+
     private async Task ReevaluarAprobacionOrdenAsync(OrdenServicio orden)
     {
         var detallesActivos = orden.Detalles.Where(d => d.Activo).ToList();
@@ -2011,6 +2052,18 @@ public class OrdenServicioService : IOrdenServicioService
 
         // Retirar solicitudes pendientes ÚNICAMENTE de ítems que ya no están modificados o fueron eliminados.
         // NUNCA retirar solicitudes genéricas de la orden (ENTIDAD_ORDENSERVICIO) al corregir o revertir ítems.
+        // Una rechazada de un ítem que volvió al precio de lista también se retira: si no,
+        // volvería a bloquear la orden cuando Gerencia resuelva otra solicitud. Se le
+        // conserva la respuesta de Gerencia.
+        foreach (var sol in solicitudesActivas.Where(s =>
+                     s.Estado == EstadoAprobacionGerencia.Rechazado
+                     && AprobacionService.ObtenerDetalleId(s) is Guid rechazadoId
+                     && !detallesConPrecioModificado.Contains(rechazadoId)))
+        {
+            sol.Activo = false;
+            sol.FechaModificacion = DateTime.UtcNow;
+        }
+
         foreach (var sol in solicitudesActivas.Where(s => s.Estado == EstadoAprobacionGerencia.Pendiente))
         {
             var dId = AprobacionService.ObtenerDetalleId(sol);
@@ -2049,7 +2102,10 @@ public class OrdenServicioService : IOrdenServicioService
                 var dId = AprobacionService.ObtenerDetalleId(s);
                 if (dId.HasValue)
                 {
-                    return detallesActivos.Any(d => d.Id == dId.Value);
+                    // Una solicitud de un ítem cuenta mientras el ítem siga con un precio
+                    // fuera de lista: volver al de lista libera la orden aunque Gerencia
+                    // lo hubiera rechazado.
+                    return detallesConPrecioModificado.Contains(dId.Value);
                 }
                 var item = AprobacionService.ObtenerNombreItem(s);
                 if (item != null)

@@ -337,7 +337,8 @@ public class VentaService : IVentaService
                     UsuarioSolicitanteId = usuarioId,
                     FechaSolicitud = DateTime.UtcNow,
                     Estado = EstadoAprobacionGerencia.Pendiente,
-                    DetalleCambio = $"Modificación de precio al liquidar OS #{ordenServicio.Id}",
+                    DetalleCambio = $"Modificación de precio al liquidar OS #{ordenServicio.NumeroOrden ?? ordenServicio.Id.ToString()}",
+                    ClaveObjetivo = AprobacionService.ClaveEntidadVenta,
                     Motivo = "Modificación de precio al liquidar OS",
                     FechaCreacion = DateTime.UtcNow,
                     Activo = true
@@ -493,6 +494,7 @@ public class VentaService : IVentaService
                     FechaSolicitud = DateTime.UtcNow,
                     Estado = EstadoAprobacionGerencia.Pendiente,
                     DetalleCambio = $"Modificación de precio en cotización ({detallesCambioCotiz.Count} ítems)",
+                    ClaveObjetivo = AprobacionService.ClaveEntidadVenta,
                     Motivo = "Modificación de precio en cotización",
                     FechaCreacion = DateTime.UtcNow,
                     Activo = true
@@ -652,6 +654,7 @@ public class VentaService : IVentaService
                     FechaSolicitud = DateTime.UtcNow,
                     Estado = EstadoAprobacionGerencia.Pendiente,
                     DetalleCambio = $"Modificación de precio en venta directa ({detallesCambioVenta.Count} ítems)",
+                    ClaveObjetivo = AprobacionService.ClaveEntidadVenta,
                     Motivo = "Modificación de precio en venta directa",
                     FechaCreacion = DateTime.UtcNow,
                     Activo = true
@@ -841,7 +844,7 @@ public class VentaService : IVentaService
             }
 
             bool requiereAprobacion = false;
-            var detallesCambio = new List<object>();
+            var detallesCambio = new List<AprobacionService.CambioPrecioLinea>();
 
             decimal subtotalGravadoTotal = 0m;
             decimal subtotalExoneradoTotal = 0m;
@@ -860,14 +863,7 @@ public class VentaService : IVentaService
                 if (precioModificado || tieneDescuento)
                 {
                     requiereAprobacion = true;
-                    detallesCambio.Add(new
-                    {
-                        ProductoId = prod.Id,
-                        ProductoNombre = prod.Nombre,
-                        PrecioBase = precioBase,
-                        PrecioSolicitado = precioUnitario,
-                        Descuento = item.Descuento ?? 0m
-                    });
+                    detallesCambio.Add(new AprobacionService.CambioPrecioLinea(prod.Nombre, precioBase, precioUnitario, item.Descuento ?? 0m));
                 }
 
                 var afectacion = item.TipoAfectacionIgv ?? TipoAfectacionIgv.Gravado;
@@ -917,7 +913,7 @@ public class VentaService : IVentaService
                     _context,
                     "Venta",
                     venta.Id.ToString(),
-                    "entidad_venta",
+                    AprobacionService.ClaveEntidadVenta,
                     "Superada automáticamente por nueva modificación de precios.");
 
                 venta.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
@@ -930,9 +926,14 @@ public class VentaService : IVentaService
                     UsuarioSolicitanteId = usuarioId,
                     FechaSolicitud = DateTime.UtcNow,
                     Estado = EstadoAprobacionGerencia.Pendiente,
-                    DetalleCambio = System.Text.Json.JsonSerializer.Serialize(detallesCambio),
-                    ValorAnterior = 0m,
-                    ValorSolicitado = venta.Total,
+                    // Gerencia lee el texto en su bandeja: qué cambia y de cuánto a cuánto.
+                    DetalleCambio = AprobacionService.ResumenCambiosDePrecio(
+                        venta.Estado == EstadoVenta.Confirmada ? "venta" : "cotización",
+                        detallesCambio),
+                    ClaveObjetivo = AprobacionService.ClaveEntidadVenta,
+                    // Con un solo producto se muestra su precio de lista y el pedido; con varios, el detalle va en el texto.
+                    ValorAnterior = detallesCambio.Count == 1 ? detallesCambio[0].PrecioBase : null,
+                    ValorSolicitado = detallesCambio.Count == 1 ? detallesCambio[0].PrecioSolicitado : null,
                     Motivo = venta.Estado == EstadoVenta.Confirmada
                         ? "Modificación de precios en venta mostrador corregida"
                         : "Modificación de precios en cotización actualizada",

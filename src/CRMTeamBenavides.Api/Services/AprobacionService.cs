@@ -128,7 +128,12 @@ public class AprobacionService : IAprobacionService
             Activo = true
         };
 
+        // Una solicitud manual puede traer marcas en el texto: se pasan a sus columnas
+        // y el texto queda solo para leerlo.
+        solicitud.DetalleId = ObtenerDetalleId(solicitud);
         var clave = ObtenerClaveObjetivo(solicitud);
+        solicitud.ClaveObjetivo = clave;
+        solicitud.DetalleCambio = LimpiarMarcas(solicitud.DetalleCambio);
         await RetirarSolicitudesPendientesPorObjetivoAsync(
             _context,
             solicitud.Entidad,
@@ -244,8 +249,51 @@ public class AprobacionService : IAprobacionService
         return ServiceResult<SolicitudAprobacionResponse>.Success(MapToResponse(solicitud));
     }
 
+    /// <summary>Clave de una solicitud por ítem de orden o de pedido.</summary>
+    public static string ClaveDeDetalle(Guid detalleId) => $"detalle_{detalleId}".ToLowerInvariant();
+
+    public const string ClaveEntidadVenta = "entidad_venta";
+    public const string ClaveEntidadOrdenServicio = "entidad_ordenservicio";
+    public const string ClaveEntidadPedidoLima = "entidad_pedidolima";
+
+    // Marcas que llevaban las solicitudes antiguas dentro del texto.
+    private static readonly System.Text.RegularExpressions.Regex MarcasInternas = new(
+        @"\s*\[(?:Detalle|Supera|Objetivo):[^\]]*\]",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>Un producto cuyo precio difiere del de lista en una venta o un pedido a Lima.</summary>
+    public sealed record CambioPrecioLinea(string Nombre, decimal PrecioBase, decimal PrecioSolicitado, decimal Descuento = 0m);
+
+    // DetalleCambio admite 1000 caracteres.
+    private const int LargoMaximoDetalleCambio = 1000;
+
+    /// <summary>
+    /// El texto que Gerencia lee en su bandeja cuando la solicitud cubre varios
+    /// productos: cuáles cambian y de cuánto a cuánto.
+    /// </summary>
+    public static string ResumenCambiosDePrecio(string operacion, IReadOnlyList<CambioPrecioLinea> cambios)
+    {
+        var lineas = cambios.Select(c => c.Descuento > 0
+            ? $"{c.Nombre}: S/ {c.PrecioBase:F2} -> S/ {c.PrecioSolicitado:F2}, descuento S/ {c.Descuento:F2}"
+            : $"{c.Nombre}: S/ {c.PrecioBase:F2} -> S/ {c.PrecioSolicitado:F2}");
+        var texto = $"Modificación de precio en {operacion} ({cambios.Count} {(cambios.Count == 1 ? "ítem" : "ítems")}): {string.Join("; ", lineas)}";
+        return texto.Length <= LargoMaximoDetalleCambio
+            ? texto
+            : string.Concat(texto.AsSpan(0, LargoMaximoDetalleCambio - 3), "...");
+    }
+
+    /// <summary>El texto que ve Gerencia, sin ids ni claves internas.</summary>
+    public static string LimpiarMarcas(string? detalleCambio) =>
+        MarcasInternas.Replace(detalleCambio ?? string.Empty, string.Empty).Trim();
+
     public static Guid? ObtenerDetalleId(SolicitudAprobacion s)
     {
+        if (s.DetalleId.HasValue)
+        {
+            return s.DetalleId;
+        }
+
+        // Solicitudes anteriores a la columna DetalleId: la marca iba en el texto.
         var detalle = s.DetalleCambio ?? string.Empty;
         var idx = detalle.IndexOf("[Detalle:", StringComparison.OrdinalIgnoreCase);
         if (idx >= 0)
@@ -304,8 +352,18 @@ public class AprobacionService : IAprobacionService
         return null;
     }
 
+    /// <summary>
+    /// Solo para solicitudes antiguas sin clave: el nombre del ítem iba entre comillas
+    /// en el texto. Con la clave guardada no se lee el texto, así un nombre con
+    /// apóstrofo no confunde una solicitud con otra.
+    /// </summary>
     public static string? ObtenerNombreItem(SolicitudAprobacion s)
     {
+        if (!string.IsNullOrWhiteSpace(s.ClaveObjetivo) || s.DetalleId.HasValue)
+        {
+            return null;
+        }
+
         var detalle = s.DetalleCambio ?? string.Empty;
         var idxStart = detalle.IndexOf('\'');
         if (idxStart >= 0)
@@ -325,6 +383,17 @@ public class AprobacionService : IAprobacionService
 
     public static string ObtenerClaveObjetivo(SolicitudAprobacion s)
     {
+        if (!string.IsNullOrWhiteSpace(s.ClaveObjetivo))
+        {
+            return s.ClaveObjetivo.Trim().ToLowerInvariant();
+        }
+
+        if (s.DetalleId.HasValue)
+        {
+            return ClaveDeDetalle(s.DetalleId.Value);
+        }
+
+        // Solicitudes anteriores a la columna ClaveObjetivo: se deduce del texto.
         var objExplicito = ObtenerClaveObjetivoExplicita(s);
         if (!string.IsNullOrEmpty(objExplicito))
         {
@@ -616,7 +685,7 @@ public class AprobacionService : IAprobacionService
             s.FechaSolicitud,
             (int)s.Estado,
             s.Estado.ToString(),
-            s.DetalleCambio,
+            LimpiarMarcas(s.DetalleCambio),
             s.ValorAnterior,
             s.ValorSolicitado,
             s.Motivo,

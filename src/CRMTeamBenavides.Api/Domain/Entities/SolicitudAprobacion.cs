@@ -22,8 +22,19 @@ public class SolicitudAprobacion : BaseEntity
 
     public EstadoAprobacionGerencia Estado { get; set; } = EstadoAprobacionGerencia.Pendiente;
 
-    /// <summary>Descripción detallada del cambio propuesto.</summary>
+    /// <summary>Descripción del cambio para leerla en pantalla; no lleva datos internos.</summary>
     public string DetalleCambio { get; set; } = string.Empty;
+
+    /// <summary>Ítem de la orden o del pedido al que apunta el cambio de precio, si es por ítem.</summary>
+    public Guid? DetalleId { get; set; }
+
+    /// <summary>
+    /// Qué decide la solicitud: "detalle_{id}" para un ítem, o "entidad_venta",
+    /// "entidad_ordenservicio" y "entidad_pedidolima" para la operación completa.
+    /// Una solicitud nueva con la misma clave reemplaza a la pendiente anterior.
+    /// Null solo en las solicitudes anteriores a esta columna.
+    /// </summary>
+    public string? ClaveObjetivo { get; set; }
 
     /// <summary>Precio base o valor original antes de la modificación.</summary>
     public decimal? ValorAnterior { get; set; }

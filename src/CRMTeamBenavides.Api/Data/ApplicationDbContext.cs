@@ -600,6 +600,8 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
             entity.Property(s => s.Entidad).HasMaxLength(50).IsRequired();
             entity.Property(s => s.EntidadId).HasMaxLength(100).IsRequired();
             entity.Property(s => s.DetalleCambio).HasMaxLength(1000).IsRequired();
+            entity.Property(s => s.ClaveObjetivo).HasMaxLength(200);
+            entity.HasIndex(s => s.DetalleId);
             entity.Property(s => s.ValorAnterior).HasPrecision(12, 2);
             entity.Property(s => s.ValorSolicitado).HasPrecision(12, 2);
             entity.Property(s => s.Motivo).HasMaxLength(500);

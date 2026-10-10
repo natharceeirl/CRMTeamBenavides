@@ -201,9 +201,7 @@ public class PedidoLimaService : IPedidoLimaService
         decimal subtotalInafecto = 0m;
         decimal montoIgv = 0m;
         bool precioModificado = false;
-        string? detalleModificacion = null;
-        decimal? valorBase = null;
-        decimal? valorSolicitado = null;
+        var cambiosDePrecio = new List<AprobacionService.CambioPrecioLinea>();
 
         foreach (var item in request.Detalles)
         {
@@ -215,9 +213,7 @@ public class PedidoLimaService : IPedidoLimaService
             if (Math.Abs(precioUnitario - prod.PrecioVenta) > 0.001m)
             {
                 precioModificado = true;
-                valorBase = prod.PrecioVenta;
-                valorSolicitado = precioUnitario;
-                detalleModificacion = $"Modificación de precio en repuesto '{prod.Nombre}': base S/ {prod.PrecioVenta:F2} -> solicitado S/ {precioUnitario:F2}";
+                cambiosDePrecio.Add(new AprobacionService.CambioPrecioLinea(prod.Nombre, prod.PrecioVenta, precioUnitario));
             }
 
             var afectacion = item.TipoAfectacionIgv ?? TipoAfectacionIgv.Gravado;
@@ -286,9 +282,11 @@ public class PedidoLimaService : IPedidoLimaService
                 UsuarioSolicitanteId = usuarioId,
                 FechaSolicitud = DateTime.UtcNow,
                 Estado = EstadoAprobacionGerencia.Pendiente,
-                DetalleCambio = detalleModificacion ?? "Modificación de precio en Pedido Lima",
-                ValorAnterior = valorBase,
-                ValorSolicitado = valorSolicitado,
+                // Una sola solicitud por pedido, con todos los precios que salen de la lista.
+                DetalleCambio = AprobacionService.ResumenCambiosDePrecio("pedido a Lima", cambiosDePrecio),
+                ClaveObjetivo = AprobacionService.ClaveEntidadPedidoLima,
+                ValorAnterior = cambiosDePrecio.Count == 1 ? cambiosDePrecio[0].PrecioBase : null,
+                ValorSolicitado = cambiosDePrecio.Count == 1 ? cambiosDePrecio[0].PrecioSolicitado : null,
                 Motivo = "Modificación de precio en Pedido Lima",
                 FechaCreacion = DateTime.UtcNow,
                 Activo = true
@@ -425,11 +423,8 @@ public class PedidoLimaService : IPedidoLimaService
             return ServiceResult<PedidoLimaResponse>.Invalid("El producto asociado al detalle no existe.");
         }
 
-        var precioBase = prod.PrecioVenta;
-        var nuevoPrecio = request.PrecioUnitario;
-        bool precioDifiere = Math.Abs(nuevoPrecio - precioBase) > 0.001m;
-
-        detalle.PrecioUnitario = nuevoPrecio;
+        // Si el precio sale de la lista se decide más abajo, con todos los repuestos del pedido.
+        detalle.PrecioUnitario = request.PrecioUnitario;
         if (request.Cantidad.HasValue && request.Cantidad.Value > 0)
         {
             detalle.Cantidad = request.Cantidad.Value;
@@ -468,18 +463,36 @@ public class PedidoLimaService : IPedidoLimaService
             .Where(p => prodIds.Contains(p.Id))
             .ToDictionaryAsync(p => p.Id, p => p.PrecioVenta, ct);
 
-        bool quedanPreciosModificados = false;
-        foreach (var d in pedido.Detalles.Where(d => d.Activo))
-        {
-            if (productosBase.TryGetValue(d.ProductoId, out var baseP) && Math.Abs(d.PrecioUnitario - baseP) > 0.001m)
-            {
-                quedanPreciosModificados = true;
-                break;
-            }
-        }
+        // Los repuestos del pedido que siguen con un precio distinto al de lista.
+        var nombresProductos = await _context.Productos
+            .Where(p => prodIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.Nombre, ct);
+        var cambiosVigentes = pedido.Detalles
+            .Where(d => d.Activo
+                && productosBase.TryGetValue(d.ProductoId, out var baseP)
+                && Math.Abs(d.PrecioUnitario - baseP) > 0.001m)
+            .Select(d => new AprobacionService.CambioPrecioLinea(
+                nombresProductos.GetValueOrDefault(d.ProductoId, "Repuesto"),
+                productosBase[d.ProductoId],
+                d.PrecioUnitario))
+            .ToList();
+        bool quedanPreciosModificados = cambiosVigentes.Count > 0;
 
         if (quedanPreciosModificados)
         {
+            // La solicitud nueva cubre todos los precios vigentes y reemplaza a la pendiente,
+            // en vez de sumar una por cada corrección.
+            var pendientesAnteriores = await _context.SolicitudesAprobacion
+                .Where(s => s.Entidad == "PedidoLima" && s.EntidadId == pedido.Id.ToString() && s.Estado == EstadoAprobacionGerencia.Pendiente && s.Activo)
+                .ToListAsync(ct);
+            foreach (var anterior in pendientesAnteriores)
+            {
+                anterior.Activo = false;
+                anterior.ObservacionesRespuesta = "Superada automáticamente por nueva modificación de precios del pedido.";
+                anterior.FechaRespuesta = DateTime.UtcNow;
+                anterior.FechaModificacion = DateTime.UtcNow;
+            }
+
             pedido.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
             _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
             {
@@ -490,9 +503,10 @@ public class PedidoLimaService : IPedidoLimaService
                 UsuarioSolicitanteId = usuarioId,
                 FechaSolicitud = DateTime.UtcNow,
                 Estado = EstadoAprobacionGerencia.Pendiente,
-                DetalleCambio = $"Actualización de precio en repuesto '{prod.Nombre}': base S/ {precioBase:F2} -> solicitado S/ {nuevoPrecio:F2}",
-                ValorAnterior = precioBase,
-                ValorSolicitado = nuevoPrecio,
+                DetalleCambio = AprobacionService.ResumenCambiosDePrecio("pedido a Lima", cambiosVigentes),
+                ClaveObjetivo = AprobacionService.ClaveEntidadPedidoLima,
+                ValorAnterior = cambiosVigentes.Count == 1 ? cambiosVigentes[0].PrecioBase : null,
+                ValorSolicitado = cambiosVigentes.Count == 1 ? cambiosVigentes[0].PrecioSolicitado : null,
                 Motivo = "Modificación de precio de repuesto en Pedido Lima",
                 FechaCreacion = DateTime.UtcNow,
                 Activo = true
