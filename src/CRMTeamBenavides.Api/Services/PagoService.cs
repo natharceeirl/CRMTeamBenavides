@@ -36,23 +36,6 @@ public class PagoService : IPagoService
             return ServiceResult<PagoResponse>.Invalid("El monto del pago debe ser mayor a 0.");
         }
 
-        var venta = await _context.Ventas
-            .Include(v => v.Pagos)
-            .Include(v => v.Cliente)
-            .Include(v => v.OrdenServicio)
-            .Include(v => v.Comprobante)
-            .FirstOrDefaultAsync(v => v.Id == ventaId && v.Activo);
-
-        if (venta is null)
-        {
-            return ServiceResult<PagoResponse>.NotFound();
-        }
-
-        if (venta.Estado != EstadoVenta.Confirmada)
-        {
-            return ServiceResult<PagoResponse>.Invalid("Solo se pueden registrar pagos en ventas en estado Confirmada.");
-        }
-
         var metodo = await _context.MetodosPago
             .FirstOrDefaultAsync(m => m.Id == request.MetodoPagoId && m.Activo);
 
@@ -67,68 +50,116 @@ public class PagoService : IPagoService
                 .AnyAsync(c => c.Estado == EstadoCajaChica.Abierta);
             if (!cajaAbierta)
             {
-                return ServiceResult<PagoResponse>.Invalid(
-                    MensajeEfectivoSinCaja);
+                return ServiceResult<PagoResponse>.Invalid(MensajeEfectivoSinCaja);
             }
         }
 
-        var totalPagado = venta.Pagos.Where(p => p.Activo).Sum(p => p.Monto);
-        var saldo = Math.Max(0m, venta.Total - totalPagado);
-
-        if (saldo <= 0)
-        {
-            return ServiceResult<PagoResponse>.Invalid("La venta ya se encuentra pagada en su totalidad.");
-        }
-
-        if (request.Monto > saldo)
-        {
-            return ServiceResult<PagoResponse>.Invalid(
-                $"El monto del pago (S/ {request.Monto:F2}) no puede exceder el saldo pendiente (S/ {saldo:F2}).");
-        }
-
-        var pago = new Pago
-        {
-            Monto           = request.Monto,
-            MetodoPagoId    = request.MetodoPagoId,
-            MetodoPago      = metodo,
-            Fecha           = DateTime.UtcNow,
-            Referencia      = string.IsNullOrWhiteSpace(request.Referencia) ? null : request.Referencia.Trim(),
-            VentaId         = venta.Id,
-            OrdenServicioId = venta.OrdenServicioId,
-            EsAnticipo      = request.EsAnticipo,
-            UsuarioId       = usuarioId,
-            Observaciones   = string.IsNullOrWhiteSpace(request.Observaciones) ? null : request.Observaciones.Trim(),
-            Activo          = true,
-            FechaCreacion   = DateTime.UtcNow
-        };
-
-        _context.Pagos.Add(pago);
-
-        string refVenta;
-        if (venta.OrdenServicio != null && !string.IsNullOrWhiteSpace(venta.OrdenServicio.NumeroOrden))
-        {
-            refVenta = $"OS #{venta.OrdenServicio.NumeroOrden}";
-        }
-        else if (venta.Comprobante != null && !string.IsNullOrWhiteSpace(venta.Comprobante.Numero))
-        {
-            refVenta = $"Comprobante {venta.Comprobante.Serie}-{venta.Comprobante.Numero}";
-        }
-        else if (venta.Cliente != null)
-        {
-            refVenta = $"Venta mostrador ({venta.Cliente.NombreCompleto})";
-        }
-        else
-        {
-            refVenta = "Venta mostrador";
-        }
-
+        Pago pago;
         await using var transaccion = await _context.Database.BeginTransactionAsync();
-        if (!await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, refVenta, usuarioId))
+        try
         {
-            return ServiceResult<PagoResponse>.Invalid(MensajeEfectivoSinCaja);
+            // Bloqueo pesimista a nivel de fila sobre la venta para serializar operaciones concurrentes
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT \"Id\" FROM \"Ventas\" WHERE \"Id\" = {ventaId} FOR UPDATE");
+
+            var venta = await _context.Ventas
+                .Include(v => v.Cliente)
+                .Include(v => v.OrdenServicio)
+                .Include(v => v.Comprobante)
+                .FirstOrDefaultAsync(v => v.Id == ventaId && v.Activo);
+
+            if (venta is null)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.NotFound();
+            }
+
+            if (venta.Estado != EstadoVenta.Confirmada)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid("Solo se pueden registrar pagos en ventas en estado Confirmada.");
+            }
+
+            if (venta.EstadoAprobacionGerencia == EstadoAprobacionGerencia.Pendiente)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid("No se pueden registrar pagos en una venta con aprobación de Gerencia pendiente.");
+            }
+
+            if (venta.EstadoAprobacionGerencia == EstadoAprobacionGerencia.Rechazado)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid("No se pueden registrar pagos en una venta con aprobación de Gerencia rechazada.");
+            }
+
+            var totalPagado = await _context.Pagos
+                .Where(p => p.VentaId == venta.Id && p.Activo)
+                .SumAsync(p => (decimal?)p.Monto) ?? 0m;
+            var saldo = Math.Max(0m, venta.Total - totalPagado);
+
+            if (saldo <= 0)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid("La venta ya se encuentra pagada en su totalidad.");
+            }
+
+            if (request.Monto > saldo)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid(
+                    $"El monto del pago (S/ {request.Monto:F2}) no puede exceder el saldo pendiente (S/ {saldo:F2}).");
+            }
+
+            pago = new Pago
+            {
+                Monto           = request.Monto,
+                MetodoPagoId    = request.MetodoPagoId,
+                MetodoPago      = metodo,
+                Fecha           = DateTime.UtcNow,
+                Referencia      = string.IsNullOrWhiteSpace(request.Referencia) ? null : request.Referencia.Trim(),
+                VentaId         = venta.Id,
+                OrdenServicioId = venta.OrdenServicioId,
+                EsAnticipo      = request.EsAnticipo,
+                UsuarioId       = usuarioId,
+                Observaciones   = string.IsNullOrWhiteSpace(request.Observaciones) ? null : request.Observaciones.Trim(),
+                Activo          = true,
+                FechaCreacion   = DateTime.UtcNow
+            };
+
+            _context.Pagos.Add(pago);
+
+            string refVenta;
+            if (venta.OrdenServicio != null && !string.IsNullOrWhiteSpace(venta.OrdenServicio.NumeroOrden))
+            {
+                refVenta = $"OS #{venta.OrdenServicio.NumeroOrden}";
+            }
+            else if (venta.Comprobante != null && !string.IsNullOrWhiteSpace(venta.Comprobante.Numero))
+            {
+                refVenta = $"Comprobante {venta.Comprobante.Serie}-{venta.Comprobante.Numero}";
+            }
+            else if (venta.Cliente != null)
+            {
+                refVenta = $"Venta mostrador ({venta.Cliente.NombreCompleto})";
+            }
+            else
+            {
+                refVenta = "Venta mostrador";
+            }
+
+            if (!await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, refVenta, usuarioId))
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid(MensajeEfectivoSinCaja);
+            }
+
+            await _context.SaveChangesAsync();
+            await transaccion.CommitAsync();
         }
-        await _context.SaveChangesAsync();
-        await transaccion.CommitAsync();
+        catch
+        {
+            await transaccion.RollbackAsync();
+            throw;
+        }
 
         await _auditoriaService.RegistrarEventoAsync(
             usuarioId,
@@ -179,28 +210,6 @@ public class PagoService : IPagoService
             return ServiceResult<PagoResponse>.Invalid("El monto del pago debe ser mayor a 0.");
         }
 
-        var orden = await _context.OrdenesServicio
-            .Include(o => o.Pagos)
-            .FirstOrDefaultAsync(o => o.Id == ordenServicioId && o.Activo);
-
-        if (orden is null)
-        {
-            return ServiceResult<PagoResponse>.NotFound();
-        }
-
-        if (orden.Estado == EstadoOrdenServicio.Cancelada)
-        {
-            return ServiceResult<PagoResponse>.Invalid("No se pueden registrar pagos en una orden de servicio cancelada.");
-        }
-
-        // Un adelanto después de liquidar no llegaría al saldo de la venta.
-        var liquidada = await _context.Ventas.AnyAsync(v =>
-            v.OrdenServicioId == ordenServicioId && v.Activo && v.Estado != EstadoVenta.Anulada);
-        if (liquidada)
-        {
-            return ServiceResult<PagoResponse>.Invalid("La orden ya está liquidada: registra el pago en su venta.");
-        }
-
         var metodo = await _context.MetodosPago
             .FirstOrDefaultAsync(m => m.Id == request.MetodoPagoId && m.Activo);
 
@@ -215,49 +224,104 @@ public class PagoService : IPagoService
                 .AnyAsync(c => c.Estado == EstadoCajaChica.Abierta);
             if (!cajaAbierta)
             {
-                return ServiceResult<PagoResponse>.Invalid(
-                    MensajeEfectivoSinCaja);
+                return ServiceResult<PagoResponse>.Invalid(MensajeEfectivoSinCaja);
             }
         }
 
-        var totalPagado = orden.Pagos.Where(p => p.Activo).Sum(p => p.Monto);
-        var saldo = Math.Max(0m, orden.Total - totalPagado);
-
-        if (saldo <= 0)
-        {
-            return ServiceResult<PagoResponse>.Invalid("La orden de servicio ya se encuentra pagada en su totalidad.");
-        }
-
-        if (request.Monto > saldo)
-        {
-            return ServiceResult<PagoResponse>.Invalid(
-                $"El monto del pago (S/ {request.Monto:F2}) no puede exceder el saldo pendiente (S/ {saldo:F2}).");
-        }
-
-        var pago = new Pago
-        {
-            Monto           = request.Monto,
-            MetodoPagoId    = request.MetodoPagoId,
-            MetodoPago      = metodo,
-            Fecha           = DateTime.UtcNow,
-            Referencia      = string.IsNullOrWhiteSpace(request.Referencia) ? null : request.Referencia.Trim(),
-            OrdenServicioId = orden.Id,
-            EsAnticipo      = request.EsAnticipo,
-            UsuarioId       = usuarioId,
-            Observaciones   = string.IsNullOrWhiteSpace(request.Observaciones) ? null : request.Observaciones.Trim(),
-            Activo          = true,
-            FechaCreacion   = DateTime.UtcNow
-        };
-
-        _context.Pagos.Add(pago);
-        var refOrden = !string.IsNullOrWhiteSpace(orden.NumeroOrden) ? $"OS #{orden.NumeroOrden}" : "OS taller";
+        Pago pago;
         await using var transaccion = await _context.Database.BeginTransactionAsync();
-        if (!await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, refOrden, usuarioId))
+        try
         {
-            return ServiceResult<PagoResponse>.Invalid(MensajeEfectivoSinCaja);
+            // Bloqueo pesimista a nivel de fila sobre la orden de servicio para serializar operaciones concurrentes
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT \"Id\" FROM \"OrdenesServicio\" WHERE \"Id\" = {ordenServicioId} FOR UPDATE");
+
+            var orden = await _context.OrdenesServicio
+                .FirstOrDefaultAsync(o => o.Id == ordenServicioId && o.Activo);
+
+            if (orden is null)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.NotFound();
+            }
+
+            if (orden.Estado == EstadoOrdenServicio.Cancelada)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid("No se pueden registrar pagos en una orden de servicio cancelada.");
+            }
+
+            // Un adelanto después de liquidar no llegaría al saldo de la venta.
+            var liquidada = await _context.Ventas.AnyAsync(v =>
+                v.OrdenServicioId == ordenServicioId && v.Activo && v.Estado != EstadoVenta.Anulada);
+            if (liquidada)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid("La orden ya está liquidada: registra el pago en su venta.");
+            }
+
+            if (orden.EstadoAprobacionGerencia == EstadoAprobacionGerencia.Pendiente)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid("No se pueden registrar pagos en una orden de servicio con aprobación de Gerencia pendiente.");
+            }
+
+            if (orden.EstadoAprobacionGerencia == EstadoAprobacionGerencia.Rechazado)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid("No se pueden registrar pagos en una orden de servicio con aprobación de Gerencia rechazada.");
+            }
+
+            var totalPagado = await _context.Pagos
+                .Where(p => p.OrdenServicioId == orden.Id && p.Activo)
+                .SumAsync(p => (decimal?)p.Monto) ?? 0m;
+            var saldo = Math.Max(0m, orden.Total - totalPagado);
+
+            if (saldo <= 0)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid("La orden de servicio ya se encuentra pagada en su totalidad.");
+            }
+
+            if (request.Monto > saldo)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid(
+                    $"El monto del pago (S/ {request.Monto:F2}) no puede exceder el saldo pendiente (S/ {saldo:F2}).");
+            }
+
+            pago = new Pago
+            {
+                Monto           = request.Monto,
+                MetodoPagoId    = request.MetodoPagoId,
+                MetodoPago      = metodo,
+                Fecha           = DateTime.UtcNow,
+                Referencia      = string.IsNullOrWhiteSpace(request.Referencia) ? null : request.Referencia.Trim(),
+                OrdenServicioId = orden.Id,
+                EsAnticipo      = request.EsAnticipo,
+                UsuarioId       = usuarioId,
+                Observaciones   = string.IsNullOrWhiteSpace(request.Observaciones) ? null : request.Observaciones.Trim(),
+                Activo          = true,
+                FechaCreacion   = DateTime.UtcNow
+            };
+
+            _context.Pagos.Add(pago);
+            var refOrden = !string.IsNullOrWhiteSpace(orden.NumeroOrden) ? $"OS #{orden.NumeroOrden}" : "OS taller";
+
+            if (!await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, refOrden, usuarioId))
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid(MensajeEfectivoSinCaja);
+            }
+
+            await _context.SaveChangesAsync();
+            await transaccion.CommitAsync();
         }
-        await _context.SaveChangesAsync();
-        await transaccion.CommitAsync();
+        catch
+        {
+            await transaccion.RollbackAsync();
+            throw;
+        }
 
         await _auditoriaService.RegistrarEventoAsync(
             usuarioId,
@@ -390,21 +454,6 @@ public class PagoService : IPagoService
             return ServiceResult<PagoResponse>.Invalid("El monto del pago debe ser mayor a 0.");
         }
 
-        var pedido = await _context.PedidosLima
-            .Include(p => p.Pagos)
-            .Include(p => p.Cliente)
-            .FirstOrDefaultAsync(p => p.Id == pedidoLimaId && p.Activo);
-
-        if (pedido is null)
-        {
-            return ServiceResult<PagoResponse>.NotFound();
-        }
-
-        if (pedido.Estado == EstadoPedidoLima.Cancelado)
-        {
-            return ServiceResult<PagoResponse>.Invalid("No se pueden registrar pagos en un pedido de Lima cancelado.");
-        }
-
         var metodo = await _context.MetodosPago
             .FirstOrDefaultAsync(m => m.Id == request.MetodoPagoId && m.Activo);
 
@@ -419,49 +468,96 @@ public class PagoService : IPagoService
                 .AnyAsync(c => c.Estado == EstadoCajaChica.Abierta);
             if (!cajaAbierta)
             {
-                return ServiceResult<PagoResponse>.Invalid(
-                    MensajeEfectivoSinCaja);
+                return ServiceResult<PagoResponse>.Invalid(MensajeEfectivoSinCaja);
             }
         }
 
-        var totalPagado = pedido.Pagos.Where(p => p.Activo).Sum(p => p.Monto);
-        var saldo = Math.Max(0m, pedido.Total - totalPagado);
-
-        if (saldo <= 0)
-        {
-            return ServiceResult<PagoResponse>.Invalid("El pedido de Lima ya se encuentra pagada en su totalidad.");
-        }
-
-        if (request.Monto > saldo)
-        {
-            return ServiceResult<PagoResponse>.Invalid(
-                $"El monto del pago (S/ {request.Monto:F2}) no puede exceder el saldo pendiente (S/ {saldo:F2}).");
-        }
-
-        var pago = new Pago
-        {
-            Monto           = request.Monto,
-            MetodoPagoId    = request.MetodoPagoId,
-            MetodoPago      = metodo,
-            Fecha           = DateTime.UtcNow,
-            Referencia      = string.IsNullOrWhiteSpace(request.Referencia) ? null : request.Referencia.Trim(),
-            PedidoLimaId    = pedido.Id,
-            EsAnticipo      = request.EsAnticipo || saldo > request.Monto,
-            UsuarioId       = usuarioId,
-            Observaciones   = string.IsNullOrWhiteSpace(request.Observaciones) ? null : request.Observaciones.Trim(),
-            Activo          = true,
-            FechaCreacion   = DateTime.UtcNow
-        };
-
-        _context.Pagos.Add(pago);
-        var refPedido = !string.IsNullOrWhiteSpace(pedido.NumeroPedido) ? $"Pedido Lima #{pedido.NumeroPedido}" : $"Pedido Lima ({pedido.Cliente?.NombreCompleto ?? "Cliente"})";
+        Pago pago;
         await using var transaccion = await _context.Database.BeginTransactionAsync();
-        if (!await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, refPedido, usuarioId))
+        try
         {
-            return ServiceResult<PagoResponse>.Invalid(MensajeEfectivoSinCaja);
+            // Bloqueo pesimista a nivel de fila sobre el pedido de Lima para serializar operaciones concurrentes
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT \"Id\" FROM \"PedidosLima\" WHERE \"Id\" = {pedidoLimaId} FOR UPDATE");
+
+            var pedido = await _context.PedidosLima
+                .Include(p => p.Cliente)
+                .FirstOrDefaultAsync(p => p.Id == pedidoLimaId && p.Activo);
+
+            if (pedido is null)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.NotFound();
+            }
+
+            if (pedido.Estado == EstadoPedidoLima.Cancelado)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid("No se pueden registrar pagos en un pedido de Lima cancelado.");
+            }
+
+            if (pedido.EstadoAprobacionGerencia == EstadoAprobacionGerencia.Pendiente)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid("No se pueden registrar pagos en un pedido a Lima con aprobación de Gerencia pendiente.");
+            }
+
+            if (pedido.EstadoAprobacionGerencia == EstadoAprobacionGerencia.Rechazado)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid("No se pueden registrar pagos en un pedido a Lima con aprobación de Gerencia rechazada.");
+            }
+
+            var totalPagado = await _context.Pagos
+                .Where(p => p.PedidoLimaId == pedido.Id && p.Activo)
+                .SumAsync(p => (decimal?)p.Monto) ?? 0m;
+            var saldo = Math.Max(0m, pedido.Total - totalPagado);
+
+            if (saldo <= 0)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid("El pedido de Lima ya se encuentra pagada en su totalidad.");
+            }
+
+            if (request.Monto > saldo)
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid(
+                    $"El monto del pago (S/ {request.Monto:F2}) no puede exceder el saldo pendiente (S/ {saldo:F2}).");
+            }
+
+            pago = new Pago
+            {
+                Monto           = request.Monto,
+                MetodoPagoId    = request.MetodoPagoId,
+                MetodoPago      = metodo,
+                Fecha           = DateTime.UtcNow,
+                Referencia      = string.IsNullOrWhiteSpace(request.Referencia) ? null : request.Referencia.Trim(),
+                PedidoLimaId    = pedido.Id,
+                EsAnticipo      = request.EsAnticipo || saldo > request.Monto,
+                UsuarioId       = usuarioId,
+                Observaciones   = string.IsNullOrWhiteSpace(request.Observaciones) ? null : request.Observaciones.Trim(),
+                Activo          = true,
+                FechaCreacion   = DateTime.UtcNow
+            };
+
+            _context.Pagos.Add(pago);
+            var refPedido = !string.IsNullOrWhiteSpace(pedido.NumeroPedido) ? $"Pedido Lima #{pedido.NumeroPedido}" : $"Pedido Lima ({pedido.Cliente?.NombreCompleto ?? "Cliente"})";
+
+            if (!await RegistrarMovimientoCajaChicaAutomaticoAsync(pago, metodo, refPedido, usuarioId))
+            {
+                await transaccion.RollbackAsync();
+                return ServiceResult<PagoResponse>.Invalid(MensajeEfectivoSinCaja);
+            }
+
+            await _context.SaveChangesAsync();
+            await transaccion.CommitAsync();
         }
-        await _context.SaveChangesAsync();
-        await transaccion.CommitAsync();
+        catch
+        {
+            await transaccion.RollbackAsync();
+            throw;
+        }
 
         await _auditoriaService.RegistrarEventoAsync(
             usuarioId,

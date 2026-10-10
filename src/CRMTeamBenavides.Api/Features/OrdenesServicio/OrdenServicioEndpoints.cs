@@ -13,6 +13,7 @@ public static class OrdenServicioEndpoints
 {
     public const string PoliticaVerOrdenes = "PoliticaVerOrdenes";
     public const string PoliticaAprobacionCliente = "PoliticaAprobacionCliente";
+    public const string PoliticaModificarDetalles = "PoliticaModificarDetalles";
 
     public static void MapOrdenServicioEndpoints(this IEndpointRouteBuilder app)
     {
@@ -318,9 +319,15 @@ public static class OrdenServicioEndpoints
             IOrdenServicioService service,
             ApplicationDbContext dbContext) =>
         {
+            var (soloTecnicoId, _, debeDenegarAcceso) = await ResolverAislamientoAsync(user, dbContext);
+            if (debeDenegarAcceso)
+            {
+                return Results.NotFound();
+            }
+
             var puedeModificarPrecios = await PuedeModificarPreciosAsync(user, dbContext);
             var usuarioId = ObtenerUsuarioId(user);
-            var result = await service.ActualizarDetalleAsync(id, detalleId, request, puedeModificarPrecios, usuarioId);
+            var result = await service.ActualizarDetalleAsync(id, detalleId, request, puedeModificarPrecios, soloTecnicoId, usuarioId);
             return result.Status switch
             {
                 ServiceResultStatus.Success => Results.Ok(result.Data),
@@ -330,12 +337,23 @@ public static class OrdenServicioEndpoints
                 _ => Results.Problem()
             };
         })
-        .RequireAuthorization(PermisosDefinidos.OrdenesEditar)
+        .RequireAuthorization(PoliticaModificarDetalles)
         .WithName("ActualizarDetalleOrdenServicio");
 
-        group.MapDelete("/{id:guid}/detalles/{detalleId:guid}", async (Guid id, Guid detalleId, IOrdenServicioService service) =>
+        group.MapDelete("/{id:guid}/detalles/{detalleId:guid}", async (
+            Guid id,
+            Guid detalleId,
+            ClaimsPrincipal user,
+            IOrdenServicioService service,
+            ApplicationDbContext dbContext) =>
         {
-            var result = await service.EliminarDetalleAsync(id, detalleId);
+            var (soloTecnicoId, _, debeDenegarAcceso) = await ResolverAislamientoAsync(user, dbContext);
+            if (debeDenegarAcceso)
+            {
+                return Results.NotFound();
+            }
+
+            var result = await service.EliminarDetalleAsync(id, detalleId, soloTecnicoId);
             return result.Status switch
             {
                 ServiceResultStatus.Success => Results.Ok(new { message = "Detalle eliminado correctamente." }),
@@ -345,7 +363,7 @@ public static class OrdenServicioEndpoints
                 _ => Results.Problem()
             };
         })
-        .RequireAuthorization(PermisosDefinidos.OrdenesEditar)
+        .RequireAuthorization(PoliticaModificarDetalles)
         .WithName("EliminarDetalleOrdenServicio");
 
         group.MapPut("/{id:guid}/estado", async (

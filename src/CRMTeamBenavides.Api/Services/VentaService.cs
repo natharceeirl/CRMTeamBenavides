@@ -710,6 +710,7 @@ public class VentaService : IVentaService
             .Include(v => v.Cliente)
             .Include(v => v.Detalles.Where(d => d.Activo))
             .Include(v => v.Pagos.Where(p => p.Activo))
+            .Include(v => v.Comprobante)
             .FirstOrDefaultAsync(v => v.Id == id && v.Activo);
 
         if (venta is null)
@@ -724,7 +725,16 @@ public class VentaService : IVentaService
 
         if (venta.Estado != EstadoVenta.Cotizacion)
         {
-            return ServiceResult<VentaDetalleResponse>.Invalid("Solo se pueden modificar ventas en estado Cotización.");
+            bool esVentaConfirmadaRecuperable = venta.Estado == EstadoVenta.Confirmada
+                && (venta.EstadoAprobacionGerencia == EstadoAprobacionGerencia.Rechazado || venta.EstadoAprobacionGerencia == EstadoAprobacionGerencia.Pendiente)
+                && !venta.Pagos.Any(p => p.Activo)
+                && venta.Comprobante == null;
+
+            if (!esVentaConfirmadaRecuperable)
+            {
+                return ServiceResult<VentaDetalleResponse>.Invalid(
+                    "Solo se pueden modificar ventas en estado Cotización o ventas confirmadas con aprobación de precios pendiente o rechazada y sin pagos ni comprobantes emitidos.");
+            }
         }
 
         if (venta.Pagos.Any(p => p.Activo))
@@ -732,139 +742,235 @@ public class VentaService : IVentaService
             return ServiceResult<VentaDetalleResponse>.Invalid("No se puede modificar una venta que ya registra pagos.");
         }
 
+        if (venta.Comprobante != null)
+        {
+            return ServiceResult<VentaDetalleResponse>.Invalid("No se puede modificar una venta que ya cuenta con comprobante emitido.");
+        }
+
         var config = await _context.ConfiguracionesEmpresa.FirstOrDefaultAsync();
         var porcentajeIgv = config?.PorcentajeIgv ?? 18.00m;
 
-        var productIds = request.Detalles.Select(d => d.ProductoId).Distinct().ToList();
-        var productos = await _context.Productos
-            .Where(p => productIds.Contains(p.Id))
-            .ToDictionaryAsync(p => p.Id);
-
-        if (productos.Count != productIds.Count || productos.Values.Any(p => !p.Activo))
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+        try
         {
-            return ServiceResult<VentaDetalleResponse>.Invalid("Uno o más productos no existen o están inactivos.");
-        }
+            var oldDetallesActivos = venta.Detalles.Where(d => d.Activo).ToList();
+            var oldCantidades = oldDetallesActivos
+                .Where(d => d.ProductoId != null)
+                .GroupBy(d => d.ProductoId!.Value)
+                .ToDictionary(g => g.Key, g => g.Sum(d => d.Cantidad));
 
-        foreach (var det in venta.Detalles)
-        {
-            det.Activo = false;
-            det.FechaModificacion = DateTime.UtcNow;
-        }
+            var newCantidades = request.Detalles
+                .GroupBy(d => d.ProductoId)
+                .ToDictionary(g => g.Key, g => g.Sum(d => d.Cantidad));
 
-        bool requiereAprobacion = false;
-        var detallesCambio = new List<object>();
+            var allProductIds = oldCantidades.Keys.Union(newCantidades.Keys).OrderBy(pid => pid).ToList();
 
-        decimal subtotalGravadoTotal = 0m;
-        decimal subtotalExoneradoTotal = 0m;
-        decimal subtotalInafectoTotal = 0m;
-        decimal montoIgvTotal = 0m;
-
-        foreach (var item in request.Detalles)
-        {
-            var prod = productos[item.ProductoId];
-            var precioBase = prod.PrecioVenta;
-            var precioUnitario = item.PrecioUnitario ?? precioBase;
-
-            bool precioModificado = Math.Abs(precioUnitario - precioBase) > 0.001m;
-            bool tieneDescuento = item.Descuento.HasValue && item.Descuento.Value > 0;
-
-            if (precioModificado || tieneDescuento)
+            if (venta.Estado == EstadoVenta.Confirmada)
             {
-                requiereAprobacion = true;
-                detallesCambio.Add(new
+                foreach (var prodId in allProductIds)
                 {
+                    await _context.Database.ExecuteSqlInterpolatedAsync(
+                        $"SELECT \"Id\" FROM \"Productos\" WHERE \"Id\" = {prodId} FOR UPDATE");
+                }
+            }
+
+            var productos = await _context.Productos
+                .Where(p => allProductIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id);
+
+            if (newCantidades.Keys.Any(pid => !productos.ContainsKey(pid) || !productos[pid].Activo))
+            {
+                await transaction.RollbackAsync();
+                return ServiceResult<VentaDetalleResponse>.Invalid("Uno o más productos no existen o están inactivos.");
+            }
+
+            // Si es venta confirmada, ajustar inventario según diferencia de cantidades
+            if (venta.Estado == EstadoVenta.Confirmada)
+            {
+                foreach (var prodId in allProductIds)
+                {
+                    var prod = productos[prodId];
+                    int oldQty = oldCantidades.GetValueOrDefault(prodId, 0);
+                    int newQty = newCantidades.GetValueOrDefault(prodId, 0);
+                    int diff = newQty - oldQty;
+
+                    if (diff > 0)
+                    {
+                        if (prod.StockActual < diff)
+                        {
+                            await transaction.RollbackAsync();
+                            return ServiceResult<VentaDetalleResponse>.Invalid(
+                                $"Stock insuficiente para el producto '{prod.Nombre}'. Stock disponible: {prod.StockActual}, solicitado adicional: {diff}.");
+                        }
+                        prod.StockActual -= diff;
+                        prod.FechaModificacion = DateTime.UtcNow;
+                        _context.MovimientosInventario.Add(new MovimientoInventario
+                        {
+                            ProductoId    = prod.Id,
+                            Tipo          = TipoMovimientoInventario.Salida,
+                            Cantidad      = diff,
+                            Motivo        = $"Ajuste por incremento de cantidad en venta mostrador #{venta.Id}",
+                            VentaId       = venta.Id,
+                            FechaCreacion = DateTime.UtcNow,
+                            Activo        = true
+                        });
+                    }
+                    else if (diff < 0)
+                    {
+                        int devolucion = Math.Abs(diff);
+                        prod.StockActual += devolucion;
+                        prod.FechaModificacion = DateTime.UtcNow;
+                        _context.MovimientosInventario.Add(new MovimientoInventario
+                        {
+                            ProductoId    = prod.Id,
+                            Tipo          = TipoMovimientoInventario.Entrada,
+                            Cantidad      = devolucion,
+                            Motivo        = $"Ajuste por reducción o eliminación de ítem en venta mostrador #{venta.Id}",
+                            VentaId       = venta.Id,
+                            FechaCreacion = DateTime.UtcNow,
+                            Activo        = true
+                        });
+                    }
+                }
+            }
+
+            foreach (var det in oldDetallesActivos)
+            {
+                det.Activo = false;
+                det.FechaModificacion = DateTime.UtcNow;
+            }
+
+            bool requiereAprobacion = false;
+            var detallesCambio = new List<object>();
+
+            decimal subtotalGravadoTotal = 0m;
+            decimal subtotalExoneradoTotal = 0m;
+            decimal subtotalInafectoTotal = 0m;
+            decimal montoIgvTotal = 0m;
+
+            foreach (var item in request.Detalles)
+            {
+                var prod = productos[item.ProductoId];
+                var precioBase = prod.PrecioVenta;
+                var precioUnitario = item.PrecioUnitario ?? precioBase;
+
+                bool precioModificado = Math.Abs(precioUnitario - precioBase) > 0.001m;
+                bool tieneDescuento = item.Descuento.HasValue && item.Descuento.Value > 0;
+
+                if (precioModificado || tieneDescuento)
+                {
+                    requiereAprobacion = true;
+                    detallesCambio.Add(new
+                    {
+                        ProductoId = prod.Id,
+                        ProductoNombre = prod.Nombre,
+                        PrecioBase = precioBase,
+                        PrecioSolicitado = precioUnitario,
+                        Descuento = item.Descuento ?? 0m
+                    });
+                }
+
+                var afectacion = item.TipoAfectacionIgv ?? TipoAfectacionIgv.Gravado;
+                var subtotalItem = item.Cantidad * precioUnitario;
+                var subtotalGravado = afectacion == TipoAfectacionIgv.Gravado ? subtotalItem : 0m;
+                var igvCalculado = afectacion == TipoAfectacionIgv.Gravado
+                    ? decimal.Round(subtotalItem * (porcentajeIgv / 100m), 2, MidpointRounding.AwayFromZero)
+                    : 0m;
+                var totalLinea = decimal.Round(subtotalItem + igvCalculado, 2, MidpointRounding.AwayFromZero);
+
+                subtotalGravadoTotal += subtotalGravado;
+                if (afectacion == TipoAfectacionIgv.Exonerado) subtotalExoneradoTotal += subtotalItem;
+                if (afectacion == TipoAfectacionIgv.Inafecto) subtotalInafectoTotal += subtotalItem;
+                montoIgvTotal += igvCalculado;
+
+                var nuevoDetalle = new DetalleVenta
+                {
+                    VentaId = venta.Id,
                     ProductoId = prod.Id,
-                    ProductoNombre = prod.Nombre,
-                    PrecioBase = precioBase,
-                    PrecioSolicitado = precioUnitario,
-                    Descuento = item.Descuento ?? 0m
+                    Producto = prod,
+                    TipoItem = TipoItemServicio.Repuesto,
+                    Cantidad = item.Cantidad,
+                    PrecioUnitario = precioUnitario,
+                    CostoUnitarioHistorico = prod.Costo,
+                    TipoAfectacionIgv = afectacion,
+                    SubtotalGravado = subtotalGravado,
+                    PorcentajeIgvAplicado = afectacion == TipoAfectacionIgv.Gravado ? porcentajeIgv : 0m,
+                    MontoIgv = igvCalculado,
+                    Total = totalLinea,
+                    Activo = true,
+                    FechaCreacion = DateTime.UtcNow
+                };
+                venta.Detalles.Add(nuevoDetalle);
+                _context.DetallesVenta.Add(nuevoDetalle);
+            }
+
+            venta.SubtotalGravado = decimal.Round(subtotalGravadoTotal, 2, MidpointRounding.AwayFromZero);
+            venta.SubtotalExonerado = decimal.Round(subtotalExoneradoTotal, 2, MidpointRounding.AwayFromZero);
+            venta.SubtotalInafecto = decimal.Round(subtotalInafectoTotal, 2, MidpointRounding.AwayFromZero);
+            venta.MontoIgv = decimal.Round(montoIgvTotal, 2, MidpointRounding.AwayFromZero);
+            venta.Total = decimal.Round(venta.SubtotalGravado + venta.SubtotalExonerado + venta.SubtotalInafecto + venta.MontoIgv, 2, MidpointRounding.AwayFromZero);
+            venta.FechaModificacion = DateTime.UtcNow;
+
+            if (requiereAprobacion)
+            {
+                await AprobacionService.RetirarSolicitudesPendientesPorObjetivoAsync(
+                    _context,
+                    "Venta",
+                    venta.Id.ToString(),
+                    "entidad_venta",
+                    "Superada automáticamente por nueva modificación de precios.");
+
+                venta.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
+                _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
+                {
+                    Id = Guid.NewGuid(),
+                    Tipo = "CambioPrecio",
+                    Entidad = "Venta",
+                    EntidadId = venta.Id.ToString(),
+                    UsuarioSolicitanteId = usuarioId,
+                    FechaSolicitud = DateTime.UtcNow,
+                    Estado = EstadoAprobacionGerencia.Pendiente,
+                    DetalleCambio = System.Text.Json.JsonSerializer.Serialize(detallesCambio),
+                    ValorAnterior = 0m,
+                    ValorSolicitado = venta.Total,
+                    Motivo = venta.Estado == EstadoVenta.Confirmada
+                        ? "Modificación de precios en venta mostrador corregida"
+                        : "Modificación de precios en cotización actualizada",
+                    FechaCreacion = DateTime.UtcNow,
+                    Activo = true
                 });
             }
-
-            var afectacion = item.TipoAfectacionIgv ?? TipoAfectacionIgv.Gravado;
-            var subtotalItem = item.Cantidad * precioUnitario;
-            var subtotalGravado = afectacion == TipoAfectacionIgv.Gravado ? subtotalItem : 0m;
-            var igvCalculado = afectacion == TipoAfectacionIgv.Gravado
-                ? decimal.Round(subtotalItem * (porcentajeIgv / 100m), 2, MidpointRounding.AwayFromZero)
-                : 0m;
-            var totalLinea = decimal.Round(subtotalItem + igvCalculado, 2, MidpointRounding.AwayFromZero);
-
-            subtotalGravadoTotal += subtotalGravado;
-            if (afectacion == TipoAfectacionIgv.Exonerado) subtotalExoneradoTotal += subtotalItem;
-            if (afectacion == TipoAfectacionIgv.Inafecto) subtotalInafectoTotal += subtotalItem;
-            montoIgvTotal += igvCalculado;
-
-            var nuevoDetalle = new DetalleVenta
+            else
             {
-                VentaId = venta.Id,
-                ProductoId = prod.Id,
-                Producto = prod,
-                TipoItem = TipoItemServicio.Repuesto,
-                Cantidad = item.Cantidad,
-                PrecioUnitario = precioUnitario,
-                CostoUnitarioHistorico = prod.Costo,
-                TipoAfectacionIgv = afectacion,
-                SubtotalGravado = subtotalGravado,
-                PorcentajeIgvAplicado = afectacion == TipoAfectacionIgv.Gravado ? porcentajeIgv : 0m,
-                MontoIgv = igvCalculado,
-                Total = totalLinea,
-                Activo = true,
-                FechaCreacion = DateTime.UtcNow
-            };
-            venta.Detalles.Add(nuevoDetalle);
-            _context.DetallesVenta.Add(nuevoDetalle);
-        }
+                if (venta.EstadoAprobacionGerencia is EstadoAprobacionGerencia.Pendiente or EstadoAprobacionGerencia.Rechazado)
+                {
+                    venta.EstadoAprobacionGerencia = EstadoAprobacionGerencia.NoAplica;
+                    venta.ObservacionesAprobacionGerencia = null;
+                }
 
-        venta.SubtotalGravado = decimal.Round(subtotalGravadoTotal, 2, MidpointRounding.AwayFromZero);
-        venta.SubtotalExonerado = decimal.Round(subtotalExoneradoTotal, 2, MidpointRounding.AwayFromZero);
-        venta.SubtotalInafecto = decimal.Round(subtotalInafectoTotal, 2, MidpointRounding.AwayFromZero);
-        venta.MontoIgv = decimal.Round(montoIgvTotal, 2, MidpointRounding.AwayFromZero);
-        venta.Total = decimal.Round(venta.SubtotalGravado + venta.SubtotalExonerado + venta.SubtotalInafecto + venta.MontoIgv, 2, MidpointRounding.AwayFromZero);
-        venta.FechaModificacion = DateTime.UtcNow;
+                var solicitudesPendientes = await _context.SolicitudesAprobacion
+                    .Where(s => s.Entidad == "Venta" && s.EntidadId == venta.Id.ToString() && s.Estado == EstadoAprobacionGerencia.Pendiente && s.Activo)
+                    .ToListAsync();
 
-        if (requiereAprobacion)
-        {
-            venta.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
-            _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
-            {
-                Id = Guid.NewGuid(),
-                Tipo = "CambioPrecio",
-                Entidad = "Venta",
-                EntidadId = venta.Id.ToString(),
-                UsuarioSolicitanteId = usuarioId,
-                FechaSolicitud = DateTime.UtcNow,
-                Estado = EstadoAprobacionGerencia.Pendiente,
-                DetalleCambio = System.Text.Json.JsonSerializer.Serialize(detallesCambio),
-                ValorAnterior = 0m,
-                ValorSolicitado = venta.Total,
-                Motivo = "Modificación de precios en cotización actualizada",
-                FechaCreacion = DateTime.UtcNow,
-                Activo = true
-            });
-        }
-        else
-        {
-            if (venta.EstadoAprobacionGerencia is EstadoAprobacionGerencia.Pendiente or EstadoAprobacionGerencia.Rechazado)
-            {
-                venta.EstadoAprobacionGerencia = EstadoAprobacionGerencia.NoAplica;
-                venta.ObservacionesAprobacionGerencia = null;
+                foreach (var sol in solicitudesPendientes)
+                {
+                    sol.Activo = false;
+                    sol.ObservacionesRespuesta = "Retirada automáticamente por restablecimiento de precios a catálogo.";
+                    sol.FechaRespuesta = DateTime.UtcNow;
+                    sol.FechaModificacion = DateTime.UtcNow;
+                }
             }
 
-            var solicitudesPendientes = await _context.SolicitudesAprobacion
-                .Where(s => s.Entidad == "Venta" && s.EntidadId == venta.Id.ToString() && s.Estado == EstadoAprobacionGerencia.Pendiente && s.Activo)
-                .ToListAsync();
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
 
-            foreach (var sol in solicitudesPendientes)
-            {
-                sol.Activo = false;
-                sol.ObservacionesRespuesta = "Retirada automáticamente por restablecimiento de precios a catálogo.";
-                sol.FechaRespuesta = DateTime.UtcNow;
-                sol.FechaModificacion = DateTime.UtcNow;
-            }
+            return ServiceResult<VentaDetalleResponse>.Success(MapToDetalleResponse(venta));
         }
-
-        await _context.SaveChangesAsync();
-        return ServiceResult<VentaDetalleResponse>.Success(MapToDetalleResponse(venta));
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
     }
 
     public async Task<ServiceResult<VentaDetalleResponse>> ConfirmarCotizacionAsync(Guid id, Guid? soloClienteId = null)
@@ -1216,64 +1322,95 @@ public class VentaService : IVentaService
 
         var serieDefecto = tipoEnum == TipoComprobante.Factura ? "F001" : "B001";
         var serieFinal = string.IsNullOrWhiteSpace(request.Serie) ? serieDefecto : request.Serie.Trim().ToUpperInvariant();
-        string numeroFinal;
-        if (!string.IsNullOrWhiteSpace(request.Numero))
-        {
-            numeroFinal = request.Numero.Trim();
-        }
-        else
-        {
-            var count = await _context.Comprobantes.CountAsync(c => c.Tipo == tipoEnum.ToString() && c.Serie == serieFinal);
-            numeroFinal = (count + 1).ToString("D6");
-        }
 
-        var comprobante = new Comprobante
-        {
-            VentaId              = ventaId,
-            Tipo                 = tipoEnum.ToString(),
-            Serie                = serieFinal,
-            Numero               = numeroFinal,
-            Estado               = "Emitido",
-            Activo               = true,
-            FechaCreacion        = DateTime.UtcNow,
-            SubtotalGravado      = venta.SubtotalGravado,
-            SubtotalExonerado    = venta.SubtotalExonerado,
-            SubtotalInafecto     = venta.SubtotalInafecto,
-            PorcentajeIgv        = porcentajeIgv,
-            MontoIgv             = venta.MontoIgv,
-            Total                = venta.Total,
-            MetodoPagoPrincipal  = metodoPrincipal,
-            Observaciones        = string.IsNullOrWhiteSpace(request.Observaciones) ? null : request.Observaciones.Trim(),
-            OrdenServicioId      = venta.OrdenServicioId
-        };
-
-        _context.Comprobantes.Add(comprobante);
-
+        await using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
-            await _context.SaveChangesAsync();
-        }
-        catch (DbUpdateException)
-        {
-            return ServiceResult<ComprobanteResponse>.Invalid("La venta ya cuenta con un comprobante registrado.");
-        }
-
-        await _auditoriaService.RegistrarEventoAsync(
-            usuarioId,
-            "Crear",
-            "Comprobante",
-            comprobante.Id.ToString(),
-            new
+            string numeroFinal;
+            if (!string.IsNullOrWhiteSpace(request.Numero))
             {
-                VentaId = ventaId,
-                Tipo = comprobante.Tipo,
-                Serie = comprobante.Serie,
-                Numero = comprobante.Numero,
-                Total = comprobante.Total,
-                MetodoPagoPrincipal = comprobante.MetodoPagoPrincipal
-            });
+                numeroFinal = request.Numero.Trim();
+            }
+            else
+            {
+                // Serializar generación de correlativos por (Tipo, Serie) usando pg_advisory_xact_lock
+                // a nivel de transacción PostgreSQL para evitar números duplicados concurrentes
+                var lockKey = $"comprobante_{tipoEnum.ToString().ToLowerInvariant()}_{serieFinal.ToLowerInvariant()}";
+                await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
 
-        return ServiceResult<ComprobanteResponse>.Success(MapToComprobanteResponse(comprobante));
+                var numerosExistentes = await _context.Comprobantes
+                    .Where(c => c.Tipo == tipoEnum.ToString() && c.Serie == serieFinal)
+                    .Select(c => c.Numero)
+                    .ToListAsync();
+
+                int maxNumero = 0;
+                foreach (var numStr in numerosExistentes)
+                {
+                    if (int.TryParse(numStr, out var numVal) && numVal > maxNumero)
+                    {
+                        maxNumero = numVal;
+                    }
+                }
+
+                numeroFinal = (maxNumero + 1).ToString("D6");
+            }
+
+            var comprobante = new Comprobante
+            {
+                VentaId              = ventaId,
+                Tipo                 = tipoEnum.ToString(),
+                Serie                = serieFinal,
+                Numero               = numeroFinal,
+                Estado               = "Emitido",
+                Activo               = true,
+                FechaCreacion        = DateTime.UtcNow,
+                SubtotalGravado      = venta.SubtotalGravado,
+                SubtotalExonerado    = venta.SubtotalExonerado,
+                SubtotalInafecto     = venta.SubtotalInafecto,
+                PorcentajeIgv        = porcentajeIgv,
+                MontoIgv             = venta.MontoIgv,
+                Total                = venta.Total,
+                MetodoPagoPrincipal  = metodoPrincipal,
+                Observaciones        = string.IsNullOrWhiteSpace(request.Observaciones) ? null : request.Observaciones.Trim(),
+                OrdenServicioId      = venta.OrdenServicioId
+            };
+
+            _context.Comprobantes.Add(comprobante);
+
+            try
+            {
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
+            catch (DbUpdateException)
+            {
+                await transaction.RollbackAsync();
+                return ServiceResult<ComprobanteResponse>.Invalid("La venta ya cuenta con un comprobante registrado.");
+            }
+
+            await _auditoriaService.RegistrarEventoAsync(
+                usuarioId,
+                "Crear",
+                "Comprobante",
+                comprobante.Id.ToString(),
+                new
+                {
+                    VentaId = ventaId,
+                    Tipo = comprobante.Tipo,
+                    Serie = comprobante.Serie,
+                    Numero = comprobante.Numero,
+                    Total = comprobante.Total,
+                    MetodoPagoPrincipal = comprobante.MetodoPagoPrincipal
+                });
+
+            return ServiceResult<ComprobanteResponse>.Success(MapToComprobanteResponse(comprobante));
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
     }
 
     public async Task<ServiceResult<ComprobanteResponse>> AnularComprobanteAsync(Guid ventaId, Guid? usuarioId = null)

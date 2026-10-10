@@ -54,9 +54,13 @@ public interface IOrdenServicioService
         Guid detalleId,
         ActualizarDetalleServicioRequest request,
         bool puedeModificarPrecios,
+        Guid? soloTecnicoId = null,
         Guid? usuarioId = null);
 
-    Task<ServiceResult<bool>> EliminarDetalleAsync(Guid ordenServicioId, Guid detalleId);
+    Task<ServiceResult<bool>> EliminarDetalleAsync(
+        Guid ordenServicioId,
+        Guid detalleId,
+        Guid? soloTecnicoId = null);
 
     Task<ServiceResult<OrdenServicioResponse>> CambiarEstadoAsync(
         Guid ordenServicioId,

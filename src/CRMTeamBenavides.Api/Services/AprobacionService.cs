@@ -128,6 +128,15 @@ public class AprobacionService : IAprobacionService
             Activo = true
         };
 
+        var clave = ObtenerClaveObjetivo(solicitud);
+        await RetirarSolicitudesPendientesPorObjetivoAsync(
+            _context,
+            solicitud.Entidad,
+            solicitud.EntidadId,
+            clave,
+            "Superada automáticamente por nueva solicitud para el mismo objetivo.",
+            ct);
+
         _context.SolicitudesAprobacion.Add(solicitud);
 
         // Actualizar la entidad vinculada a Pendiente
@@ -194,6 +203,23 @@ public class AprobacionService : IAprobacionService
         solicitud.ObservacionesRespuesta = request.Observaciones?.Trim();
         solicitud.FechaModificacion = DateTime.UtcNow;
 
+        // Retirar cualquier otra solicitud obsoleta que haya quedado pendiente para este mismo objetivo
+        var claveObjetivo = ObtenerClaveObjetivo(solicitud);
+        var otrasPendientes = await _context.SolicitudesAprobacion
+            .Where(s => s.Activo && s.Id != solicitud.Id && s.Entidad == solicitud.Entidad && s.EntidadId == solicitud.EntidadId && s.Estado == EstadoAprobacionGerencia.Pendiente)
+            .ToListAsync(ct);
+
+        foreach (var otra in otrasPendientes)
+        {
+            if (ObtenerClaveObjetivo(otra) == claveObjetivo)
+            {
+                otra.Activo = false;
+                otra.ObservacionesRespuesta = $"Retirada automáticamente tras resolución de solicitud {solicitud.Id}.";
+                otra.FechaRespuesta = DateTime.UtcNow;
+                otra.FechaModificacion = DateTime.UtcNow;
+            }
+        }
+
         // Actualizar la entidad origen (OrdenServicio, Venta o PedidoLima)
         await ActualizarEstadoEntidadVinculadaAsync(solicitud.Entidad, solicitud.EntidadId, request.Estado, request.Observaciones, usuarioId, ct);
 
@@ -218,6 +244,205 @@ public class AprobacionService : IAprobacionService
         return ServiceResult<SolicitudAprobacionResponse>.Success(MapToResponse(solicitud));
     }
 
+    public static Guid? ObtenerDetalleId(SolicitudAprobacion s)
+    {
+        var detalle = s.DetalleCambio ?? string.Empty;
+        var idx = detalle.IndexOf("[Detalle:", StringComparison.OrdinalIgnoreCase);
+        if (idx >= 0)
+        {
+            var start = idx + 9;
+            var end = detalle.IndexOf(']', start);
+            if (end > start)
+            {
+                var strGuid = detalle.Substring(start, end - start).Trim();
+                if (Guid.TryParse(strGuid, out var guid))
+                {
+                    return guid;
+                }
+            }
+        }
+        return null;
+    }
+
+    public static Guid? ObtenerSuperaId(SolicitudAprobacion s)
+    {
+        var detalle = s.DetalleCambio ?? string.Empty;
+        var idx = detalle.IndexOf("[Supera:", StringComparison.OrdinalIgnoreCase);
+        if (idx >= 0)
+        {
+            var start = idx + 8;
+            var end = detalle.IndexOf(']', start);
+            if (end > start)
+            {
+                var strGuid = detalle.Substring(start, end - start).Trim();
+                if (Guid.TryParse(strGuid, out var guid))
+                {
+                    return guid;
+                }
+            }
+        }
+        return null;
+    }
+
+    public static string? ObtenerClaveObjetivoExplicita(SolicitudAprobacion s)
+    {
+        var detalle = s.DetalleCambio ?? string.Empty;
+        var idx = detalle.IndexOf("[Objetivo:", StringComparison.OrdinalIgnoreCase);
+        if (idx >= 0)
+        {
+            var start = idx + 10;
+            var end = detalle.IndexOf(']', start);
+            if (end > start)
+            {
+                var clave = detalle.Substring(start, end - start).Trim().ToLowerInvariant();
+                if (!string.IsNullOrEmpty(clave))
+                {
+                    return clave;
+                }
+            }
+        }
+        return null;
+    }
+
+    public static string? ObtenerNombreItem(SolicitudAprobacion s)
+    {
+        var detalle = s.DetalleCambio ?? string.Empty;
+        var idxStart = detalle.IndexOf('\'');
+        if (idxStart >= 0)
+        {
+            var idxEnd = detalle.IndexOf('\'', idxStart + 1);
+            if (idxEnd > idxStart)
+            {
+                var nombreItem = detalle.Substring(idxStart + 1, idxEnd - idxStart - 1).Trim().ToLowerInvariant();
+                if (!string.IsNullOrEmpty(nombreItem))
+                {
+                    return nombreItem;
+                }
+            }
+        }
+        return null;
+    }
+
+    public static string ObtenerClaveObjetivo(SolicitudAprobacion s)
+    {
+        var objExplicito = ObtenerClaveObjetivoExplicita(s);
+        if (!string.IsNullOrEmpty(objExplicito))
+        {
+            return objExplicito;
+        }
+
+        var detalleId = ObtenerDetalleId(s);
+        if (detalleId.HasValue)
+        {
+            return $"detalle_{detalleId.Value}".ToLowerInvariant();
+        }
+
+        var nombreItem = ObtenerNombreItem(s);
+        if (!string.IsNullOrEmpty(nombreItem))
+        {
+            var tipoItem = string.IsNullOrWhiteSpace(s.Tipo) ? "ITEM" : s.Tipo.Trim();
+            return $"{tipoItem}_{nombreItem}".ToLowerInvariant();
+        }
+
+        var entidad = (s.Entidad ?? string.Empty).Trim().ToUpperInvariant();
+        if (entidad == "VENTA" || entidad == "VENTAS")
+        {
+            return "entidad_venta";
+        }
+
+        var detalle = (s.DetalleCambio ?? string.Empty).Trim().ToLowerInvariant();
+        if (detalle.StartsWith("solicitud de aprobación para os") || detalle.StartsWith("solicitud de aprobacion para os"))
+        {
+            return "entidad_ordenservicio";
+        }
+
+        if (detalle.StartsWith("modificación de precio en pedido lima") || detalle.StartsWith("modificacion de precio en pedido lima"))
+        {
+            return "entidad_pedidolima";
+        }
+
+        var superaId = ObtenerSuperaId(s);
+        if (superaId.HasValue)
+        {
+            return $"solicitud_{superaId.Value}".ToLowerInvariant();
+        }
+
+        return $"solicitud_{s.Id}".ToLowerInvariant();
+    }
+
+    public static async Task RetirarSolicitudesPendientesPorObjetivoAsync(
+        ApplicationDbContext context,
+        string entidad,
+        string entidadId,
+        string claveObjetivo,
+        string motivoRetiro,
+        CancellationToken ct = default)
+    {
+        var normalizadoEnt = entidad.Trim().ToUpperInvariant();
+        var normalizadoEntNombre = (normalizadoEnt == "ORDENSERVICIO" || normalizadoEnt == "ORDENESSERVICIO") ? "ORDENSERVICIO"
+            : (normalizadoEnt == "VENTA" || normalizadoEnt == "VENTAS") ? "VENTA"
+            : (normalizadoEnt == "PEDIDOLIMA" || normalizadoEnt == "PEDIDOSLIMA") ? "PEDIDOLIMA"
+            : normalizadoEnt;
+
+        var solicitudes = await context.SolicitudesAprobacion
+            .Where(s => s.Activo && s.EntidadId == entidadId && s.Estado == EstadoAprobacionGerencia.Pendiente)
+            .ToListAsync(ct);
+
+        foreach (var sol in solicitudes)
+        {
+            var solEnt = sol.Entidad.Trim().ToUpperInvariant();
+            var solNorm = (solEnt == "ORDENSERVICIO" || solEnt == "ORDENESSERVICIO") ? "ORDENSERVICIO"
+                : (solEnt == "VENTA" || solEnt == "VENTAS") ? "VENTA"
+                : (solEnt == "PEDIDOLIMA" || solEnt == "PEDIDOSLIMA") ? "PEDIDOLIMA"
+                : solEnt;
+
+            if (solNorm == normalizadoEntNombre && ObtenerClaveObjetivo(sol) == claveObjetivo)
+            {
+                sol.Activo = false;
+                sol.ObservacionesRespuesta = motivoRetiro;
+                sol.FechaRespuesta = DateTime.UtcNow;
+                sol.FechaModificacion = DateTime.UtcNow;
+            }
+        }
+    }
+
+    public static EstadoAprobacionGerencia CalcularEstadoAgregado(
+        IEnumerable<SolicitudAprobacion> solicitudes,
+        EstadoAprobacionGerencia? estadoFallback = null)
+    {
+        var solicitudesVigentes = solicitudes
+            .GroupBy(ObtenerClaveObjetivo)
+            .Select(g => g
+                .OrderByDescending(s => s.FechaSolicitud)
+                .ThenByDescending(s => s.FechaCreacion)
+                .ThenByDescending(s => s.Id)
+                .First())
+            .ToList();
+
+        var estados = solicitudesVigentes.Select(s => s.Estado).ToList();
+        if (estados.Count == 0)
+        {
+            return estadoFallback ?? EstadoAprobacionGerencia.NoAplica;
+        }
+
+        if (estados.Any(e => e == EstadoAprobacionGerencia.Rechazado))
+        {
+            return EstadoAprobacionGerencia.Rechazado;
+        }
+
+        if (estados.Any(e => e == EstadoAprobacionGerencia.Pendiente))
+        {
+            return EstadoAprobacionGerencia.Pendiente;
+        }
+
+        if (estados.Any(e => e == EstadoAprobacionGerencia.Aprobado))
+        {
+            return EstadoAprobacionGerencia.Aprobado;
+        }
+
+        return EstadoAprobacionGerencia.NoAplica;
+    }
+
     private async Task ActualizarEstadoEntidadVinculadaAsync(
         string entidad,
         string entidadIdStr,
@@ -229,39 +454,151 @@ public class AprobacionService : IAprobacionService
         if (!Guid.TryParse(entidadIdStr, out var entidadId)) return;
 
         var entUpper = entidad.Trim().ToUpperInvariant();
-        if (entUpper == "ORDENSERVICIO" || entUpper == "ORDENESSERVICIO")
+        var normalizadoEnt = (entUpper == "ORDENSERVICIO" || entUpper == "ORDENESSERVICIO") ? "ORDENSERVICIO"
+            : (entUpper == "VENTA" || entUpper == "VENTAS") ? "VENTA"
+            : (entUpper == "PEDIDOLIMA" || entUpper == "PEDIDOSLIMA") ? "PEDIDOLIMA"
+            : entUpper;
+
+        // Consultar todas las solicitudes activas de la BD para esta entidad
+        var solicitudesBd = await _context.SolicitudesAprobacion
+            .Where(s => s.Activo && s.EntidadId == entidadIdStr)
+            .ToListAsync(ct);
+
+        // Considerar también las solicitudes locales rastreadas en DbContext (en memoria / Added / Modified)
+        var solicitudesLocales = _context.SolicitudesAprobacion.Local
+            .Where(s => s.Activo && s.EntidadId == entidadIdStr)
+            .ToList();
+
+        var todasSolicitudes = solicitudesBd
+            .UnionBy(solicitudesLocales, s => s.Id)
+            .Where(s =>
+            {
+                var sUpper = s.Entidad.Trim().ToUpperInvariant();
+                var sNorm = (sUpper == "ORDENSERVICIO" || sUpper == "ORDENESSERVICIO") ? "ORDENSERVICIO"
+                    : (sUpper == "VENTA" || sUpper == "VENTAS") ? "VENTA"
+                    : (sUpper == "PEDIDOLIMA" || sUpper == "PEDIDOSLIMA") ? "PEDIDOLIMA"
+                    : sUpper;
+                return sNorm == normalizadoEnt;
+            })
+            .ToList();
+
+        if (normalizadoEnt == "ORDENSERVICIO")
         {
-            var orden = await _context.OrdenesServicio.FirstOrDefaultAsync(o => o.Id == entidadId, ct);
+            var orden = await _context.OrdenesServicio
+                .Include(o => o.Detalles)
+                .FirstOrDefaultAsync(o => o.Id == entidadId, ct);
+
             if (orden != null)
             {
-                orden.EstadoAprobacionGerencia = nuevoEstado;
-                orden.FechaAprobacionGerencia = DateTime.UtcNow;
-                if (usuarioId.HasValue) orden.UsuarioAprobacionGerenciaId = usuarioId;
-                if (!string.IsNullOrWhiteSpace(observaciones)) orden.ObservacionesAprobacionGerencia = observaciones.Trim();
+                var detallesActivos = orden.Detalles.Where(d => d.Activo).ToList();
+                var idsActivos = new HashSet<Guid>(detallesActivos.Select(d => d.Id));
+                var prodIds = detallesActivos.Where(d => d.ProductoId.HasValue).Select(d => d.ProductoId!.Value).Distinct().ToList();
+                var servIds = detallesActivos.Where(d => d.ServicioId.HasValue).Select(d => d.ServicioId!.Value).Distinct().ToList();
+
+                var nombresActivos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (prodIds.Count > 0)
+                {
+                    var pNombres = await _context.Productos.Where(p => prodIds.Contains(p.Id)).Select(p => p.Nombre).ToListAsync(ct);
+                    foreach (var n in pNombres) nombresActivos.Add(n.Trim().ToLowerInvariant());
+                }
+                if (servIds.Count > 0)
+                {
+                    var sNombres = await _context.Servicios.Where(s => servIds.Contains(s.Id)).Select(s => s.Nombre).ToListAsync(ct);
+                    foreach (var n in sNombres) nombresActivos.Add(n.Trim().ToLowerInvariant());
+                }
+                foreach (var d in detallesActivos.Where(d => d.TipoItem == TipoItemServicio.ManoDeObra || d.TipoItem == TipoItemServicio.Terceros))
+                {
+                    if (!string.IsNullOrWhiteSpace(d.Descripcion))
+                    {
+                        nombresActivos.Add(d.Descripcion.Trim().ToLowerInvariant());
+                    }
+                }
+
+                // Filtrar solicitudes para que ítems eliminados de la OS no influyan
+                var solicitudesRelevantes = todasSolicitudes.Where(s =>
+                {
+                    var dId = ObtenerDetalleId(s);
+                    if (dId.HasValue)
+                    {
+                        return idsActivos.Contains(dId.Value);
+                    }
+                    var item = ObtenerNombreItem(s);
+                    if (item != null)
+                    {
+                        return nombresActivos.Contains(item);
+                    }
+                    // Solicitud genérica de la orden: siempre relevante mientras la orden exista
+                    return true;
+                }).ToList();
+
+                var estadoAgregado = CalcularEstadoAgregado(solicitudesRelevantes, nuevoEstado);
+                orden.EstadoAprobacionGerencia = estadoAgregado;
+                if (estadoAgregado == EstadoAprobacionGerencia.Aprobado || estadoAgregado == EstadoAprobacionGerencia.Rechazado)
+                {
+                    orden.FechaAprobacionGerencia = DateTime.UtcNow;
+                    if (usuarioId.HasValue) orden.UsuarioAprobacionGerenciaId = usuarioId;
+                    if (!string.IsNullOrWhiteSpace(observaciones)) orden.ObservacionesAprobacionGerencia = observaciones.Trim();
+                }
                 orden.FechaModificacion = DateTime.UtcNow;
             }
         }
-        else if (entUpper == "VENTA" || entUpper == "VENTAS")
+        else if (normalizadoEnt == "VENTA")
         {
             var venta = await _context.Ventas.FirstOrDefaultAsync(v => v.Id == entidadId, ct);
             if (venta != null)
             {
-                venta.EstadoAprobacionGerencia = nuevoEstado;
-                venta.FechaAprobacionGerencia = DateTime.UtcNow;
-                if (usuarioId.HasValue) venta.UsuarioAprobacionGerenciaId = usuarioId;
-                if (!string.IsNullOrWhiteSpace(observaciones)) venta.ObservacionesAprobacionGerencia = observaciones.Trim();
+                var estadoAgregado = CalcularEstadoAgregado(todasSolicitudes, nuevoEstado);
+                venta.EstadoAprobacionGerencia = estadoAgregado;
+                if (estadoAgregado == EstadoAprobacionGerencia.Aprobado || estadoAgregado == EstadoAprobacionGerencia.Rechazado)
+                {
+                    venta.FechaAprobacionGerencia = DateTime.UtcNow;
+                    if (usuarioId.HasValue) venta.UsuarioAprobacionGerenciaId = usuarioId;
+                    if (!string.IsNullOrWhiteSpace(observaciones)) venta.ObservacionesAprobacionGerencia = observaciones.Trim();
+                }
                 venta.FechaModificacion = DateTime.UtcNow;
             }
         }
-        else if (entUpper == "PEDIDOLIMA" || entUpper == "PEDIDOSLIMA")
+        else if (normalizadoEnt == "PEDIDOLIMA")
         {
-            var pedido = await _context.PedidosLima.FirstOrDefaultAsync(p => p.Id == entidadId, ct);
+            var pedido = await _context.PedidosLima
+                .Include(p => p.Detalles)
+                .FirstOrDefaultAsync(p => p.Id == entidadId, ct);
+
             if (pedido != null)
             {
-                pedido.EstadoAprobacionGerencia = nuevoEstado;
-                pedido.FechaAprobacionGerencia = DateTime.UtcNow;
-                if (usuarioId.HasValue) pedido.UsuarioAprobacionGerenciaId = usuarioId;
-                if (!string.IsNullOrWhiteSpace(observaciones)) pedido.ObservacionesAprobacionGerencia = observaciones.Trim();
+                var detallesActivos = pedido.Detalles.Where(d => d.Activo).ToList();
+                var idsActivos = new HashSet<Guid>(detallesActivos.Select(d => d.Id));
+                var prodIds = detallesActivos.Select(d => d.ProductoId).Distinct().ToList();
+                var nombresActivos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (prodIds.Count > 0)
+                {
+                    var pNombres = await _context.Productos.Where(p => prodIds.Contains(p.Id)).Select(p => p.Nombre).ToListAsync(ct);
+                    foreach (var n in pNombres) nombresActivos.Add(n.Trim().ToLowerInvariant());
+                }
+
+                var solicitudesRelevantes = todasSolicitudes.Where(s =>
+                {
+                    var dId = ObtenerDetalleId(s);
+                    if (dId.HasValue)
+                    {
+                        return idsActivos.Contains(dId.Value);
+                    }
+                    var item = ObtenerNombreItem(s);
+                    if (item != null)
+                    {
+                        return nombresActivos.Contains(item);
+                    }
+                    return true;
+                }).ToList();
+
+                var estadoAgregado = CalcularEstadoAgregado(solicitudesRelevantes, nuevoEstado);
+                pedido.EstadoAprobacionGerencia = estadoAgregado;
+                if (estadoAgregado == EstadoAprobacionGerencia.Aprobado || estadoAgregado == EstadoAprobacionGerencia.Rechazado)
+                {
+                    pedido.FechaAprobacionGerencia = DateTime.UtcNow;
+                    if (usuarioId.HasValue) pedido.UsuarioAprobacionGerenciaId = usuarioId;
+                    if (!string.IsNullOrWhiteSpace(observaciones)) pedido.ObservacionesAprobacionGerencia = observaciones.Trim();
+                }
                 pedido.FechaModificacion = DateTime.UtcNow;
             }
         }

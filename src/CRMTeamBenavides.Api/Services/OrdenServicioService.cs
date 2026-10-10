@@ -612,31 +612,6 @@ public class OrdenServicioService : IOrdenServicioService
                     precioFinal = precioBase;
                 }
 
-                if (precioModificado)
-                {
-                    orden.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
-                    _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
-                    {
-                        Id = Guid.NewGuid(),
-                        Tipo = "CambioPrecio",
-                        Entidad = "OrdenServicio",
-                        EntidadId = orden.Id.ToString(),
-                        UsuarioSolicitanteId = usuarioId,
-                        FechaSolicitud = DateTime.UtcNow,
-                        Estado = EstadoAprobacionGerencia.Pendiente,
-                        DetalleCambio = $"Modificación de precio en repuesto '{producto.Nombre}': base S/ {precioBase:F2} -> solicitado S/ {precioFinal:F2}",
-                        ValorAnterior = precioBase,
-                        ValorSolicitado = precioFinal,
-                        Motivo = "Modificación de precio de repuesto en Orden de Servicio",
-                        FechaCreacion = DateTime.UtcNow,
-                        Activo = true
-                    });
-                }
-                else
-                {
-                    await ReevaluarAprobacionOrdenAsync(orden);
-                }
-
                 if (string.IsNullOrWhiteSpace(descripcion))
                 {
                     descripcion = producto.Nombre;
@@ -662,6 +637,7 @@ public class OrdenServicioService : IOrdenServicioService
 
                 var detalle = new DetalleServicio
                 {
+                    Id                     = Guid.NewGuid(),
                     OrdenServicioId        = orden.Id,
                     TipoItem               = tipoItem,
                     ProductoId             = producto.Id,
@@ -683,6 +659,31 @@ public class OrdenServicioService : IOrdenServicioService
                 if (!orden.Detalles.Contains(detalle))
                 {
                     orden.Detalles.Add(detalle);
+                }
+
+                if (precioModificado)
+                {
+                    orden.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
+                    _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
+                    {
+                        Id = Guid.NewGuid(),
+                        Tipo = "CambioPrecio",
+                        Entidad = "OrdenServicio",
+                        EntidadId = orden.Id.ToString(),
+                        UsuarioSolicitanteId = usuarioId,
+                        FechaSolicitud = DateTime.UtcNow,
+                        Estado = EstadoAprobacionGerencia.Pendiente,
+                        DetalleCambio = $"Modificación de precio en repuesto '{producto.Nombre}' [Detalle:{detalle.Id}]: base S/ {precioBase:F2} -> solicitado S/ {precioFinal:F2}",
+                        ValorAnterior = precioBase,
+                        ValorSolicitado = precioFinal,
+                        Motivo = "Modificación de precio de repuesto en Orden de Servicio",
+                        FechaCreacion = DateTime.UtcNow,
+                        Activo = true
+                    });
+                }
+                else
+                {
+                    await ReevaluarAprobacionOrdenAsync(orden);
                 }
                 RecalcularTotalesOrden(orden);
                 orden.FechaModificacion = DateTime.UtcNow;
@@ -733,31 +734,6 @@ public class OrdenServicioService : IOrdenServicioService
                 precioFinal = precioBaseServ;
             }
 
-            if (precioModificadoServ)
-            {
-                orden.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
-                _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
-                {
-                    Id = Guid.NewGuid(),
-                    Tipo = "CambioPrecio",
-                    Entidad = "OrdenServicio",
-                    EntidadId = orden.Id.ToString(),
-                    UsuarioSolicitanteId = usuarioId,
-                    FechaSolicitud = DateTime.UtcNow,
-                    Estado = EstadoAprobacionGerencia.Pendiente,
-                    DetalleCambio = $"Modificación de precio en servicio '{servicio.Nombre}': base S/ {precioBaseServ:F2} -> solicitado S/ {precioFinal:F2}",
-                    ValorAnterior = precioBaseServ,
-                    ValorSolicitado = precioFinal,
-                    Motivo = "Modificación de precio de servicio en Orden de Servicio",
-                    FechaCreacion = DateTime.UtcNow,
-                    Activo = true
-                });
-            }
-            else
-            {
-                await ReevaluarAprobacionOrdenAsync(orden);
-            }
-
             if (string.IsNullOrWhiteSpace(descripcion))
             {
                 descripcion = servicio.Nombre;
@@ -770,6 +746,7 @@ public class OrdenServicioService : IOrdenServicioService
 
             var detalle = new DetalleServicio
             {
+                Id                     = Guid.NewGuid(),
                 OrdenServicioId        = orden.Id,
                 TipoItem               = tipoItem,
                 ServicioId             = servicio.Id,
@@ -792,6 +769,32 @@ public class OrdenServicioService : IOrdenServicioService
             {
                 orden.Detalles.Add(detalle);
             }
+
+            if (precioModificadoServ)
+            {
+                orden.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
+                _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
+                {
+                    Id = Guid.NewGuid(),
+                    Tipo = "CambioPrecio",
+                    Entidad = "OrdenServicio",
+                    EntidadId = orden.Id.ToString(),
+                    UsuarioSolicitanteId = usuarioId,
+                    FechaSolicitud = DateTime.UtcNow,
+                    Estado = EstadoAprobacionGerencia.Pendiente,
+                    DetalleCambio = $"Modificación de precio en servicio '{servicio.Nombre}' [Detalle:{detalle.Id}]: base S/ {precioBaseServ:F2} -> solicitado S/ {precioFinal:F2}",
+                    ValorAnterior = precioBaseServ,
+                    ValorSolicitado = precioFinal,
+                    Motivo = "Modificación de precio de servicio en Orden de Servicio",
+                    FechaCreacion = DateTime.UtcNow,
+                    Activo = true
+                });
+            }
+            else
+            {
+                await ReevaluarAprobacionOrdenAsync(orden);
+            }
+
             RecalcularTotalesOrden(orden);
             orden.FechaModificacion = DateTime.UtcNow;
 
@@ -852,7 +855,10 @@ public class OrdenServicioService : IOrdenServicioService
         }
     }
 
-    public async Task<ServiceResult<bool>> EliminarDetalleAsync(Guid ordenServicioId, Guid detalleId)
+    public async Task<ServiceResult<bool>> EliminarDetalleAsync(
+        Guid ordenServicioId,
+        Guid detalleId,
+        Guid? soloTecnicoId = null)
     {
         var orden = await _context.OrdenesServicio
             .Include(o => o.Detalles)
@@ -861,6 +867,11 @@ public class OrdenServicioService : IOrdenServicioService
         if (orden is null)
         {
             return ServiceResult<bool>.NotFound();
+        }
+
+        if (soloTecnicoId.HasValue && orden.TecnicoAsignadoId != soloTecnicoId.Value)
+        {
+            return ServiceResult<bool>.Forbidden("No tiene autorización para eliminar detalles de órdenes asignadas a otro técnico.");
         }
 
         if (orden.Estado == EstadoOrdenServicio.Entregada || orden.Estado == EstadoOrdenServicio.Cancelada)
@@ -951,6 +962,7 @@ public class OrdenServicioService : IOrdenServicioService
         Guid detalleId,
         ActualizarDetalleServicioRequest request,
         bool puedeModificarPrecios,
+        Guid? soloTecnicoId = null,
         Guid? usuarioId = null)
     {
         var orden = await _context.OrdenesServicio
@@ -960,6 +972,12 @@ public class OrdenServicioService : IOrdenServicioService
         if (orden is null)
         {
             return ServiceResult<DetalleServicioResponse>.NotFound("Orden de servicio no encontrada.");
+        }
+
+        if (soloTecnicoId.HasValue && orden.TecnicoAsignadoId != soloTecnicoId.Value)
+        {
+            return ServiceResult<DetalleServicioResponse>.Forbidden(
+                "No tiene autorización para modificar detalles de órdenes asignadas a otro técnico.");
         }
 
         if (orden.Estado == EstadoOrdenServicio.Entregada || orden.Estado == EstadoOrdenServicio.Cancelada)
@@ -1015,6 +1033,11 @@ public class OrdenServicioService : IOrdenServicioService
                 nombreItem = serv.Nombre;
             }
         }
+        else if (detalle.TipoItem == TipoItemServicio.ManoDeObra || detalle.TipoItem == TipoItemServicio.Terceros)
+        {
+            // Para mano de obra y terceros, la referencia base es el precio unitario acordado previamente
+            precioBase = detalle.PrecioUnitario;
+        }
 
         if (request.PrecioUnitario.HasValue)
         {
@@ -1025,23 +1048,38 @@ public class OrdenServicioService : IOrdenServicioService
 
             if (precioDifiere)
             {
-                orden.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
-                _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
+                if (!puedeModificarPrecios)
                 {
-                    Id = Guid.NewGuid(),
-                    Tipo = "CambioPrecio",
-                    Entidad = "OrdenServicio",
-                    EntidadId = orden.Id.ToString(),
-                    UsuarioSolicitanteId = usuarioId,
-                    FechaSolicitud = DateTime.UtcNow,
-                    Estado = EstadoAprobacionGerencia.Pendiente,
-                    DetalleCambio = $"Actualización de precio en '{nombreItem}': base S/ {precioBase:F2} -> solicitado S/ {nuevoPrecio:F2}",
-                    ValorAnterior = precioBase,
-                    ValorSolicitado = nuevoPrecio,
-                    Motivo = "Modificación de precio de ítem existente en Orden de Servicio",
-                    FechaCreacion = DateTime.UtcNow,
-                    Activo = true
-                });
+                    var claveDetalle = $"detalle_{detalle.Id}".ToLowerInvariant();
+                    await AprobacionService.RetirarSolicitudesPendientesPorObjetivoAsync(
+                        _context,
+                        "OrdenServicio",
+                        orden.Id.ToString(),
+                        claveDetalle,
+                        "Superada automáticamente por nueva modificación de precio del ítem.");
+
+                    orden.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
+                    _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
+                    {
+                        Id = Guid.NewGuid(),
+                        Tipo = "CambioPrecio",
+                        Entidad = "OrdenServicio",
+                        EntidadId = orden.Id.ToString(),
+                        UsuarioSolicitanteId = usuarioId,
+                        FechaSolicitud = DateTime.UtcNow,
+                        Estado = EstadoAprobacionGerencia.Pendiente,
+                        DetalleCambio = $"Actualización de precio en '{nombreItem}' [Detalle:{detalle.Id}]: base S/ {precioBase:F2} -> solicitado S/ {nuevoPrecio:F2}",
+                        ValorAnterior = precioBase,
+                        ValorSolicitado = nuevoPrecio,
+                        Motivo = "Modificación de precio de ítem existente en Orden de Servicio",
+                        FechaCreacion = DateTime.UtcNow,
+                        Activo = true
+                    });
+                }
+                else
+                {
+                    await ReevaluarAprobacionOrdenAsync(orden);
+                }
             }
             else
             {
@@ -1199,31 +1237,50 @@ public class OrdenServicioService : IOrdenServicioService
                 $"Transición de estado no permitida de '{orden.Estado}' a '{request.NuevoEstado}'.");
         }
 
-        if (request.NuevoEstado == EstadoOrdenServicio.Aprobada || request.NuevoEstado == EstadoOrdenServicio.Entregada)
+        if (request.NuevoEstado == EstadoOrdenServicio.Aprobada
+            || request.NuevoEstado == EstadoOrdenServicio.Entregada
+            || request.NuevoEstado == EstadoOrdenServicio.Lista)
         {
-            if (request.NuevoEstado == EstadoOrdenServicio.Aprobada && orden.EstadoPresupuestoCliente == EstadoPresupuestoCliente.Rechazado)
+            if (request.NuevoEstado == EstadoOrdenServicio.Aprobada)
             {
-                return ServiceResult<OrdenServicioResponse>.Invalid(
-                    "No se puede aprobar la orden de servicio porque el presupuesto fue rechazado por el cliente.");
-            }
+                if (orden.EstadoPresupuestoCliente == EstadoPresupuestoCliente.Rechazado)
+                {
+                    return ServiceResult<OrdenServicioResponse>.Invalid(
+                        "No se puede aprobar la orden de servicio porque el presupuesto fue rechazado por el cliente.");
+                }
 
-            // «Aprobada» es «presupuesto aprobado»: sin la respuesta del cliente no se aprueba.
-            if (orden.EstadoPresupuestoCliente != EstadoPresupuestoCliente.Aprobado)
-            {
-                return ServiceResult<OrdenServicioResponse>.Invalid(
-                    "No se puede aprobar la orden de servicio: falta que el cliente apruebe el presupuesto.");
+                // «Aprobada» es «presupuesto aprobado»: sin la respuesta del cliente no se aprueba.
+                if (orden.EstadoPresupuestoCliente != EstadoPresupuestoCliente.Aprobado)
+                {
+                    return ServiceResult<OrdenServicioResponse>.Invalid(
+                        "No se puede aprobar la orden de servicio: falta que el cliente apruebe el presupuesto.");
+                }
             }
 
             if (orden.EstadoAprobacionGerencia == EstadoAprobacionGerencia.Pendiente)
             {
+                var accion = request.NuevoEstado switch
+                {
+                    EstadoOrdenServicio.Aprobada => "aprobar",
+                    EstadoOrdenServicio.Entregada => "entregar",
+                    EstadoOrdenServicio.Lista => "marcar como lista",
+                    _ => "avanzar"
+                };
                 return ServiceResult<OrdenServicioResponse>.Invalid(
-                    $"No se puede {(request.NuevoEstado == EstadoOrdenServicio.Aprobada ? "aprobar" : "entregar")} la orden de servicio porque requiere aprobación de Gerencia previa.");
+                    $"No se puede {accion} la orden de servicio porque requiere aprobación de Gerencia previa.");
             }
 
             if (orden.EstadoAprobacionGerencia == EstadoAprobacionGerencia.Rechazado)
             {
+                var accion = request.NuevoEstado switch
+                {
+                    EstadoOrdenServicio.Aprobada => "aprobar",
+                    EstadoOrdenServicio.Entregada => "entregar",
+                    EstadoOrdenServicio.Lista => "marcar como lista",
+                    _ => "avanzar"
+                };
                 return ServiceResult<OrdenServicioResponse>.Invalid(
-                    $"No se puede {(request.NuevoEstado == EstadoOrdenServicio.Aprobada ? "aprobar" : "entregar")} la orden de servicio porque la aprobación de Gerencia fue rechazada.");
+                    $"No se puede {accion} la orden de servicio porque la aprobación de Gerencia fue rechazada.");
             }
         }
 
@@ -1639,6 +1696,13 @@ public class OrdenServicioService : IOrdenServicioService
                 .FirstOrDefaultAsync();
         }
 
+        await AprobacionService.RetirarSolicitudesPendientesPorObjetivoAsync(
+            _context,
+            "OrdenServicio",
+            orden.Id.ToString(),
+            "entidad_ordenservicio",
+            "Superada automáticamente por nueva solicitud de aprobación de la orden.");
+
         var solicitud = new SolicitudAprobacion
         {
             Id = Guid.NewGuid(),
@@ -1868,47 +1932,147 @@ public class OrdenServicioService : IOrdenServicioService
             .Where(s => servIds.Contains(s.Id))
             .ToDictionaryAsync(s => s.Id, s => s.PrecioSugerido);
 
-        bool tienePreciosModificados = false;
+        var prodNombres = await _context.Productos
+            .Where(p => prodIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.Nombre);
+
+        var servNombres = await _context.Servicios
+            .Where(s => servIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, s => s.Nombre);
+
+        var detallesConPrecioModificado = new HashSet<Guid>();
+        var itemsConPrecioModificado = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var r in repuestos)
         {
             if (prodPrecios.TryGetValue(r.ProductoId!.Value, out var basePrice) && Math.Abs(r.PrecioUnitario - basePrice) > 0.001m)
             {
-                tienePreciosModificados = true;
-                break;
-            }
-        }
-
-        if (!tienePreciosModificados)
-        {
-            foreach (var s in servicios)
-            {
-                if (servPrecios.TryGetValue(s.ServicioId!.Value, out var basePrice) && Math.Abs(s.PrecioUnitario - basePrice) > 0.001m)
+                detallesConPrecioModificado.Add(r.Id);
+                if (prodNombres.TryGetValue(r.ProductoId!.Value, out var nombre))
                 {
-                    tienePreciosModificados = true;
-                    break;
+                    itemsConPrecioModificado.Add(nombre.Trim().ToLowerInvariant());
                 }
             }
         }
 
-        if (!tienePreciosModificados)
+        foreach (var s in servicios)
+        {
+            if (servPrecios.TryGetValue(s.ServicioId!.Value, out var basePrice) && Math.Abs(s.PrecioUnitario - basePrice) > 0.001m)
+            {
+                detallesConPrecioModificado.Add(s.Id);
+                if (servNombres.TryGetValue(s.ServicioId!.Value, out var nombre))
+                {
+                    itemsConPrecioModificado.Add(nombre.Trim().ToLowerInvariant());
+                }
+            }
+        }
+
+        var solicitudesActivas = await _context.SolicitudesAprobacion
+            .Where(s => s.Entidad == "OrdenServicio" && s.EntidadId == orden.Id.ToString() && s.Activo)
+            .ToListAsync();
+
+        var manoDeObraYTerceros = detallesActivos
+            .Where(d => d.TipoItem == TipoItemServicio.ManoDeObra || d.TipoItem == TipoItemServicio.Terceros)
+            .ToList();
+
+        if (solicitudesActivas.Count > 0)
+        {
+            foreach (var sol in solicitudesActivas)
+            {
+                var dId = AprobacionService.ObtenerDetalleId(sol);
+                if (dId.HasValue)
+                {
+                    var dItem = manoDeObraYTerceros.FirstOrDefault(m => m.Id == dId.Value);
+                    if (dItem != null && sol.ValorAnterior.HasValue && Math.Abs(dItem.PrecioUnitario - sol.ValorAnterior.Value) > 0.001m)
+                    {
+                        detallesConPrecioModificado.Add(dItem.Id);
+                        if (!string.IsNullOrWhiteSpace(dItem.Descripcion))
+                        {
+                            itemsConPrecioModificado.Add(dItem.Descripcion.Trim().ToLowerInvariant());
+                        }
+                    }
+                }
+                else if (sol.ValorAnterior.HasValue && sol.ValorSolicitado.HasValue)
+                {
+                    var itemCorrespondiente = manoDeObraYTerceros
+                        .FirstOrDefault(m => Math.Abs(m.PrecioUnitario - sol.ValorSolicitado.Value) < 0.001m);
+
+                    if (itemCorrespondiente != null && Math.Abs(itemCorrespondiente.PrecioUnitario - sol.ValorAnterior.Value) > 0.001m)
+                    {
+                        detallesConPrecioModificado.Add(itemCorrespondiente.Id);
+                        var nombreMo = AprobacionService.ObtenerNombreItem(sol);
+                        if (!string.IsNullOrEmpty(nombreMo))
+                        {
+                            itemsConPrecioModificado.Add(nombreMo);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Retirar solicitudes pendientes ÚNICAMENTE de ítems que ya no están modificados o fueron eliminados.
+        // NUNCA retirar solicitudes genéricas de la orden (ENTIDAD_ORDENSERVICIO) al corregir o revertir ítems.
+        foreach (var sol in solicitudesActivas.Where(s => s.Estado == EstadoAprobacionGerencia.Pendiente))
+        {
+            var dId = AprobacionService.ObtenerDetalleId(sol);
+            if (dId.HasValue)
+            {
+                if (!detallesConPrecioModificado.Contains(dId.Value))
+                {
+                    sol.Activo = false;
+                    sol.ObservacionesRespuesta = "Retirada automáticamente por eliminación o reversión del ítem modificado.";
+                    sol.FechaRespuesta = DateTime.UtcNow;
+                    sol.FechaModificacion = DateTime.UtcNow;
+                }
+            }
+            else
+            {
+                var item = AprobacionService.ObtenerNombreItem(sol);
+                if (item != null)
+                {
+                    if (!itemsConPrecioModificado.Contains(item))
+                    {
+                        sol.Activo = false;
+                        sol.ObservacionesRespuesta = "Retirada automáticamente por eliminación o reversión del ítem modificado.";
+                        sol.FechaRespuesta = DateTime.UtcNow;
+                        sol.FechaModificacion = DateTime.UtcNow;
+                    }
+                }
+                // Las solicitudes genéricas de la orden no tienen dId ni item: permanecen activas.
+            }
+        }
+
+        // Filtrar solicitudes relevantes para el estado agregado
+        var solicitudesRelevantes = solicitudesActivas
+            .Where(s =>
+            {
+                if (!s.Activo) return false;
+                var dId = AprobacionService.ObtenerDetalleId(s);
+                if (dId.HasValue)
+                {
+                    return detallesActivos.Any(d => d.Id == dId.Value);
+                }
+                var item = AprobacionService.ObtenerNombreItem(s);
+                if (item != null)
+                {
+                    return itemsConPrecioModificado.Contains(item) ||
+                           detallesActivos.Any(d => (d.Descripcion ?? "").Trim().Equals(item, StringComparison.OrdinalIgnoreCase));
+                }
+                // Solicitud genérica de la orden (ENTIDAD_ORDENSERVICIO o global): siempre relevante mientras esté activa
+                return true;
+            })
+            .ToList();
+
+        if (solicitudesRelevantes.Count == 0)
         {
             if (orden.EstadoAprobacionGerencia is EstadoAprobacionGerencia.Pendiente or EstadoAprobacionGerencia.Rechazado)
             {
                 orden.EstadoAprobacionGerencia = EstadoAprobacionGerencia.NoAplica;
                 orden.ObservacionesAprobacionGerencia = null;
             }
-
-            var solicitudesPendientes = await _context.SolicitudesAprobacion
-                .Where(s => s.Entidad == "OrdenServicio" && s.EntidadId == orden.Id.ToString() && s.Estado == EstadoAprobacionGerencia.Pendiente && s.Activo)
-                .ToListAsync();
-
-            foreach (var sol in solicitudesPendientes)
-            {
-                sol.Activo = false;
-                sol.ObservacionesRespuesta = "Retirada automáticamente por eliminación o reversión del ítem modificado.";
-                sol.FechaRespuesta = DateTime.UtcNow;
-                sol.FechaModificacion = DateTime.UtcNow;
-            }
+        }
+        else
+        {
+            orden.EstadoAprobacionGerencia = AprobacionService.CalcularEstadoAgregado(solicitudesRelevantes);
         }
     }
 

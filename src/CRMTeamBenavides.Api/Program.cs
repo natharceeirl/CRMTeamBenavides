@@ -142,6 +142,11 @@ builder.Services.AddAuthorization(options =>
             PermisosDefinidos.PortalAcceso,
             PermisosDefinidos.VentasCrear)));
 
+    options.AddPolicy(OrdenServicioEndpoints.PoliticaModificarDetalles, policy =>
+        policy.Requirements.Add(new PermissionRequirement(
+            PermisosDefinidos.OrdenesEditar,
+            PermisosDefinidos.OrdenesAgregarItems)));
+
     options.AddPolicy(VentaEndpoints.PoliticaVerVentas, policy =>
         policy.Requirements.Add(new PermissionRequirement(
             PermisosDefinidos.VentasVer,
