@@ -4,12 +4,21 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// google-services.json trae el proyecto de Firebase y no se sube al repositorio:
+// cada quien pone el suyo (ver docs/notificaciones.md). Sin el archivo la app
+// compila igual y funciona sin notificaciones al teléfono.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "pe.natharce.crm_team_benavides"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // flutter_local_notifications usa APIs de fecha de Java 8 en Android antiguos.
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -46,4 +55,8 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }

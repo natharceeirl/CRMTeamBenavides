@@ -43,10 +43,36 @@ Sección `Notificaciones` de `appsettings.json`; las credenciales nunca van en e
 
 Si se pide Firebase y faltan las credenciales, la API sigue en modo registro y lo avisa en el log.
 
-**Por revisar al conectar Firebase:** `FirebaseAdmin` 3.7 marca el token de registro como obsoleto en favor del FID (identificador de instalación). Hoy se usa el token, que es lo que entrega el plugin de Flutter.
+`FirebaseAdmin` 3.7 marca el token de registro como obsoleto en favor del FID (identificador de instalación). Se sigue usando el token porque es lo que entrega `firebase_messaging` en Flutter, que no lo marca como obsoleto.
+
+## En la app
+
+`lib/avisos_telefono.dart`:
+
+- `main` inicia Firebase antes de abrir la app. Si no puede (falta `google-services.json`, pruebas o escritorio), la app sigue igual, solo con la campanita.
+- Al entrar pide el permiso de notificaciones (Android 13+ e iOS) y registra el token. Si la persona no da el permiso, no se registra. Si Firebase renueva el token, se registra de nuevo.
+- Al cerrar sesión, `ApiHttp.cerrarSesion` da de baja el token antes del logout.
+- Con la app abierta, la notificación se muestra igual (en Android con `flutter_local_notifications`) y la campanita se refresca.
+- Al tocarla se marca como leída y se abre su pantalla. Si abrió la app cerrada, espera a que la sesión cargue.
+- El canal de Android se llama `avisos`, como pide la API, con el ícono `ic_notificacion` (una llave, porque Android pinta el ícono de un solo color) y el acento del tema.
+
+## Configurar Firebase en tu máquina
+
+Los archivos de Firebase no se suben al repositorio (están en `.gitignore`). Sin ellos todo compila y funciona, sin avisos al teléfono.
+
+1. En la consola de Firebase, abrir el proyecto y agregar la app Android `pe.natharce.crm_team_benavides`.
+2. Descargar `google-services.json` y copiarlo en `src/movil/android/app/`. Gradle aplica el plugin de Google Services solo si el archivo existe.
+3. En «Configuración del proyecto → Cuentas de servicio», generar una clave privada y guardarla fuera del repositorio.
+4. En la API:
+
+   ```
+   dotnet user-secrets set "Notificaciones:Proveedor" "Firebase"
+   dotnet user-secrets set "Notificaciones:Firebase:CredencialesRuta" "C:/secretos/firebase/cuenta-servicio.json"
+   ```
+
+5. Probar en un teléfono real o en un emulador con imagen **Google APIs**: la imagen AOSP («default») no trae Google Play Services y no recibe notificaciones.
 
 ## Pendiente
 
-- Proyecto de Firebase: uno de prueba de NATHARCE para Android y, para producción, el de la empresa.
-- En la app: permisos, registro del teléfono y abrir la pantalla al tocar la notificación del sistema.
-- iPhone: necesita la cuenta de Apple (para la clave de notificaciones) y una Mac.
+- Proyecto de Firebase: hoy se usa uno de prueba de NATHARCE para Android; para producción, el de la empresa.
+- iPhone: necesita la cuenta de Apple (para la clave de notificaciones), `GoogleService-Info.plist` y una Mac.

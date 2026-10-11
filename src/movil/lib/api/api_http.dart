@@ -37,6 +37,10 @@ class ApiHttp {
   /// La app escucha esto para mandar al login cuando ya no hay forma de renovar.
   void Function()? alExpirarSesion;
 
+  /// Token de Firebase registrado en esta sesión. Al cerrarla se da de baja para
+  /// que el teléfono deje de recibir los avisos de ese usuario.
+  String? tokenDispositivo;
+
   Sesion? get sesion => _sesion;
 
   Future<Sesion?> recuperarSesionGuardada() async {
@@ -63,18 +67,29 @@ class ApiHttp {
   }
 
   Future<void> cerrarSesion() async {
+    final token = _sesion?.accessToken;
+    final autorizacion = Options(headers: {'Authorization': 'Bearer $token'});
     try {
-      final token = _sesion?.accessToken;
-      if (token != null) {
+      final dispositivo = tokenDispositivo;
+      if (token != null && dispositivo != null) {
         await _dioSinToken.post<void>(
-          '/api/auth/logout',
-          options: Options(headers: {'Authorization': 'Bearer $token'}),
+          '/api/notificaciones/dispositivos/baja',
+          data: {'token': dispositivo},
+          options: autorizacion,
         );
+      }
+    } catch (_) {
+      // Si falla, el teléfono pasa al siguiente usuario que entre en él.
+    }
+    try {
+      if (token != null) {
+        await _dioSinToken.post<void>('/api/auth/logout', options: autorizacion);
       }
     } catch (_) {
       // Si la API falla o no hay conexión, el logout local procede de todas formas.
     } finally {
       _sesion = null;
+      tokenDispositivo = null;
       await _almacen.borrar();
     }
   }
@@ -499,14 +514,12 @@ class ApiHttp {
   Future<void> marcarTodasLeidas() => _enviar(() => _dio.put<void>('/api/notificaciones/leidas'));
 
   /// Registra el teléfono para recibir avisos (token de Firebase). Plataforma: 0 Android, 1 iOS.
-  Future<void> registrarDispositivo(String token, int plataforma) => _enviar(
-        () => _dio.post<void>('/api/notificaciones/dispositivos', data: {'token': token, 'plataforma': plataforma}),
-      );
-
-  /// Al cerrar sesión el teléfono deja de recibir los avisos de ese usuario.
-  Future<void> darDeBajaDispositivo(String token) => _enviar(
-        () => _dio.post<void>('/api/notificaciones/dispositivos/baja', data: {'token': token}),
-      );
+  Future<void> registrarDispositivo(String token, int plataforma) async {
+    await _enviar(
+      () => _dio.post<void>('/api/notificaciones/dispositivos', data: {'token': token, 'plataforma': plataforma}),
+    );
+    tokenDispositivo = token;
+  }
 
   // --- Aprobaciones de Gerencia ---
 

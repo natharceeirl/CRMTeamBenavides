@@ -2,4 +2,6 @@
 <resources>
     <!-- Fondo de marca, igual que en la web y en el tema de la app. -->
     <color name="fondo_marca">#F3F2F2</color>
+    <!-- Acento del tema (Marca.acento), para el ícono de las notificaciones. -->
+    <color name="acento_marca">#EC3013</color>
 </resources>

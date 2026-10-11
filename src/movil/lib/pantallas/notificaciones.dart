@@ -12,12 +12,16 @@ import 'comunes.dart';
 
 /// La pantalla a la que lleva un aviso, o null si su lugar es el inicio (el
 /// cliente ve sus citas y pedidos ahí).
-String? rutaDeNotificacion(NotificacionApi aviso, {required bool esCliente}) {
-  switch (aviso.entidad) {
+String? rutaDeNotificacion(NotificacionApi aviso, {required bool esCliente}) =>
+    rutaDeEntidad(aviso.entidad, aviso.entidadId, esCliente: esCliente);
+
+/// Lo mismo a partir de los datos que trae la notificación del teléfono.
+String? rutaDeEntidad(String? entidad, String? entidadId, {required bool esCliente}) {
+  switch (entidad) {
     case 'Aprobaciones':
       return '/aprobaciones';
     case 'OrdenServicio':
-      return aviso.entidadId == null ? null : '/ordenes/${aviso.entidadId}';
+      return entidadId == null || entidadId.isEmpty ? null : '/ordenes/$entidadId';
     case 'Cita':
       return esCliente ? null : '/agenda';
     default:
