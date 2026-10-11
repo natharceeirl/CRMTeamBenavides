@@ -5,6 +5,7 @@ using CRMTeamBenavides.Api.Features.Ventas;
 using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 
 namespace CRMTeamBenavides.Api.Features.OrdenesServicio;
@@ -187,37 +188,11 @@ public static class OrdenServicioEndpoints
         .RequireAuthorization(PoliticaVerOrdenes)
         .WithName("ImprimirFormatoAtencionOrdenServicio");
 
-        group.MapPost("/", async (
-            AperturaOrdenServicioRequest request,
-            ClaimsPrincipal user,
-            IOrdenServicioService service) =>
-        {
-            var usuarioId = ObtenerUsuarioId(user);
-            var result = await service.CreateAperturaAsync(request, usuarioId);
-            return result.Status switch
-            {
-                ServiceResultStatus.Success => Results.Created($"/api/ordenes-servicio/{result.Data!.Id}", result.Data),
-                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
-                _ => Results.Problem()
-            };
-        })
+        group.MapPost("/", AbrirOrdenAsync)
         .RequireAuthorization(PermisosDefinidos.OrdenesCrear)
         .WithName("CreateAperturaOrdenServicio");
 
-        group.MapPost("/apertura", async (
-            AperturaOrdenServicioRequest request,
-            ClaimsPrincipal user,
-            IOrdenServicioService service) =>
-        {
-            var usuarioId = ObtenerUsuarioId(user);
-            var result = await service.CreateAperturaAsync(request, usuarioId);
-            return result.Status switch
-            {
-                ServiceResultStatus.Success => Results.Created($"/api/ordenes-servicio/{result.Data!.Id}", result.Data),
-                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
-                _ => Results.Problem()
-            };
-        })
+        group.MapPost("/apertura", AbrirOrdenAsync)
         .RequireAuthorization(PermisosDefinidos.OrdenesCrear)
         .WithName("CreateAperturaOrdenServicioAlias");
 
@@ -569,6 +544,39 @@ public static class OrdenServicioEndpoints
         })
         .RequireAuthorization(PoliticaVerOrdenes)
         .WithName("GetPagosOrdenServicio");
+    }
+
+    /// <summary>
+    /// Abre la orden. Registrar ahí mismo un cliente o una unidad exige además
+    /// clientes.crear o unidades.crear, como en sus pantallas.
+    /// </summary>
+    private static async Task<IResult> AbrirOrdenAsync(
+        AperturaOrdenServicioRequest request,
+        ClaimsPrincipal user,
+        IAuthorizationService autorizacion,
+        IOrdenServicioService service)
+    {
+        if (request.ClienteNuevo is not null
+            && !(await autorizacion.AuthorizeAsync(user, PermisosDefinidos.ClientesCrear)).Succeeded)
+        {
+            return Results.Json(new { error = "No tienes permiso para registrar clientes." }, statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        if (request.UnidadNueva is not null
+            && !(await autorizacion.AuthorizeAsync(user, PermisosDefinidos.UnidadesCrear)).Succeeded)
+        {
+            return Results.Json(new { error = "No tienes permiso para registrar unidades." }, statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        var result = await service.CreateAperturaAsync(request, ObtenerUsuarioId(user));
+        return result.Status switch
+        {
+            ServiceResultStatus.Success => Results.Created($"/api/ordenes-servicio/{result.Data!.Id}", result.Data),
+            ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+            ServiceResultStatus.Conflict => Results.Conflict(new { error = result.Error }),
+            ServiceResultStatus.Forbidden => Results.Json(new { error = result.Error }, statusCode: StatusCodes.Status403Forbidden),
+            _ => Results.Problem()
+        };
     }
 
     private static Guid? ObtenerUsuarioId(ClaimsPrincipal user)

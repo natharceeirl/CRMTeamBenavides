@@ -77,7 +77,7 @@ public class VehiculoService : IVehiculoService
             return ServiceResult<VehiculoResponse>.Invalid("No se puede asignar un vehículo a un cliente inactivo.");
         }
 
-        string? placaNormalizada = string.IsNullOrWhiteSpace(request.Placa) ? null : request.Placa.Trim().ToUpperInvariant();
+        var placaNormalizada = NormalizarPlaca(request.Placa);
 
         if (placaNormalizada is not null)
         {
@@ -90,44 +90,7 @@ public class VehiculoService : IVehiculoService
             }
         }
 
-        decimal? lecturaActual = request.LecturaMedidorActual;
-        int? kilometraje = request.Kilometraje;
-        decimal? horasUso = request.HorasUso;
-
-        if (lecturaActual.HasValue)
-        {
-            if (request.TipoMedidor == TipoMedidor.Kilometraje)
-                kilometraje = (int)Math.Round(lecturaActual.Value);
-            else
-                horasUso = lecturaActual.Value;
-        }
-        else
-        {
-            lecturaActual = request.TipoMedidor == TipoMedidor.Kilometraje
-                ? (kilometraje.HasValue ? (decimal?)kilometraje.Value : null)
-                : horasUso;
-        }
-
-        var vehiculo = new Vehiculo
-        {
-            ClienteId            = request.ClienteId,
-            Placa                = placaNormalizada,
-            TipoUnidad           = request.TipoUnidad,
-            Marca                = request.Marca.Trim(),
-            Modelo               = request.Modelo.Trim(),
-            Anio                 = request.Anio,
-            NumeroSerieVIN       = string.IsNullOrWhiteSpace(request.NumeroSerieVIN) ? null : request.NumeroSerieVIN.Trim().ToUpperInvariant(),
-            NumeroMotor          = string.IsNullOrWhiteSpace(request.NumeroMotor) ? null : request.NumeroMotor.Trim().ToUpperInvariant(),
-            TipoMedidor          = request.TipoMedidor,
-            Kilometraje          = kilometraje,
-            HorasUso             = horasUso,
-            LecturaMedidorActual = lecturaActual,
-            ValorEstimado        = request.ValorEstimado,
-            Color                = request.Color?.Trim(),
-            Observaciones        = request.Observaciones?.Trim(),
-            FechaCreacion        = DateTime.UtcNow,
-            Activo               = true
-        };
+        var vehiculo = ConstruirVehiculo(request);
 
         _context.Vehiculos.Add(vehiculo);
         await _context.SaveChangesAsync();
@@ -237,6 +200,57 @@ public class VehiculoService : IVehiculoService
         await _context.SaveChangesAsync();
 
         return ServiceResult<bool>.Success(true);
+    }
+
+    internal static string? NormalizarPlaca(string? placa) =>
+        string.IsNullOrWhiteSpace(placa) ? null : placa.Trim().ToUpperInvariant();
+
+    /// <summary>
+    /// La unidad lista para guardar, con la placa y la serie normalizadas y la
+    /// lectura en el campo de su medidor. No valida: eso lo hace quien la crea
+    /// (marca, modelo, cliente activo y placa sin repetir). Lo usa también la
+    /// apertura de orden con unidad nueva.
+    /// </summary>
+    internal static Vehiculo ConstruirVehiculo(CreateVehiculoRequest request)
+    {
+        decimal? lecturaActual = request.LecturaMedidorActual;
+        int? kilometraje = request.Kilometraje;
+        decimal? horasUso = request.HorasUso;
+
+        if (lecturaActual.HasValue)
+        {
+            if (request.TipoMedidor == TipoMedidor.Kilometraje)
+                kilometraje = (int)Math.Round(lecturaActual.Value);
+            else
+                horasUso = lecturaActual.Value;
+        }
+        else
+        {
+            lecturaActual = request.TipoMedidor == TipoMedidor.Kilometraje
+                ? (kilometraje.HasValue ? (decimal?)kilometraje.Value : null)
+                : horasUso;
+        }
+
+        return new Vehiculo
+        {
+            ClienteId            = request.ClienteId,
+            Placa                = NormalizarPlaca(request.Placa),
+            TipoUnidad           = request.TipoUnidad,
+            Marca                = request.Marca.Trim(),
+            Modelo               = request.Modelo.Trim(),
+            Anio                 = request.Anio,
+            NumeroSerieVIN       = string.IsNullOrWhiteSpace(request.NumeroSerieVIN) ? null : request.NumeroSerieVIN.Trim().ToUpperInvariant(),
+            NumeroMotor          = string.IsNullOrWhiteSpace(request.NumeroMotor) ? null : request.NumeroMotor.Trim().ToUpperInvariant(),
+            TipoMedidor          = request.TipoMedidor,
+            Kilometraje          = kilometraje,
+            HorasUso             = horasUso,
+            LecturaMedidorActual = lecturaActual,
+            ValorEstimado        = request.ValorEstimado,
+            Color                = request.Color?.Trim(),
+            Observaciones        = request.Observaciones?.Trim(),
+            FechaCreacion        = DateTime.UtcNow,
+            Activo               = true
+        };
     }
 
     private static string? ValidateBasicFields(string? placa, string marca, string modelo)

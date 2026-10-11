@@ -3,6 +3,8 @@ import type { Dayjs } from 'dayjs'
 import { solicitar } from './http'
 import { avisoSegun, type AvisoExito } from './avisos'
 import { clavesPortal } from './portal'
+import { clavesClientes } from './clientes'
+import { clavesVehiculos } from './vehiculos'
 import type {
   ActualizarOrdenRequest,
   ActualizarDetalleRequest,
@@ -277,8 +279,13 @@ export function useAbrirOrden() {
       ) },
     mutationFn: (datos: AperturaOrdenRequest) =>
       solicitar<OrdenServicioResponse>('/ordenes-servicio', { metodo: 'POST', cuerpo: datos }),
+    // La orden puede traer un cliente o una unidad nuevos: también se refrescan.
     onSuccess: async () => {
-      await consultas.invalidateQueries({ queryKey: clavesOrdenes.todas })
+      await Promise.all([
+        consultas.invalidateQueries({ queryKey: clavesOrdenes.todas }),
+        consultas.invalidateQueries({ queryKey: clavesClientes.todos }),
+        consultas.invalidateQueries({ queryKey: clavesVehiculos.todos }),
+      ])
     },
   })
 }

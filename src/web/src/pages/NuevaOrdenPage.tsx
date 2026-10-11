@@ -4,16 +4,16 @@ import { Button, DatePicker, Form, Input, InputNumber, Select } from 'antd'
 import { useNavigate, useSearchParams } from 'react-router'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
-import { ModalAltaRapidaCliente, ModalAltaRapidaUnidad } from '../components/ModalesAltaRapida'
 import { useClientePorDocumento } from '../api/clientes'
 import { useHistorialServicioUnidad } from '../api/portal'
-import type { ClienteResponse } from '../api/tipos'
+import { TIPO_DOCUMENTO_CLIENTE, type AperturaOrdenRequest } from '../api/tipos'
 import { fechaCorta } from '../utils/formato'
 import {
   MODALIDADES_ATENCION,
   TIPOS_ATENCION,
   TIPOS_FALLA,
   motivoEntregaInvalida,
+  nombresEstado,
   useAbrirOrden,
   useOrdenes,
 } from '../api/ordenes'
@@ -21,17 +21,44 @@ import { useVehiculos } from '../api/vehiculos'
 import { useCita, useVincularOrdenCita } from '../api/citas'
 import { useTecnicos } from '../api/usuarios'
 import {
+  MEDIDOR_HORAS,
+  TIPOS_UNIDAD,
   identificadorUnidad,
   lecturaActualUnidad,
   midePorHoras,
   textoLectura,
   ultimaLecturaRegistrada,
 } from '../utils/unidades'
+import {
+  medidorPorTipoUnidad,
+  motivoDocumentoInvalido,
+  ordenAbiertaDeUnidad,
+  tipoDocumentoSugerido,
+} from '../utils/recepcion'
 import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
 
+type CamposClienteNuevo = {
+  tipoDocumento: number
+  nombreCompleto: string
+  telefono?: string
+  email?: string
+}
+
+type CamposUnidadNueva = {
+  tipoUnidad: number
+  tipoMedidor: number
+  marca: string
+  modelo: string
+  placa?: string
+  numeroSerieVIN?: string
+  color?: string
+}
+
 type Campos = {
   vehiculoId: string
+  clienteNuevo: CamposClienteNuevo
+  unidadNueva: CamposUnidadNueva
   tecnicoAsignadoId?: string
   tipoAtencion: number
   modalidadAtencion: number
@@ -47,6 +74,13 @@ const sinVacios = (valor?: string) => (valor?.trim() ? valor.trim() : null)
 // Las atenciones anteriores que se muestran al elegir la unidad.
 const ATENCIONES_A_MOSTRAR = 3
 
+const unidadNuevaInicial: CamposUnidadNueva = {
+  tipoUnidad: 0,
+  tipoMedidor: medidorPorTipoUnidad(0),
+  marca: 'Yamaha',
+  modelo: '',
+}
+
 export function NuevaOrdenPage() {
   const navigate = useNavigate()
   const [formulario] = Form.useForm<Campos>()
@@ -61,23 +95,34 @@ export function NuevaOrdenPage() {
   const abrir = useAbrirOrden()
 
   // Recepción por documento: con el cliente encontrado, la lista de unidades se
-  // reduce a las suyas; si no existe, se registra ahí mismo.
+  // reduce a las suyas; si no existe, sus datos y los de su unidad se escriben
+  // aquí mismo y se guardan junto con la orden.
   const [documento, setDocumento] = useState('')
   const [documentoBuscado, setDocumentoBuscado] = useState<string | null>(null)
   const clienteBuscado = useClientePorDocumento(documentoBuscado)
   const cliente = clienteBuscado.data ?? null
-  const [modalCliente, setModalCliente] = useState(false)
-  const [clienteDeUnidadNueva, setClienteDeUnidadNueva] = useState<Pick<ClienteResponse, 'id' | 'nombreCompleto'> | null>(
-    null,
-  )
+  const clienteNoEncontrado = Boolean(documentoBuscado) && clienteBuscado.isSuccess && !cliente
+  // Un cliente nuevo llega con su unidad: hacen falta los dos permisos.
+  const registraClienteNuevo = clienteNoEncontrado && puedeRegistrarCliente && puedeRegistrarUnidad
+  const [quiereUnidadNueva, setQuiereUnidadNueva] = useState(false)
+  const registraUnidadNueva = registraClienteNuevo || (Boolean(cliente) && quiereUnidadNueva && puedeRegistrarUnidad)
+
   const unidadesVisibles = cliente
     ? (vehiculos.data ?? []).filter((vehiculo) => vehiculo.clienteId === cliente.id)
     : (vehiculos.data ?? [])
 
   const buscarCliente = (valor: string) => {
     setDocumentoBuscado(valor.trim() || null)
+    setQuiereUnidadNueva(false)
     formulario.setFieldsValue({ vehiculoId: undefined })
   }
+
+  // El tipo de documento del cliente nuevo se propone por la cantidad de dígitos.
+  useEffect(() => {
+    if (clienteNoEncontrado && documentoBuscado) {
+      formulario.setFieldsValue({ clienteNuevo: { tipoDocumento: tipoDocumentoSugerido(documentoBuscado) } })
+    }
+  }, [clienteNoEncontrado, documentoBuscado, formulario])
 
   // Si el cliente tiene una sola unidad, queda elegida.
   const unicaUnidad = cliente && unidadesVisibles.length === 1 ? unidadesVisibles[0].id : null
@@ -104,21 +149,37 @@ export function NuevaOrdenPage() {
   }, [datosCita, formulario])
 
   const vehiculoId = Form.useWatch('vehiculoId', formulario)
-  const unidad = (vehiculos.data ?? []).find((vehiculo) => vehiculo.id === vehiculoId)
-  const historial = useHistorialServicioUnidad(vehiculoId ?? null)
+  const medidorUnidadNueva = Form.useWatch(['unidadNueva', 'tipoMedidor'], formulario)
+  const unidad = registraUnidadNueva ? undefined : (vehiculos.data ?? []).find((vehiculo) => vehiculo.id === vehiculoId)
+  const historial = useHistorialServicioUnidad(unidad ? unidad.id : null)
   const atencionesAnteriores = (historial.data ?? []).slice(0, ATENCIONES_A_MOSTRAR)
-  const enHoras = unidad ? midePorHoras(unidad) : false
+  let enHoras = false
+  if (registraUnidadNueva) enHoras = medidorUnidadNueva === MEDIDOR_HORAS
+  else if (unidad) enHoras = midePorHoras(unidad)
   // El medidor no retrocede: la lectura nueva se compara con la de la unidad y
   // con la de sus órdenes anteriores.
-  const ordenesDeLaUnidad = useOrdenes({ vehiculoId }, Boolean(vehiculoId))
+  const ordenesDeLaUnidad = useOrdenes({ vehiculoId: unidad?.id }, Boolean(unidad))
   const ultimaLectura = unidad
     ? ultimaLecturaRegistrada(enHoras, lecturaActualUnidad(unidad), ordenesDeLaUnidad.data ?? [])
     : null
   const textoUltimaLectura = ultimaLectura == null ? '—' : textoLectura(ultimaLectura, enHoras)
+  let ayudaLectura: string | undefined
+  if (registraUnidadNueva) ayudaLectura = 'Queda como la lectura actual de la unidad.'
+  else if (unidad) ayudaLectura = `Última lectura registrada: ${textoUltimaLectura}`
+  // Una unidad tiene una sola orden abierta; el backend lo exige, aquí se avisa antes.
+  const ordenAbierta = unidad ? ordenAbiertaDeUnidad(ordenesDeLaUnidad.data) : null
+  const textoOrdenAbierta = ordenAbierta
+    ? `Ya tiene abierta la orden ${ordenAbierta.numeroOrden ?? ''} (${nombresEstado[ordenAbierta.estadoId]}). Entrégala o cancélala antes de abrir otra.`
+    : null
+  // Se avisa apenas llegan sus órdenes, sin esperar a que se intente guardar.
+  const unidadElegidaId = unidad?.id
+  useEffect(() => {
+    if (unidadElegidaId) formulario.validateFields(['vehiculoId']).catch(() => undefined)
+  }, [textoOrdenAbierta, unidadElegidaId, formulario])
 
   const enviar = async (campos: Campos) => {
-    const orden = await abrir.mutateAsync({
-      vehiculoId: campos.vehiculoId,
+    const lectura = campos.lecturaIngreso
+    const base = {
       tecnicoAsignadoId: campos.tecnicoAsignadoId ?? null,
       tipoAtencion: campos.tipoAtencion,
       modalidadAtencion: campos.modalidadAtencion,
@@ -126,9 +187,41 @@ export function NuevaOrdenPage() {
       motivoFalla: sinVacios(campos.motivoFalla),
       observaciones: sinVacios(campos.observaciones),
       fechaEstimadaEntrega: campos.fechaEstimadaEntrega?.toISOString() ?? null,
-      kilometrajeIngreso: !enHoras && campos.lecturaIngreso != null ? Math.round(campos.lecturaIngreso) : null,
-      horasUsoIngreso: enHoras ? (campos.lecturaIngreso ?? null) : null,
-    })
+      kilometrajeIngreso: !enHoras && lectura != null ? Math.round(lectura) : null,
+      horasUsoIngreso: enHoras ? (lectura ?? null) : null,
+    }
+
+    // Lo que se registra se arma según lo que se ve en pantalla, no según los
+    // valores que el formulario pudo guardar de una búsqueda anterior.
+    const solicitud: AperturaOrdenRequest = registraUnidadNueva
+      ? {
+          ...base,
+          vehiculoId: null,
+          clienteId: registraClienteNuevo ? null : (cliente?.id ?? null),
+          clienteNuevo: registraClienteNuevo
+            ? {
+                tipoDocumento: campos.clienteNuevo.tipoDocumento,
+                numeroDocumento: documentoBuscado ?? '',
+                nombreCompleto: campos.clienteNuevo.nombreCompleto.trim(),
+                telefono: sinVacios(campos.clienteNuevo.telefono),
+                email: sinVacios(campos.clienteNuevo.email),
+              }
+            : null,
+          unidadNueva: {
+            tipoUnidad: campos.unidadNueva.tipoUnidad,
+            tipoMedidor: campos.unidadNueva.tipoMedidor,
+            marca: campos.unidadNueva.marca.trim(),
+            modelo: campos.unidadNueva.modelo.trim(),
+            placa: sinVacios(campos.unidadNueva.placa)?.toUpperCase() ?? null,
+            numeroSerieVIN: sinVacios(campos.unidadNueva.numeroSerieVIN)?.toUpperCase() ?? null,
+            numeroMotor: null,
+            anio: null,
+            color: sinVacios(campos.unidadNueva.color),
+          },
+        }
+      : { ...base, vehiculoId: campos.vehiculoId }
+
+    const orden = await abrir.mutateAsync(solicitud)
 
     if (citaId) {
       // La orden ya existe: si el vínculo falla, se sigue a la orden igual y la
@@ -136,6 +229,17 @@ export function NuevaOrdenPage() {
       await vincular.mutateAsync({ id: citaId, ordenServicioId: orden.id }).catch(() => undefined)
     }
     navigate(`/ordenes/${orden.id}`)
+  }
+
+  const ayudaDocumento = () => {
+    if (!documentoBuscado || !clienteBuscado.isSuccess) {
+      return 'Con el DNI o RUC la lista muestra solo las unidades del cliente; si es nuevo, se registra aquí mismo.'
+    }
+    if (cliente) {
+      return `${cliente.nombreCompleto} · ${unidadesVisibles.length === 1 ? '1 unidad' : `${unidadesVisibles.length} unidades`}`
+    }
+    if (registraClienteNuevo) return `No hay un cliente con el documento ${documentoBuscado}: completa sus datos abajo.`
+    return `No hay un cliente con el documento ${documentoBuscado}. Registrar clientes y unidades necesita permisos que tu usuario no tiene.`
   }
 
   return (
@@ -166,42 +270,19 @@ export function NuevaOrdenPage() {
           requiredMark={false}
           className="formulario"
           onFinish={enviar}
-          initialValues={{ tipoAtencion: 0, modalidadAtencion: 0 }}
+          scrollToFirstError
+          initialValues={{
+            tipoAtencion: 0,
+            modalidadAtencion: 0,
+            clienteNuevo: { tipoDocumento: TIPO_DOCUMENTO_CLIENTE.dni },
+            unidadNueva: unidadNuevaInicial,
+          }}
         >
           <section className="bloque">
-            <h2>Unidad que ingresa</h2>
+            <h2>Cliente y unidad</h2>
             <div className="formulario-grid">
               {puedeBuscarCliente && (
-                <Form.Item
-                  label="Documento del cliente"
-                  className="ancho-completo"
-                  extra={
-                    documentoBuscado && clienteBuscado.isSuccess ? (
-                      cliente ? (
-                        <>
-                          {cliente.nombreCompleto} ·{' '}
-                          {unidadesVisibles.length === 1 ? '1 unidad' : `${unidadesVisibles.length} unidades`}
-                          {puedeRegistrarUnidad && (
-                            <Button type="link" size="small" onClick={() => setClienteDeUnidadNueva(cliente)}>
-                              Registrar unidad
-                            </Button>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          No hay un cliente con el documento {documentoBuscado}.
-                          {puedeRegistrarCliente && (
-                            <Button type="link" size="small" onClick={() => setModalCliente(true)}>
-                              Registrar cliente
-                            </Button>
-                          )}
-                        </>
-                      )
-                    ) : (
-                      'Opcional: con el DNI o RUC la lista muestra solo las unidades del cliente.'
-                    )
-                  }
-                >
+                <Form.Item label="Documento del cliente" className="ancho-completo" extra={ayudaDocumento()}>
                   <Input.Search
                     allowClear
                     enterButton="Buscar"
@@ -214,43 +295,166 @@ export function NuevaOrdenPage() {
                   />
                 </Form.Item>
               )}
-              <Form.Item
-                label="Unidad"
-                name="vehiculoId"
-                className="ancho-completo"
-                rules={[{ required: true, message: 'Elige la unidad que ingresa al taller' }]}
-                extra={
-                  atencionesAnteriores.length > 0 ? (
-                    <ul className="lista-simple">
-                      {atencionesAnteriores.map((atencion) => (
-                        <li key={atencion.ordenServicioId}>
-                          {fechaCorta(atencion.fechaIngreso)} · {atencion.numeroOrden ?? 'Sin número'} · {atencion.estado}
-                          {atencion.motivoFalla ? ` · ${atencion.motivoFalla}` : ''}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : unidad && historial.isSuccess ? (
-                    'Primera atención de esta unidad en el taller.'
-                  ) : undefined
-                }
-              >
-                <Select
-                  showSearch
-                  optionFilterProp="label"
-                  loading={vehiculos.isPending}
-                  placeholder={cliente ? 'Elige una unidad del cliente' : 'Busca por placa, serie, modelo o cliente'}
-                  notFoundContent={cliente ? 'El cliente no tiene unidades registradas' : undefined}
-                  options={unidadesVisibles.map((vehiculo) => ({
-                    value: vehiculo.id,
-                    label: `${vehiculo.marca} ${vehiculo.modelo} · ${identificadorUnidad(vehiculo)} · ${vehiculo.clienteNombre}`,
-                  }))}
-                />
-              </Form.Item>
+
+              {registraClienteNuevo && (
+                <div className="panel-formulario ancho-completo" style={{ marginBottom: 24 }}>
+                  <h3 style={{ marginBottom: 12 }}>Cliente nuevo · {documentoBuscado}</h3>
+                  <div className="formulario-grid">
+                    <Form.Item
+                      label="Tipo de documento"
+                      name={['clienteNuevo', 'tipoDocumento']}
+                      rules={[
+                        {
+                          validator: async (_, tipo: number) => {
+                            const motivo = motivoDocumentoInvalido(tipo, documentoBuscado ?? '')
+                            if (motivo) throw new Error(motivo)
+                          },
+                        },
+                      ]}
+                    >
+                      <Select
+                        options={[
+                          { value: TIPO_DOCUMENTO_CLIENTE.dni, label: 'DNI' },
+                          { value: TIPO_DOCUMENTO_CLIENTE.ruc, label: 'RUC' },
+                          { value: TIPO_DOCUMENTO_CLIENTE.otro, label: 'Otro (carné de extranjería, pasaporte)' },
+                        ]}
+                      />
+                    </Form.Item>
+                    <Form.Item
+                      label="Nombre completo o razón social"
+                      name={['clienteNuevo', 'nombreCompleto']}
+                      rules={[{ required: true, whitespace: true, message: 'Ingresa el nombre del cliente' }]}
+                    >
+                      <Input maxLength={200} />
+                    </Form.Item>
+                    <Form.Item label="Teléfono" name={['clienteNuevo', 'telefono']}>
+                      <Input maxLength={30} />
+                    </Form.Item>
+                    <Form.Item
+                      label="Correo"
+                      name={['clienteNuevo', 'email']}
+                      rules={[{ type: 'email', message: 'Correo inválido' }]}
+                    >
+                      <Input maxLength={150} />
+                    </Form.Item>
+                  </div>
+                </div>
+              )}
+
+              {registraUnidadNueva ? (
+                <div className="panel-formulario ancho-completo" style={{ marginBottom: 24 }}>
+                  <div className="seccion-titulo" style={{ marginBottom: 12 }}>
+                    <h3>Unidad nueva{cliente ? ` de ${cliente.nombreCompleto}` : ''}</h3>
+                    {!registraClienteNuevo && (
+                      <Button type="link" onClick={() => setQuiereUnidadNueva(false)}>
+                        Elegir una unidad registrada
+                      </Button>
+                    )}
+                  </div>
+                  <div className="formulario-grid">
+                    <Form.Item label="Tipo de unidad" name={['unidadNueva', 'tipoUnidad']}>
+                      <Select
+                        options={TIPOS_UNIDAD.map((tipo) => ({ value: tipo.value, label: tipo.label }))}
+                        onChange={(tipo: number) =>
+                          formulario.setFieldsValue({ unidadNueva: { tipoMedidor: medidorPorTipoUnidad(tipo) } })
+                        }
+                      />
+                    </Form.Item>
+                    <Form.Item label="Medidor" name={['unidadNueva', 'tipoMedidor']}>
+                      <Select
+                        options={[
+                          { value: 0, label: 'Kilómetros' },
+                          { value: MEDIDOR_HORAS, label: 'Horas de uso' },
+                        ]}
+                      />
+                    </Form.Item>
+                    <Form.Item
+                      label="Marca"
+                      name={['unidadNueva', 'marca']}
+                      rules={[{ required: true, whitespace: true, message: 'Ingresa la marca' }]}
+                    >
+                      <Input maxLength={100} />
+                    </Form.Item>
+                    <Form.Item
+                      label="Modelo"
+                      name={['unidadNueva', 'modelo']}
+                      rules={[{ required: true, whitespace: true, message: 'Ingresa el modelo' }]}
+                    >
+                      <Input maxLength={100} />
+                    </Form.Item>
+                    <Form.Item label="Placa" name={['unidadNueva', 'placa']} extra="Opcional: náutica y generadores no tienen.">
+                      <Input maxLength={20} style={{ textTransform: 'uppercase' }} />
+                    </Form.Item>
+                    <Form.Item label="N.° de serie o VIN" name={['unidadNueva', 'numeroSerieVIN']}>
+                      <Input maxLength={50} style={{ textTransform: 'uppercase' }} />
+                    </Form.Item>
+                    <Form.Item label="Color" name={['unidadNueva', 'color']}>
+                      <Input maxLength={50} />
+                    </Form.Item>
+                  </div>
+                </div>
+              ) : (
+                <Form.Item
+                  label="Unidad"
+                  name="vehiculoId"
+                  className="ancho-completo"
+                  rules={[
+                    { required: true, message: 'Elige la unidad que ingresa al taller' },
+                    {
+                      validator: async () => {
+                        if (textoOrdenAbierta) throw new Error(textoOrdenAbierta)
+                      },
+                    },
+                  ]}
+                  extra={
+                    <>
+                      {cliente && puedeRegistrarUnidad && (
+                        <Button
+                          type="link"
+                          size="small"
+                          style={{ paddingInline: 0 }}
+                          onClick={() => {
+                            setQuiereUnidadNueva(true)
+                            formulario.setFieldsValue({ vehiculoId: undefined })
+                          }}
+                        >
+                          + Registrar unidad nueva
+                        </Button>
+                      )}
+                      {atencionesAnteriores.length > 0 ? (
+                        <ul className="lista-simple">
+                          {atencionesAnteriores.map((atencion) => (
+                            <li key={atencion.ordenServicioId}>
+                              {fechaCorta(atencion.fechaIngreso)} · {atencion.numeroOrden ?? 'Sin número'} · {atencion.estado}
+                              {atencion.motivoFalla ? ` · ${atencion.motivoFalla}` : ''}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : unidad && historial.isSuccess ? (
+                        <div>Primera atención de esta unidad en el taller.</div>
+                      ) : null}
+                    </>
+                  }
+                >
+                  <Select
+                    showSearch
+                    optionFilterProp="label"
+                    loading={vehiculos.isPending}
+                    placeholder={cliente ? 'Elige una unidad del cliente' : 'Busca por placa, serie, modelo o cliente'}
+                    notFoundContent={cliente ? 'El cliente no tiene unidades registradas' : undefined}
+                    options={unidadesVisibles.map((vehiculo) => ({
+                      value: vehiculo.id,
+                      label: `${vehiculo.marca} ${vehiculo.modelo} · ${identificadorUnidad(vehiculo)} · ${vehiculo.clienteNombre}`,
+                    }))}
+                  />
+                </Form.Item>
+              )}
+
               <Form.Item
                 label={enHoras ? 'Horas de uso al ingresar' : 'Kilometraje al ingresar'}
                 name="lecturaIngreso"
                 dependencies={['vehiculoId']}
-                extra={unidad ? `Última lectura registrada: ${textoUltimaLectura}` : undefined}
+                extra={ayudaLectura}
                 rules={[
                   {
                     validator: async (_, lectura: number | null | undefined) => {
@@ -325,31 +529,6 @@ export function NuevaOrdenPage() {
           </section>
         </Form>
       </div>
-
-      <ModalAltaRapidaCliente
-        abierto={modalCliente}
-        numeroDocumento={documentoBuscado ?? ''}
-        onCerrar={() => setModalCliente(false)}
-        onRegistrado={(nuevo) => {
-          setModalCliente(false)
-          const numero = nuevo.numeroDocumento ?? nuevo.documentoIdentidad ?? documentoBuscado
-          setDocumento(numero ?? '')
-          setDocumentoBuscado(numero)
-          // Un cliente nuevo todavía no tiene unidades: se pasa directo a registrar la suya.
-          if (puedeRegistrarUnidad) setClienteDeUnidadNueva(nuevo)
-        }}
-      />
-      {clienteDeUnidadNueva && (
-        <ModalAltaRapidaUnidad
-          abierto
-          cliente={clienteDeUnidadNueva}
-          onCerrar={() => setClienteDeUnidadNueva(null)}
-          onRegistrada={(nueva) => {
-            setClienteDeUnidadNueva(null)
-            formulario.setFieldsValue({ vehiculoId: nueva.id })
-          }}
-        />
-      )}
     </>
   )
 }

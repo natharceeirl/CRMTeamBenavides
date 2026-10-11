@@ -3,6 +3,7 @@ using CRMTeamBenavides.Api.Features.Clientes;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace CRMTeamBenavides.Api.Services;
 
@@ -193,12 +194,18 @@ public class ClienteService : IClienteService
             return ServiceResult<ClienteResponse>.Invalid("NumeroDocumento es obligatorio.");
         }
 
-        var numDoc = request.NumeroDocumento.Trim();
-        var tipoDoc = request.TipoDocumento ?? TipoDocumentoCliente.DNI;
+        // Las mismas reglas que el alta completa: DNI de 8 dígitos y RUC de 11.
+        var (tipoValidado, numeroValidado, errorDoc) = ValidarYResolverDocumento(
+            request.TipoDocumento ?? TipoDocumentoCliente.DNI, request.NumeroDocumento, null);
+        if (errorDoc is not null)
+        {
+            return ServiceResult<ClienteResponse>.Invalid(errorDoc);
+        }
 
-        var clienteExistente = await _context.Clientes
-            .FirstOrDefaultAsync(c => c.Activo && (c.NumeroDocumento == numDoc || c.DocumentoIdentidad == numDoc));
+        var numDoc = numeroValidado!;
+        var tipoDoc = tipoValidado ?? TipoDocumentoCliente.DNI;
 
+        var clienteExistente = await BuscarActivoPorDocumentoAsync(numDoc);
         if (clienteExistente != null)
         {
             return ServiceResult<ClienteResponse>.Success(MapToResponse(clienteExistente));
@@ -218,12 +225,32 @@ public class ClienteService : IClienteService
         };
 
         _context.Clientes.Add(cliente);
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // Otro usuario registró el mismo documento a la vez: el índice único
+            // frenó el duplicado y se devuelve el que quedó, como si ya existiera.
+            _context.Entry(cliente).State = EntityState.Detached;
+            var registrado = await BuscarActivoPorDocumentoAsync(numDoc);
+            if (registrado is null) throw;
+            return ServiceResult<ClienteResponse>.Success(MapToResponse(registrado));
+        }
 
         return ServiceResult<ClienteResponse>.Success(MapToResponse(cliente));
     }
 
-    private static (TipoDocumentoCliente? tipo, string? numero, string? error) ValidarYResolverDocumento(
+    private Task<Cliente?> BuscarActivoPorDocumentoAsync(string numeroDocumento) =>
+        _context.Clientes.AsNoTracking().FirstOrDefaultAsync(c =>
+            c.Activo && (c.NumeroDocumento == numeroDocumento || c.DocumentoIdentidad == numeroDocumento));
+
+    /// <summary>
+    /// Tipo y número de documento normalizados, o el error si el número no cumple
+    /// el tipo (DNI de 8 dígitos, RUC de 11). Lo usa también la apertura de orden.
+    /// </summary>
+    internal static (TipoDocumentoCliente? tipo, string? numero, string? error) ValidarYResolverDocumento(
         TipoDocumentoCliente? tipoRequest,
         string? numeroDocRequest,
         string? docIdentidadRequest)

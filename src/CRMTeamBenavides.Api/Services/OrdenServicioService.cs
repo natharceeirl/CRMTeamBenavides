@@ -1,10 +1,12 @@
 using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Features.OrdenesServicio;
+using CRMTeamBenavides.Api.Features.Vehiculos;
 using CRMTeamBenavides.Api.Features.Ventas;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace CRMTeamBenavides.Api.Services;
 
@@ -169,15 +171,18 @@ public class OrdenServicioService : IOrdenServicioService
         AperturaOrdenServicioRequest request,
         Guid? usuarioId = null)
     {
-        var vehiculo = await _context.Vehiculos
-            .Include(v => v.Cliente)
-            .FirstOrDefaultAsync(v => v.Id == request.VehiculoId && v.Activo);
+        // 1. Qué unidad ingresa: una registrada o una nueva con su cliente, nunca las dos.
+        var conUnidadNueva = request.UnidadNueva is not null;
+        if (!conUnidadNueva && request.VehiculoId is null)
+            return ServiceResult<OrdenServicioResponse>.Invalid("Elige la unidad que ingresa o registra una nueva.");
+        if (conUnidadNueva && request.VehiculoId is not null)
+            return ServiceResult<OrdenServicioResponse>.Invalid("Elige una unidad registrada o registra una nueva, no las dos.");
+        if (!conUnidadNueva && (request.ClienteId is not null || request.ClienteNuevo is not null))
+            return ServiceResult<OrdenServicioResponse>.Invalid("Con una unidad registrada no se indica cliente: la orden toma el de la unidad.");
+        if (conUnidadNueva && (request.ClienteId is null) == (request.ClienteNuevo is null))
+            return ServiceResult<OrdenServicioResponse>.Invalid("La unidad nueva necesita su cliente: uno registrado o uno nuevo.");
 
-        if (vehiculo is null)
-        {
-            return ServiceResult<OrdenServicioResponse>.Invalid("El vehículo indicado no existe o está inactivo.");
-        }
-
+        // 2. Todo se valida antes de escribir: si algo falla, no queda nada a medias.
         Usuario? tecnico = null;
         if (request.TecnicoAsignadoId.HasValue)
         {
@@ -187,6 +192,15 @@ public class OrdenServicioService : IOrdenServicioService
             if (tecnico is null)
             {
                 return ServiceResult<OrdenServicioResponse>.Invalid("El técnico asignado no existe o está inactivo.");
+            }
+
+            // La misma regla que al reasignar: solo se asigna a quien tiene el rol Técnico.
+            var esTecnico = await _context.UsuarioRoles
+                .Where(ur => ur.UsuarioId == tecnico.Id && ur.Rol.Activo)
+                .AnyAsync(ur => ur.Rol.Nombre == RolesDefinidos.Tecnico);
+            if (!esTecnico)
+            {
+                return ServiceResult<OrdenServicioResponse>.Invalid($"{tecnico.NombreCompleto} no tiene el rol Técnico: no se le puede asignar la orden.");
             }
         }
 
@@ -198,65 +212,185 @@ public class OrdenServicioService : IOrdenServicioService
             return ServiceResult<OrdenServicioResponse>.Invalid(motivoEntrega);
         }
 
-        // Un medidor no retrocede: la lectura nueva no puede ser menor que la de
-        // la unidad ni que la de sus órdenes anteriores.
-        var lecturaNueva = LecturaSegunMedidor(
-            vehiculo.TipoMedidor, request.KilometrajeIngreso, request.HorasUsoIngreso, request.LecturaMedidorIngreso);
-        if (lecturaNueva.HasValue)
+        Cliente? clienteNuevo = null;
+        Cliente? clienteDeUnidadNueva = null;
+        Vehiculo? vehiculoNuevo = null;
+
+        if (conUnidadNueva)
         {
-            var ultimaDeOrdenes = await UltimaLecturaDeOrdenesAsync(vehiculo.Id, vehiculo.TipoMedidor);
-            var ultimaRegistrada = new[] { LecturaActualDeUnidad(vehiculo), ultimaDeOrdenes }.Max();
-            var motivoLectura = MotivoLecturaMenor(
-                lecturaNueva.Value, ultimaRegistrada, vehiculo.TipoMedidor, "la última registrada para la unidad");
-            if (motivoLectura is not null)
+            if (request.ClienteNuevo is not null)
             {
-                return ServiceResult<OrdenServicioResponse>.Invalid(motivoLectura);
+                var (cliente, errorCliente) = await PrepararClienteNuevoAsync(request.ClienteNuevo);
+                if (errorCliente is not null) return errorCliente;
+                clienteNuevo = cliente;
+                clienteDeUnidadNueva = cliente;
+            }
+            else
+            {
+                clienteDeUnidadNueva = await _context.Clientes
+                    .FirstOrDefaultAsync(c => c.Id == request.ClienteId!.Value);
+                if (clienteDeUnidadNueva is null)
+                    return ServiceResult<OrdenServicioResponse>.Invalid("El cliente indicado no existe.");
+                if (!clienteDeUnidadNueva.Activo)
+                    return ServiceResult<OrdenServicioResponse>.Invalid("El cliente está dado de baja: reactívalo antes de registrarle una unidad.");
             }
 
-            AvanzarLecturaDeUnidad(vehiculo, lecturaNueva.Value);
+            var (vehiculo, errorUnidad) = await PrepararUnidadNuevaAsync(request, clienteDeUnidadNueva!);
+            if (errorUnidad is not null) return errorUnidad;
+            vehiculoNuevo = vehiculo;
         }
 
-        var numeroOrden = await GenerarNumeroOrdenAsync();
-
-        var orden = new OrdenServicio
+        // 3. Una sola transacción: cliente nuevo, unidad nueva y orden se guardan juntos o nada.
+        OrdenServicio orden;
+        Vehiculo vehiculoOrden;
+        await using var transaccion = await _context.Database.BeginTransactionAsync();
+        try
         {
-            VehiculoId             = request.VehiculoId,
-            ClienteId              = vehiculo.ClienteId,
-            TecnicoAsignadoId      = request.TecnicoAsignadoId,
-            NumeroOrden            = numeroOrden,
-            Observaciones          = request.Observaciones?.Trim(),
-            MotivoFalla            = request.MotivoFalla?.Trim() ?? request.Observaciones?.Trim(),
-            FechaEstimadaEntrega   = request.FechaEstimadaEntrega,
-            TipoAtencion           = request.TipoAtencion,
-            ModalidadAtencion      = request.ModalidadAtencion,
-            TipoFalla              = request.TipoFalla,
-            KilometrajeIngreso     = request.KilometrajeIngreso ?? vehiculo.Kilometraje,
-            HorasUsoIngreso        = request.HorasUsoIngreso ?? vehiculo.HorasUso,
-            LecturaMedidorIngreso  = request.LecturaMedidorIngreso ?? lecturaNueva ?? vehiculo.LecturaMedidorActual,
-            Estado                 = EstadoOrdenServicio.Abierta,
-            FechaApertura          = ahora,
-            FechaIngreso           = ahora,
-            FechaCreacion          = DateTime.UtcNow,
-            Activo                 = true
-        };
+            if (vehiculoNuevo is not null)
+            {
+                if (clienteNuevo is not null) _context.Clientes.Add(clienteNuevo);
+                _context.Vehiculos.Add(vehiculoNuevo);
+                vehiculoNuevo.Cliente = clienteDeUnidadNueva!;
+                vehiculoOrden = vehiculoNuevo;
+            }
+            else
+            {
+                // La unidad se bloquea: dos recepciones a la vez no le abren dos órdenes.
+                await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT \"Id\" FROM \"Vehiculos\" WHERE \"Id\" = {request.VehiculoId!.Value} FOR UPDATE");
 
-        _context.OrdenesServicio.Add(orden);
+                var vehiculo = await _context.Vehiculos
+                    .Include(v => v.Cliente)
+                    .FirstOrDefaultAsync(v => v.Id == request.VehiculoId!.Value && v.Activo);
 
-        // Registro de hito inicial en el historial de estados
-        var primerHistorial = new HistorialEstadoOrden
+                if (vehiculo is null)
+                {
+                    await transaccion.RollbackAsync();
+                    return ServiceResult<OrdenServicioResponse>.Invalid("El vehículo indicado no existe o está inactivo.");
+                }
+
+                // Dar de baja a un cliente no da de baja sus unidades: se revisa aquí.
+                if (!vehiculo.Cliente.Activo)
+                {
+                    await transaccion.RollbackAsync();
+                    return ServiceResult<OrdenServicioResponse>.Invalid(
+                        $"El cliente de esta unidad ({vehiculo.Cliente.NombreCompleto}) está dado de baja: reactívalo antes de abrir la orden.");
+                }
+
+                // Una unidad tiene una sola orden abierta: lo que no está entregado ni cancelado.
+                var abierta = await _context.OrdenesServicio
+                    .AsNoTracking()
+                    .Where(o => o.VehiculoId == vehiculo.Id
+                        && o.Activo
+                        && o.Estado != EstadoOrdenServicio.Entregada
+                        && o.Estado != EstadoOrdenServicio.Cancelada)
+                    .OrderByDescending(o => o.FechaApertura)
+                    .Select(o => new { o.NumeroOrden, o.Estado })
+                    .FirstOrDefaultAsync();
+                if (abierta is not null)
+                {
+                    await transaccion.RollbackAsync();
+                    return ServiceResult<OrdenServicioResponse>.Conflict(
+                        $"La unidad ya tiene abierta la orden {abierta.NumeroOrden} ({NombreEstado(abierta.Estado)}). Entrégala o cancélala antes de abrir otra.");
+                }
+
+                // Un medidor no retrocede: la lectura nueva no puede ser menor que la de
+                // la unidad ni que la de sus órdenes anteriores.
+                var lecturaNueva = LecturaSegunMedidor(
+                    vehiculo.TipoMedidor, request.KilometrajeIngreso, request.HorasUsoIngreso, request.LecturaMedidorIngreso);
+                if (lecturaNueva.HasValue)
+                {
+                    var ultimaDeOrdenes = await UltimaLecturaDeOrdenesAsync(vehiculo.Id, vehiculo.TipoMedidor);
+                    var ultimaRegistrada = new[] { LecturaActualDeUnidad(vehiculo), ultimaDeOrdenes }.Max();
+                    var motivoLectura = MotivoLecturaMenor(
+                        lecturaNueva.Value, ultimaRegistrada, vehiculo.TipoMedidor, "la última registrada para la unidad");
+                    if (motivoLectura is not null)
+                    {
+                        await transaccion.RollbackAsync();
+                        return ServiceResult<OrdenServicioResponse>.Invalid(motivoLectura);
+                    }
+
+                    AvanzarLecturaDeUnidad(vehiculo, lecturaNueva.Value);
+                }
+
+                vehiculoOrden = vehiculo;
+            }
+
+            var lecturaIngreso = LecturaSegunMedidor(
+                vehiculoOrden.TipoMedidor, request.KilometrajeIngreso, request.HorasUsoIngreso, request.LecturaMedidorIngreso);
+            var numeroOrden = await GenerarNumeroOrdenAsync();
+
+            orden = new OrdenServicio
+            {
+                VehiculoId             = vehiculoOrden.Id,
+                ClienteId              = vehiculoOrden.ClienteId,
+                TecnicoAsignadoId      = request.TecnicoAsignadoId,
+                NumeroOrden            = numeroOrden,
+                Observaciones          = request.Observaciones?.Trim(),
+                MotivoFalla            = request.MotivoFalla?.Trim() ?? request.Observaciones?.Trim(),
+                FechaEstimadaEntrega   = request.FechaEstimadaEntrega,
+                TipoAtencion           = request.TipoAtencion,
+                ModalidadAtencion      = request.ModalidadAtencion,
+                TipoFalla              = request.TipoFalla,
+                KilometrajeIngreso     = request.KilometrajeIngreso ?? vehiculoOrden.Kilometraje,
+                HorasUsoIngreso        = request.HorasUsoIngreso ?? vehiculoOrden.HorasUso,
+                LecturaMedidorIngreso  = request.LecturaMedidorIngreso ?? lecturaIngreso ?? vehiculoOrden.LecturaMedidorActual,
+                Estado                 = EstadoOrdenServicio.Abierta,
+                FechaApertura          = ahora,
+                FechaIngreso           = ahora,
+                FechaCreacion          = DateTime.UtcNow,
+                Activo                 = true
+            };
+
+            _context.OrdenesServicio.Add(orden);
+
+            // Registro de hito inicial en el historial de estados
+            var primerHistorial = new HistorialEstadoOrden
+            {
+                OrdenServicioId = orden.Id,
+                EstadoAnterior  = null,
+                EstadoNuevo     = EstadoOrdenServicio.Abierta,
+                UsuarioId       = usuarioId,
+                FechaCambio     = DateTime.UtcNow,
+                Observaciones   = "Apertura de orden de servicio",
+                FechaCreacion   = DateTime.UtcNow,
+                Activo          = true
+            };
+            _context.HistorialEstadosOrden.Add(primerHistorial);
+
+            await _context.SaveChangesAsync();
+            await transaccion.CommitAsync();
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } pg)
         {
-            OrdenServicioId = orden.Id,
-            EstadoAnterior  = null,
-            EstadoNuevo     = EstadoOrdenServicio.Abierta,
-            UsuarioId       = usuarioId,
-            FechaCambio     = DateTime.UtcNow,
-            Observaciones   = "Apertura de orden de servicio",
-            FechaCreacion   = DateTime.UtcNow,
-            Activo          = true
-        };
-        _context.HistorialEstadosOrden.Add(primerHistorial);
+            // Lo validado arriba pudo registrarlo otra persona en el mismo instante.
+            await transaccion.RollbackAsync();
+            _context.ChangeTracker.Clear();
+            var mensaje = pg.ConstraintName switch
+            {
+                "IX_Clientes_NumeroDocumento" => "Ese documento se acaba de registrar para otro cliente: búscalo de nuevo por su documento.",
+                "IX_Vehiculos_Placa" => "Esa placa se acaba de registrar en otra unidad.",
+                _ => "Otro usuario acaba de registrar los mismos datos: revisa y vuelve a intentarlo."
+            };
+            return ServiceResult<OrdenServicioResponse>.Conflict(mensaje);
+        }
+        catch
+        {
+            await transaccion.RollbackAsync();
+            throw;
+        }
 
-        await _context.SaveChangesAsync();
+        if (clienteNuevo is not null)
+        {
+            await _auditoriaService.RegistrarEventoAsync(usuarioId, "Crear", "Cliente", clienteNuevo.Id.ToString(),
+                new { clienteNuevo.NumeroDocumento, clienteNuevo.NombreCompleto, Origen = "Apertura de orden " + orden.NumeroOrden });
+        }
+
+        if (vehiculoNuevo is not null)
+        {
+            await _auditoriaService.RegistrarEventoAsync(usuarioId, "Crear", "Vehiculo", vehiculoNuevo.Id.ToString(),
+                new { vehiculoNuevo.ClienteId, vehiculoNuevo.Placa, vehiculoNuevo.NumeroSerieVIN, vehiculoNuevo.Marca, vehiculoNuevo.Modelo, Origen = "Apertura de orden " + orden.NumeroOrden });
+        }
 
         await _auditoriaService.RegistrarEventoAsync(
             usuarioId,
@@ -271,12 +405,105 @@ public class OrdenServicioService : IOrdenServicioService
                 Total = orden.Total
             });
 
-        orden.Vehiculo = vehiculo;
-        orden.Cliente  = vehiculo.Cliente;
+        orden.Vehiculo = vehiculoOrden;
+        orden.Cliente  = vehiculoOrden.Cliente;
         orden.TecnicoAsignado = tecnico;
 
         return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
     }
+
+    /// <summary>El cliente nuevo validado como en el alta de clientes, sin guardarlo todavía.</summary>
+    private async Task<(Cliente? Cliente, ServiceResult<OrdenServicioResponse>? Error)> PrepararClienteNuevoAsync(ClienteNuevoRequest datos)
+    {
+        var nombre = datos.NombreCompleto?.Trim() ?? string.Empty;
+        if (nombre.Length == 0)
+            return (null, ServiceResult<OrdenServicioResponse>.Invalid("El nombre del cliente es obligatorio."));
+        if (nombre.Length > 200)
+            return (null, ServiceResult<OrdenServicioResponse>.Invalid("El nombre del cliente no puede pasar de 200 caracteres."));
+
+        if (string.IsNullOrWhiteSpace(datos.NumeroDocumento))
+            return (null, ServiceResult<OrdenServicioResponse>.Invalid("El documento del cliente es obligatorio."));
+
+        var (tipo, numero, errorDocumento) = ClienteService.ValidarYResolverDocumento(datos.TipoDocumento, datos.NumeroDocumento, null);
+        if (errorDocumento is not null)
+            return (null, ServiceResult<OrdenServicioResponse>.Invalid(errorDocumento));
+        if (numero!.Length > 20)
+            return (null, ServiceResult<OrdenServicioResponse>.Invalid("El documento no puede pasar de 20 caracteres."));
+
+        var email = string.IsNullOrWhiteSpace(datos.Email) ? null : datos.Email.Trim();
+        if (email is not null && !System.Net.Mail.MailAddress.TryCreate(email, out _))
+            return (null, ServiceResult<OrdenServicioResponse>.Invalid("El correo del cliente no es válido."));
+
+        // Recepción busca el documento antes de registrar; si ya existe, se avisa en vez de usarlo en silencio.
+        var existente = await _context.Clientes.AsNoTracking()
+            .Where(c => c.Activo && (c.NumeroDocumento == numero || c.DocumentoIdentidad == numero))
+            .Select(c => c.NombreCompleto)
+            .FirstOrDefaultAsync();
+        if (existente is not null)
+            return (null, ServiceResult<OrdenServicioResponse>.Conflict(
+                $"Ya está registrado el cliente «{existente}» con el documento {numero}: búscalo por su documento."));
+
+        return (new Cliente
+        {
+            NombreCompleto     = nombre,
+            TipoDocumento      = tipo,
+            NumeroDocumento    = numero,
+            DocumentoIdentidad = numero,
+            Telefono           = string.IsNullOrWhiteSpace(datos.Telefono) ? null : datos.Telefono.Trim(),
+            Email              = email,
+            FechaCreacion      = DateTime.UtcNow,
+            Activo             = true
+        }, null);
+    }
+
+    /// <summary>La unidad nueva validada como en Unidades, con la lectura de ingreso como lectura actual.</summary>
+    private async Task<(Vehiculo? Vehiculo, ServiceResult<OrdenServicioResponse>? Error)> PrepararUnidadNuevaAsync(
+        AperturaOrdenServicioRequest request, Cliente cliente)
+    {
+        var datos = request.UnidadNueva!;
+
+        if (!Enum.IsDefined(datos.TipoUnidad))
+            return (null, ServiceResult<OrdenServicioResponse>.Invalid("El tipo de unidad no es válido."));
+        if (!Enum.IsDefined(datos.TipoMedidor))
+            return (null, ServiceResult<OrdenServicioResponse>.Invalid("El tipo de medidor no es válido."));
+        if (string.IsNullOrWhiteSpace(datos.Marca))
+            return (null, ServiceResult<OrdenServicioResponse>.Invalid("La marca de la unidad es obligatoria."));
+        if (string.IsNullOrWhiteSpace(datos.Modelo))
+            return (null, ServiceResult<OrdenServicioResponse>.Invalid("El modelo de la unidad es obligatorio."));
+
+        var placa = VehiculoService.NormalizarPlaca(datos.Placa);
+        if (placa is not null && await _context.Vehiculos.AnyAsync(v => v.Placa == placa && v.Activo))
+            return (null, ServiceResult<OrdenServicioResponse>.Invalid($"Ya hay una unidad activa con la placa {placa}: búscala por su cliente."));
+
+        var lectura = LecturaSegunMedidor(datos.TipoMedidor, request.KilometrajeIngreso, request.HorasUsoIngreso, request.LecturaMedidorIngreso);
+        if (lectura < 0)
+            return (null, ServiceResult<OrdenServicioResponse>.Invalid("La lectura del medidor no puede ser negativa."));
+
+        return (VehiculoService.ConstruirVehiculo(new CreateVehiculoRequest(
+            cliente.Id,
+            datos.Placa,
+            datos.Marca,
+            datos.Modelo,
+            datos.Anio,
+            Kilometraje: null,
+            datos.Color,
+            Observaciones: null,
+            TipoUnidad: datos.TipoUnidad,
+            NumeroSerieVIN: datos.NumeroSerieVIN,
+            NumeroMotor: datos.NumeroMotor,
+            TipoMedidor: datos.TipoMedidor,
+            LecturaMedidorActual: lectura)), null);
+    }
+
+    private static string NombreEstado(EstadoOrdenServicio estado) => estado switch
+    {
+        EstadoOrdenServicio.Abierta => "abierta",
+        EstadoOrdenServicio.Diagnostico => "en diagnóstico",
+        EstadoOrdenServicio.Aprobada => "aprobada",
+        EstadoOrdenServicio.EnProceso => "en proceso",
+        EstadoOrdenServicio.Lista => "lista para entregar",
+        _ => estado.ToString().ToLowerInvariant()
+    };
 
     public async Task<ServiceResult<OrdenServicioResponse>> RegistrarDiagnosticoAsync(
         Guid id,

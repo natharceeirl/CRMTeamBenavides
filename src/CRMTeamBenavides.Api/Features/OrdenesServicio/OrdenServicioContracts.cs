@@ -3,8 +3,13 @@ using CRMTeamBenavides.Api.Features.Ventas;
 
 namespace CRMTeamBenavides.Api.Features.OrdenesServicio;
 
+/// <summary>
+/// Apertura de una orden. La unidad es una registrada (VehiculoId) o una nueva
+/// (UnidadNueva) de un cliente registrado (ClienteId) o nuevo (ClienteNuevo): lo
+/// nuevo se crea junto con la orden, en la misma transacción.
+/// </summary>
 public record AperturaOrdenServicioRequest(
-    Guid VehiculoId,
+    Guid? VehiculoId,
     Guid? TecnicoAsignadoId,
     string? Observaciones,
     string? MotivoFalla = null,
@@ -14,7 +19,30 @@ public record AperturaOrdenServicioRequest(
     TipoFalla? TipoFalla = null,
     int? KilometrajeIngreso = null,
     decimal? HorasUsoIngreso = null,
-    decimal? LecturaMedidorIngreso = null);
+    decimal? LecturaMedidorIngreso = null,
+    Guid? ClienteId = null,
+    ClienteNuevoRequest? ClienteNuevo = null,
+    UnidadNuevaRequest? UnidadNueva = null);
+
+/// <summary>Cliente que se registra al abrir su primera orden.</summary>
+public record ClienteNuevoRequest(
+    TipoDocumentoCliente? TipoDocumento,
+    string NumeroDocumento,
+    string NombreCompleto,
+    string? Telefono = null,
+    string? Email = null);
+
+/// <summary>Unidad que se registra al abrir la orden. La lectura de ingreso pasa a ser su lectura actual.</summary>
+public record UnidadNuevaRequest(
+    TipoUnidad TipoUnidad,
+    TipoMedidor TipoMedidor,
+    string Marca,
+    string Modelo,
+    string? Placa = null,
+    string? NumeroSerieVIN = null,
+    string? NumeroMotor = null,
+    int? Anio = null,
+    string? Color = null);
 
 public record RegistrarDiagnosticoRequest(
     string Diagnostico,

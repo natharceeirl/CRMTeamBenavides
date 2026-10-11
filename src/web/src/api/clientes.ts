@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorApi, solicitar } from './http'
-import type { AltaRapidaClienteRequest, ClienteRequest, ClienteResponse } from './tipos'
+import type { ClienteRequest, ClienteResponse } from './tipos'
 
 export const clavesClientes = {
   todos: ['clientes'] as const,
@@ -22,20 +22,6 @@ export function useClientePorDocumento(numero: string | null) {
     },
     enabled: Boolean(numero),
     retry: false,
-  })
-}
-
-/** Registro con lo mínimo para atender: documento, nombre y contacto. */
-export function useAltaRapidaCliente() {
-  const consultas = useQueryClient()
-
-  return useMutation({
-    meta: { exito: 'Cliente registrado' },
-    mutationFn: (datos: AltaRapidaClienteRequest) =>
-      solicitar<ClienteResponse>('/clientes/alta-rapida', { metodo: 'POST', cuerpo: datos }),
-    onSuccess: async () => {
-      await consultas.invalidateQueries({ queryKey: clavesClientes.todos })
-    },
   })
 }
 

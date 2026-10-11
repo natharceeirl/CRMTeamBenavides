@@ -67,25 +67,6 @@ export type ClienteRequest = {
 export const TIPO_DOCUMENTO_CLIENTE = { dni: 0, ruc: 1, otro: 2 } as const
 
 /** POST /api/clientes/alta-rapida: si el documento ya está registrado, devuelve ese cliente. */
-export type AltaRapidaClienteRequest = {
-  numeroDocumento: string
-  nombreCompleto: string
-  telefono: string | null
-  email: string | null
-  direccion: string | null
-  tipoDocumento: number | null
-}
-
-/** POST /api/vehiculos/alta-rapida: una unidad con kilometraje; lo demás se completa en su ficha. */
-export type AltaRapidaVehiculoRequest = {
-  clienteId: string
-  placa: string | null
-  marca: string
-  modelo: string
-  kilometraje: number | null
-  color: string | null
-}
-
 export type VehiculoResponse = {
   id: string
   clienteId: string
@@ -365,8 +346,16 @@ export type OrdenServicioDetalleResponse = OrdenServicioResponse & {
   pagos?: PagoResponse[] | null
 }
 
+/**
+ * POST /api/ordenes-servicio. La unidad es una registrada (vehiculoId) o una
+ * nueva (unidadNueva) de un cliente registrado (clienteId) o nuevo
+ * (clienteNuevo): lo nuevo se crea junto con la orden, todo o nada.
+ */
 export type AperturaOrdenRequest = {
-  vehiculoId: string
+  vehiculoId: string | null
+  clienteId?: string | null
+  clienteNuevo?: ClienteNuevoRequest | null
+  unidadNueva?: UnidadNuevaRequest | null
   tecnicoAsignadoId: string | null
   observaciones: string | null
   motivoFalla?: string | null
@@ -377,6 +366,28 @@ export type AperturaOrdenRequest = {
   kilometrajeIngreso?: number | null
   horasUsoIngreso?: number | null
   lecturaMedidorIngreso?: number | null
+}
+
+/** Cliente que se registra al abrir su primera orden. */
+export type ClienteNuevoRequest = {
+  tipoDocumento: number
+  numeroDocumento: string
+  nombreCompleto: string
+  telefono: string | null
+  email: string | null
+}
+
+/** Unidad que se registra al abrir la orden; la lectura de ingreso pasa a ser la suya. */
+export type UnidadNuevaRequest = {
+  tipoUnidad: number
+  tipoMedidor: number
+  marca: string
+  modelo: string
+  placa: string | null
+  numeroSerieVIN: string | null
+  numeroMotor: string | null
+  anio: number | null
+  color: string | null
 }
 
 export type DiagnosticoRequest = {

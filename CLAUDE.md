@@ -75,6 +75,8 @@ Una funcionalidad que no esté en el alcance se marca «por confirmar» y se reg
 El mapa funcional (https://claude.ai/code/artifact/708d0351-bbde-48cd-9768-7d63fc62c3cc) sigue sirviendo para módulos y pantallas. En estados, roles y acceso del cliente manda el resumen de cambios del 25/09.
 
 - **Orden de servicio:** se mantienen los estados actuales: `Abierta → Diagnóstico → Aprobada → En proceso → Lista → Entregada`. Puede pasar a `Cancelada` desde cualquier estado anterior a `Entregada`, y de `Lista` vuelve a `En proceso` si hay un reingreso. Se agregan historial de estados con usuario y hora, fecha estimada de entrega, aprobación de Gerencia y los campos del formato de atención del cliente.
+  - Una unidad tiene una sola orden abierta (ni entregada ni cancelada) a la vez.
+  - Recepción en un paso: si el cliente o la unidad no están registrados, se escriben en la misma pantalla de nueva orden y se guardan junto con ella, todo o nada. Exige `clientes.crear` o `unidades.crear` además de `ordenes.crear`.
 - **Roles definitivos:**
   - Gerencia/Admin: acceso total, administra usuarios y permisos, y aprueba los cambios importantes de la OS.
   - Recepción: clientes, unidades y OS, según permisos.
