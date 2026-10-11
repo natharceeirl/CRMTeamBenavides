@@ -77,18 +77,26 @@ function venció(fecha: string): boolean {
 }
 
 async function interpretar<T>(respuesta: Response): Promise<T> {
-  if (respuesta.status === 204 || respuesta.headers.get('content-length') === '0') {
-    return undefined as T
-  }
-
-  const texto = await respuesta.text()
-  const datos: unknown = texto ? JSON.parse(texto) : null
+  // Primero el error: un 404 o un 403 sin cuerpo (Results.NotFound(), Results.Forbid())
+  // también llega con content-length 0 y no es un éxito sin datos.
+  const vacia = respuesta.status === 204 || respuesta.headers.get('content-length') === '0'
+  const texto = vacia ? '' : await respuesta.text()
 
   if (!respuesta.ok) {
-    throw new ErrorApi(respuesta.status, mensajeDeError(respuesta.status, datos))
+    throw new ErrorApi(respuesta.status, mensajeDeError(respuesta.status, leerJson(texto)))
   }
 
-  return datos as T
+  return (vacia ? undefined : texto ? JSON.parse(texto) : null) as T
+}
+
+/** El cuerpo de un error puede no ser JSON (la página de un proxy, por ejemplo). */
+function leerJson(texto: string): unknown {
+  if (!texto) return null
+  try {
+    return JSON.parse(texto)
+  } catch {
+    return null
+  }
 }
 
 function mensajeDeError(estado: number, datos: unknown): string {

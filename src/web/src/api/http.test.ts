@@ -31,6 +31,35 @@ afterEach(() => {
 })
 
 describe('solicitar', () => {
+  // La API responde Results.NotFound() o Results.Forbid() sin cuerpo y con content-length 0.
+  const vacia = (estado: number) => new Response(null, { status: estado, headers: { 'content-length': '0' } })
+
+  it('un 404 sin cuerpo es un error, no un éxito sin datos', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(vacia(404)))
+
+    await expect(solicitar('/clientes/documento/12345678')).rejects.toMatchObject({
+      estado: 404,
+      message: 'No se encontró el registro.',
+    })
+  })
+
+  it('un 403 sin cuerpo es un error con el mensaje de permisos', async () => {
+    guardarSesion(sesionCon('token-1', 'refresco-1'))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(vacia(403)))
+
+    await expect(solicitar('/ventas/1/anular', { metodo: 'PUT' })).rejects.toBeInstanceOf(ErrorApi)
+  })
+
+  it('un 204 o un 200 sin cuerpo sigue siendo un éxito sin datos', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(vacia(204)))
+    await expect(solicitar('/productos/1', { metodo: 'DELETE' })).resolves.toBeUndefined()
+  })
+
+  it('un error con cuerpo que no es JSON usa el mensaje genérico', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('<html>Bad Gateway</html>', { status: 502 })))
+    await expect(solicitar('/clientes')).rejects.toMatchObject({ estado: 502, message: 'No se pudo completar la operación.' })
+  })
+
   it('manda el token de la sesión en cada llamada', async () => {
     guardarSesion(sesionCon('token-1', 'refresco-1'))
     const llamar = vi.fn().mockResolvedValue(respuesta([{ id: '1' }]))
