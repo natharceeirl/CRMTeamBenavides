@@ -119,6 +119,9 @@ public class OrdenServicio : BaseEntity
     public EstadoPresupuestoCliente EstadoPresupuestoCliente { get; set; } = EstadoPresupuestoCliente.Pendiente;
     public EstadoAprobacionGerencia EstadoAprobacionGerencia { get; set; } = EstadoAprobacionGerencia.NoAplica;
     public DateTime? FechaRespuestaCliente { get; set; }
+
+    /// <summary>Última vez que se avisó al cliente que su presupuesto está listo para revisar.</summary>
+    public DateTime? FechaEnvioPresupuesto { get; set; }
     public string? ObservacionesPresupuestoCliente { get; set; }
     public DateTime? FechaAprobacionGerencia { get; set; }
     public Guid? UsuarioAprobacionGerenciaId { get; set; }

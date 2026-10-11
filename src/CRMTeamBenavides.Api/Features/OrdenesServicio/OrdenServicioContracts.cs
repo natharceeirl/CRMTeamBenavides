@@ -189,7 +189,8 @@ public record OrdenServicioResponse(
     string? TipoMedidor = null,
     decimal TotalPagado = 0m,
     decimal Saldo = 0m,
-    string EstadoPago = "Pendiente");
+    string EstadoPago = "Pendiente",
+    DateTime? FechaEnvioPresupuesto = null);
 
 public record OrdenServicioDetalleResponse(
     Guid Id,
@@ -254,4 +255,5 @@ public record OrdenServicioDetalleResponse(
     decimal TotalPagado = 0m,
     decimal Saldo = 0m,
     string EstadoPago = "Pendiente",
-    List<PagoResponse>? Pagos = null);
+    List<PagoResponse>? Pagos = null,
+    DateTime? FechaEnvioPresupuesto = null);

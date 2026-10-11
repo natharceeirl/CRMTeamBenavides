@@ -246,3 +246,21 @@ final agendaProvider = FutureProvider.autoDispose<List<CitaApi>>((ref) {
   final desde = DateTime(hoy.year, hoy.month, hoy.day);
   return ref.watch(apiProvider).citas(desde: desde, hasta: desde.add(const Duration(days: 7)));
 });
+
+/// Avisos sin leer de la campanita. Se vuelve a pedir cada minuto mientras la
+/// app está abierta (ver CampanaNotificaciones).
+final conteoNotificacionesProvider = FutureProvider.autoDispose<int>(
+  (ref) => ref.watch(apiProvider).conteoNotificaciones(),
+);
+
+final notificacionesProvider = FutureProvider.autoDispose<List<NotificacionApi>>(
+  (ref) => ref.watch(apiProvider).notificaciones(),
+);
+
+final aprobacionesPendientesProvider = FutureProvider.autoDispose<List<SolicitudAprobacionApi>>(
+  (ref) => ref.watch(apiProvider).aprobacionesPendientes(),
+);
+
+final historialAprobacionesProvider = FutureProvider.autoDispose<List<SolicitudAprobacionApi>>(
+  (ref) => ref.watch(apiProvider).historialAprobaciones(),
+);

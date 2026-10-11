@@ -14,6 +14,9 @@ class Permisos {
   static const ordenesCambiarEstado = 'ordenes.cambiar_estado';
   static const ordenesAgregarItems = 'ordenes.agregar_items';
   static const ordenesEditar = 'ordenes.editar';
+
+  /// Decidir las solicitudes de precio: Gerencia.
+  static const ordenesAprobarGerencia = 'ordenes.aprobar_gerencia';
   static const ventasCrear = 'ventas.crear';
   static const portalAcceso = 'portal.acceso';
 

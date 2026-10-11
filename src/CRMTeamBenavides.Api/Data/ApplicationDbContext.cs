@@ -55,6 +55,10 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
     public DbSet<MetodoPago> MetodosPago => Set<MetodoPago>();
     public DbSet<Pago> Pagos => Set<Pago>();
 
+    // Notificaciones
+    public DbSet<DispositivoNotificacion> DispositivosNotificacion => Set<DispositivoNotificacion>();
+    public DbSet<Notificacion> Notificaciones => Set<Notificacion>();
+
     // Compras
     public DbSet<Proveedor> Proveedores => Set<Proveedor>();
     public DbSet<Compra> Compras => Set<Compra>();
@@ -778,6 +782,43 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
         modelBuilder.Entity<MovimientoInventario>(entity =>
         {
             entity.HasIndex(m => m.CompraId);
+        });
+
+        // --- Notificaciones ---
+        modelBuilder.Entity<DispositivoNotificacion>(entity =>
+        {
+            entity.ToTable("DispositivosNotificacion");
+
+            entity.Property(d => d.Token).HasMaxLength(500).IsRequired();
+
+            entity.HasOne(d => d.Usuario)
+                .WithMany()
+                .HasForeignKey(d => d.UsuarioId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Un token es una instalación de la app: si otro usuario entra en ese teléfono, el token pasa a él.
+            entity.HasIndex(d => d.Token).IsUnique();
+            entity.HasIndex(d => d.UsuarioId);
+        });
+
+        modelBuilder.Entity<Notificacion>(entity =>
+        {
+            entity.ToTable("Notificaciones");
+
+            entity.Property(n => n.Titulo).HasMaxLength(120).IsRequired();
+            entity.Property(n => n.Mensaje).HasMaxLength(300).IsRequired();
+            entity.Property(n => n.Entidad).HasMaxLength(50);
+            entity.Property(n => n.ClaveAgrupacion).HasMaxLength(150);
+            entity.Property(n => n.UltimoError).HasMaxLength(500);
+
+            entity.HasOne(n => n.Usuario)
+                .WithMany()
+                .HasForeignKey(n => n.UsuarioId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(n => new { n.UsuarioId, n.FechaLeida });
+            entity.HasIndex(n => new { n.EstadoEnvio, n.ProximoIntento });
+            entity.HasIndex(n => new { n.UsuarioId, n.ClaveAgrupacion });
         });
     }
 }

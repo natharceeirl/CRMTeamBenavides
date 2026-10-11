@@ -262,6 +262,8 @@ export type HistorialEstadoOrdenResponse = {
 }
 
 export type OrdenServicioResponse = {
+  /** Última vez que se avisó al cliente que su presupuesto está listo. */
+  fechaEnvioPresupuesto?: string | null
   id: string
   vehiculoId: string
   vehiculoPlaca: string | null
@@ -1563,3 +1565,34 @@ export type CompraResponse = Omit<CompraResumenResponse, 'cantidadLineas'> & {
   detalles: DetalleCompraResponse[]
   pagos: PagoCompraResponse[]
 }
+
+// ---------------------------------------------------------------------------
+// Notificaciones: bandeja de cada usuario (y, en la app, avisos al teléfono)
+// ---------------------------------------------------------------------------
+/** Enum TipoNotificacion del backend. */
+export const TIPO_NOTIFICACION = {
+  solicitudAprobacion: 0,
+  presupuestoEnviado: 1,
+  ordenLista: 2,
+  pedidoLimaRecibido: 3,
+  citaConfirmada: 4,
+  ordenAsignada: 5,
+} as const
+
+export type TipoNotificacion = (typeof TIPO_NOTIFICACION)[keyof typeof TIPO_NOTIFICACION]
+
+/** GET /api/notificaciones. `entidad` dice a qué pantalla lleva: «Aprobaciones», «OrdenServicio», «Cita» o «PedidoLima». */
+export type NotificacionResponse = {
+  id: string
+  tipo: TipoNotificacion
+  titulo: string
+  mensaje: string
+  entidad: string | null
+  entidadId: string | null
+  /** Cuántos avisos junta: varias solicitudes de una misma orden llegan como uno. */
+  cantidad: number
+  fechaCreacion: string
+  fechaLeida: string | null
+}
+
+export type ConteoNotificacionesResponse = { noLeidas: number }

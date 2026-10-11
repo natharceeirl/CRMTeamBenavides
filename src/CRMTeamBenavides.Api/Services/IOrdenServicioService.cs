@@ -68,6 +68,9 @@ public interface IOrdenServicioService
         bool esTecnico,
         Guid? usuarioId = null);
 
+    /// <summary>Avisa al cliente, con una notificación, que su presupuesto está listo para revisar.</summary>
+    Task<ServiceResult<OrdenServicioResponse>> EnviarPresupuestoAsync(Guid id, Guid? usuarioId = null);
+
     Task<ServiceResult<OrdenServicioResponse>> AsignarTecnicoAsync(
         Guid id,
         Guid tecnicoId,

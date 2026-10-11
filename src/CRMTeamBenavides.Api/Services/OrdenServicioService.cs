@@ -2,6 +2,7 @@ using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Features.OrdenesServicio;
 using CRMTeamBenavides.Api.Features.Vehiculos;
 using CRMTeamBenavides.Api.Features.Ventas;
+using CRMTeamBenavides.Api.Services.Notificaciones;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
@@ -1687,6 +1688,71 @@ public class OrdenServicioService : IOrdenServicioService
         return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
     }
 
+    /// <summary>
+    /// Avisa al cliente que su presupuesto está listo. Es un paso explícito de
+    /// Recepción porque el técnico va agregando ítems de a uno: avisar con el primero
+    /// llegaría antes de que la cotización esté completa.
+    /// </summary>
+    public async Task<ServiceResult<OrdenServicioResponse>> EnviarPresupuestoAsync(Guid id, Guid? usuarioId = null)
+    {
+        var orden = await _context.OrdenesServicio
+            .Include(o => o.Vehiculo)
+                .ThenInclude(v => v.Cliente)
+            .Include(o => o.Cliente)
+            .Include(o => o.TecnicoAsignado)
+            .FirstOrDefaultAsync(o => o.Id == id && o.Activo);
+
+        if (orden is null)
+        {
+            return ServiceResult<OrdenServicioResponse>.NotFound();
+        }
+
+        // Las mismas condiciones en que el cliente puede responder el presupuesto.
+        if (orden.Estado != EstadoOrdenServicio.Diagnostico)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid("El presupuesto se envía mientras la orden está en diagnóstico.");
+        }
+
+        if (orden.Total <= 0)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid("El presupuesto está vacío: agrega los repuestos y servicios antes de enviarlo.");
+        }
+
+        if (orden.EstadoPresupuestoCliente == EstadoPresupuestoCliente.Aprobado)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid("El cliente ya aprobó este presupuesto.");
+        }
+
+        if (orden.EstadoAprobacionGerencia is EstadoAprobacionGerencia.Pendiente or EstadoAprobacionGerencia.Rechazado)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid("Hay precios sin aprobar por Gerencia: envía el presupuesto cuando estén resueltos.");
+        }
+
+        if (!await DetectorNotificaciones.NotificarPresupuestoAsync(_context, orden, CancellationToken.None))
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid("El cliente todavía no tiene cuenta en la app: avísale por teléfono o WhatsApp.");
+        }
+
+        orden.FechaEnvioPresupuesto = DateTime.UtcNow;
+        orden.FechaModificacion = DateTime.UtcNow;
+
+        _context.HistorialEstadosOrden.Add(new HistorialEstadoOrden
+        {
+            OrdenServicioId = orden.Id,
+            EstadoAnterior  = orden.Estado,
+            EstadoNuevo     = orden.Estado,
+            UsuarioId       = usuarioId,
+            FechaCambio     = DateTime.UtcNow,
+            Observaciones   = "Presupuesto enviado al cliente",
+            FechaCreacion   = DateTime.UtcNow,
+            Activo          = true
+        });
+
+        await _context.SaveChangesAsync();
+
+        return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
+    }
+
     public async Task<ServiceResult<OrdenServicioResponse>> AsignarTecnicoAsync(
         Guid id,
         Guid tecnicoId,
@@ -2502,7 +2568,8 @@ public class OrdenServicioService : IOrdenServicioService
             DeterminarTipoMedidor(orden.Vehiculo),
             totalPagado,
             saldo,
-            estadoPago);
+            estadoPago,
+            orden.FechaEnvioPresupuesto);
     }
 
     private static OrdenServicioDetalleResponse MapToDetalleResponse(OrdenServicio orden)
@@ -2634,7 +2701,8 @@ public class OrdenServicioService : IOrdenServicioService
             totalPagado,
             saldo,
             estadoPago,
-            pagos);
+             pagos,
+            orden.FechaEnvioPresupuesto);
     }
 
     public async Task<ServiceResult<FormatoAtencionResponse>> GenerarFormatoAtencionAsync(

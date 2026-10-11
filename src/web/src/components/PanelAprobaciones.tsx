@@ -6,6 +6,7 @@ import {
   esEstadoTerminal,
   nombresGerencia,
   useAprobacionGerencia,
+  useEnviarPresupuesto,
   useSolicitarAprobacionGerencia,
   useResponderPresupuesto,
   respuestasPresupuesto,
@@ -59,6 +60,7 @@ export function PanelAprobaciones({ orden, titulo = 'Aprobaciones' }: Readonly<P
   const cerrada = esEstadoTerminal(orden.estadoId)
 
   const responder = useResponderPresupuesto()
+  const enviarPresupuesto = useEnviarPresupuesto()
   const gerencia = useAprobacionGerencia()
   const solicitud = useSolicitarAprobacionGerencia()
   const [accion, setAccion] = useState<Accion | null>(null)
@@ -68,6 +70,13 @@ export function PanelAprobaciones({ orden, titulo = 'Aprobaciones' }: Readonly<P
   const respuestas = puedeRegistrarRespuesta ? respuestasPresupuesto(orden.estadoId, presupuesto, orden.total ?? 0) : []
   const etiqueta = etiquetaPresupuesto(orden.estadoId, presupuesto, orden.total ?? 0)
   const aprobacion = orden.estadoAprobacionGerenciaId ?? GERENCIA.noAplica
+  // Se envía en la misma etapa en que el cliente puede responder. Con precios
+  // esperando a Gerencia el backend no lo deja: se explica en vez de ofrecerlo.
+  const puedeEnviarPresupuesto =
+    !esSoloCliente &&
+    tienePermiso(PERMISOS.ordenesEditar) &&
+    respuestasPresupuesto(orden.estadoId, presupuesto, orden.total ?? 0).length > 0
+  const preciosPorAprobar = aprobacion === GERENCIA.pendiente || aprobacion === GERENCIA.rechazado
 
   const cerrar = () => {
     setAccion(null)
@@ -111,6 +120,25 @@ export function PanelAprobaciones({ orden, titulo = 'Aprobaciones' }: Readonly<P
           )}
           {orden.observacionesPresupuestoCliente && (
             <p className="aprobacion-nota">{orden.observacionesPresupuestoCliente}</p>
+          )}
+          {!esSoloCliente && orden.fechaEnvioPresupuesto && (
+            <div className="texto-secundario">Enviado al cliente el {fechaHora(orden.fechaEnvioPresupuesto)}</div>
+          )}
+          {puedeEnviarPresupuesto && (
+            <div className="aprobacion-acciones">
+              <AvisoError error={enviarPresupuesto.error} />
+              <Button
+                type="primary"
+                disabled={preciosPorAprobar}
+                loading={enviarPresupuesto.isPending}
+                onClick={() => enviarPresupuesto.mutate(orden.id)}
+              >
+                {orden.fechaEnvioPresupuesto ? 'Volver a enviar al cliente' : 'Enviar presupuesto al cliente'}
+              </Button>
+              {preciosPorAprobar && (
+                <span className="texto-secundario">Se envía cuando Gerencia resuelva los precios.</span>
+              )}
+            </div>
           )}
           {respuestas.length > 0 && (
             <div className="aprobacion-acciones">

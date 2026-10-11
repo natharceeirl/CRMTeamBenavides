@@ -84,7 +84,8 @@ El mapa funcional (https://claude.ai/code/artifact/708d0351-bbde-48cd-9768-7d63f
   - Vendedor: ventas y comprobantes de sus ventas. No cambia precios ni aplica descuentos.
   - Cliente: solo sus unidades, OS, documentos y comprobantes; aprueba o rechaza presupuestos.
 - Los permisos se aplican en el backend con policies; ocultar botones no basta.
-- **App:** una sola app con perfil Técnico y perfil Cliente. El cliente activa su cuenta con su DNI y un código que genera el personal autorizado. Referencia visual del perfil Cliente: [docs/referencias/app-cliente.html](docs/referencias/app-cliente.html).
+- **Notificaciones** (cambio de alcance del 11/10, falta registrarlo con el cliente): bandeja con campanita en la web y la app, avisos al teléfono por Firebase y bandeja de aprobaciones de Gerencia en la app. Detalle en [docs/notificaciones.md](docs/notificaciones.md).
+- **App:** nativa (Flutter, Android e iOS; la PWA quedó descartada el 11/10). Una sola app con perfil Técnico y perfil Cliente, y la bandeja de aprobaciones para Gerencia. El cliente activa su cuenta con su DNI y un código que genera el personal autorizado. Referencia visual del perfil Cliente: [docs/referencias/app-cliente.html](docs/referencias/app-cliente.html).
 
 ## Stack
 
@@ -201,6 +202,7 @@ De lo pedido el 15/09, la matriz de roles y el flujo de estados quedaron resuelt
 - Plan de implementación: [docs/plan-implementacion.md](docs/plan-implementacion.md). Versión visual: https://claude.ai/artifact/UyERKrdu6H5VUbopk3GTXT. Las páginas de claude.ai son privadas hasta que su dueño las comparte, así que la referencia del equipo es la copia del repositorio.
 - Resumen de cambios de la reunión del 25/09: [docs/resumen-cambios-reunion.md](docs/resumen-cambios-reunion.md).
 - Reglas del módulo de compras: [docs/modulo-compras.md](docs/modulo-compras.md).
+- Notificaciones: [docs/notificaciones.md](docs/notificaciones.md).
 - Referencia visual del portal del cliente: [docs/referencias/app-cliente.html](docs/referencias/app-cliente.html). Versión publicada: https://claude.ai/artifact/JqzMRP5fjiEZXdRDvFmjDL
 - Documento técnico: `Team_Benavides_Resumen Técnico.pdf` (no está en el repositorio).
 - Guía día a día original, con el Go Live del 02/10: `guia.pdf` (no está en el repositorio). La reemplaza el plan de implementación.

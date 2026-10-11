@@ -320,6 +320,22 @@ export const useResponderPresupuesto = () =>
     ),
   )
 
+/**
+ * Avisa al cliente, con una notificación en su app, que el presupuesto está
+ * listo para revisar. Recepción lo envía cuando la cotización está completa.
+ */
+export function useEnviarPresupuesto() {
+  const consultas = useQueryClient()
+  return useMutation({
+    meta: { exito: 'Presupuesto enviado al cliente' },
+    mutationFn: (id: string) =>
+      solicitar<OrdenServicioResponse>(`/ordenes-servicio/${id}/enviar-presupuesto`, { metodo: 'POST' }),
+    onSuccess: async () => {
+      await consultas.invalidateQueries({ queryKey: clavesOrdenes.todas })
+    },
+  })
+}
+
 /** Solo con `ordenes.aprobar_gerencia`. */
 export const useAprobacionGerencia = () =>
   useAccionOrden<AprobacionGerenciaRequest>(

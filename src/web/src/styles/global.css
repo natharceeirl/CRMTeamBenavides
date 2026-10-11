@@ -110,7 +110,31 @@ h4 {
 }
 
 .sidebar-logo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
   padding: 0 24px;
+}
+
+.sidebar-logo .sidebar-tipo-cambio {
+  grid-column: 1 / -1;
+}
+
+/* La campanita sobre el fondo oscuro del menú. El contador de Ant Design trae su
+   propio color oscuro: se pinta el ícono directamente. */
+.sidebar-campana .ant-btn,
+.sidebar-campana .ant-btn:hover,
+.sidebar-campana .campana-icono {
+  color: var(--color-fondo);
+}
+
+.campana-icono {
+  font-size: 20px;
+}
+
+.sidebar-campana .ant-btn:hover {
+  background: color-mix(in srgb, var(--color-fondo) 12%, transparent);
 }
 
 .sidebar-tipo-cambio {
@@ -783,6 +807,12 @@ h4 {
     padding-right: 96px;
   }
 
+  /* En el celular la campanita queda a la derecha, junto al botón del menú. */
+  .sidebar-campana {
+    order: 3;
+    margin-left: auto;
+  }
+
   .sidebar-tipo-cambio {
     margin-top: 0;
   }
@@ -1443,4 +1473,67 @@ h4 {
   .linea-pago-compra .lp-quitar {
     grid-area: quitar;
   }
+}
+
+/* Bandeja de notificaciones de la campanita */
+.notificaciones {
+  width: min(360px, calc(100vw - 48px));
+}
+
+/* En el panel del celular la bandeja ocupa todo el ancho. */
+.ant-drawer .notificaciones {
+  width: 100%;
+}
+
+.ant-drawer .notificaciones-lista {
+  max-height: none;
+}
+
+.notificaciones-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.notificaciones-lista {
+  max-height: 420px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.notificacion {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--color-divisor);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.notificacion:hover,
+.notificacion:focus-visible {
+  background: var(--color-neutro-100);
+}
+
+.notificacion-titulo {
+  font-weight: 400;
+}
+
+/* Lo no leído en negrita y con la marca del acento a la izquierda. */
+.notificacion.no-leida {
+  box-shadow: inset 3px 0 0 var(--color-acento);
+}
+
+.notificacion.no-leida .notificacion-titulo {
+  font-weight: 700;
 }

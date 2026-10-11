@@ -149,6 +149,29 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
     );
   }
 
+  /// Avisa al cliente que su presupuesto está listo. Sin cuenta en la app, el
+  /// backend responde con el motivo y se muestra.
+  Future<void> _enviarPresupuesto() async {
+    setState(() {
+      _error = null;
+      _guardando = true;
+    });
+
+    try {
+      await ref.read(apiProvider).enviarPresupuesto(widget.ordenId);
+      _refrescar();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Presupuesto enviado al cliente')),
+        );
+      }
+    } catch (fallo) {
+      if (mounted) setState(() => _error = '$fallo');
+    } finally {
+      if (mounted) setState(() => _guardando = false);
+    }
+  }
+
   Future<void> _responderPresupuesto(int estado, {required bool esCliente}) {
     final aprueba = estado == EstadoPresupuesto.aprobado;
     final String titulo;
@@ -232,6 +255,8 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                 esCliente: sesion.soloCliente,
                 alResponder: (estado) =>
                     _responderPresupuesto(estado, esCliente: sesion.soloCliente),
+                puedeEnviar: !sesion.soloCliente && sesion.tienePermiso(Permisos.ordenesEditar),
+                alEnviar: _enviarPresupuesto,
               ),
               if (_error != null)
                 Padding(
@@ -670,7 +695,7 @@ class _CambioDeEstado extends StatelessWidget {
 }
 
 /// Respuesta del cliente al presupuesto y decisión de Gerencia. El cliente
-/// responde desde aquí; Gerencia decide desde la web.
+/// responde desde aquí; Gerencia decide desde su bandeja de aprobaciones.
 class _Aprobaciones extends StatelessWidget {
   const _Aprobaciones({
     required this.orden,
@@ -678,6 +703,8 @@ class _Aprobaciones extends StatelessWidget {
     required this.puedeResponder,
     required this.esCliente,
     required this.alResponder,
+    required this.puedeEnviar,
+    required this.alEnviar,
   });
 
   final OrdenServicioApi orden;
@@ -686,12 +713,21 @@ class _Aprobaciones extends StatelessWidget {
   final bool esCliente;
   final void Function(int estado) alResponder;
 
+  /// Recepción y Gerencia avisan al cliente que el presupuesto está listo.
+  final bool puedeEnviar;
+  final VoidCallback alEnviar;
+
   @override
   Widget build(BuildContext context) {
     final presupuesto = orden.estadoPresupuestoId;
     final gerencia = orden.estadoGerenciaId;
     final respuestas =
         puedeResponder ? respuestasPresupuesto(orden.estadoId, presupuesto, orden.total ?? 0) : const <int>[];
+    // Se envía en la etapa en que el cliente puede responder; con precios
+    // esperando a Gerencia el backend no lo deja y se explica en su lugar.
+    final enEtapa = respuestasPresupuesto(orden.estadoId, presupuesto, orden.total ?? 0).isNotEmpty;
+    final mostrarEnviar = puedeEnviar && enEtapa;
+    final preciosPorAprobar = gerencia == EstadoGerencia.pendiente || gerencia == EstadoGerencia.rechazado;
 
     return Card(
       child: Padding(
@@ -712,6 +748,8 @@ class _Aprobaciones extends StatelessWidget {
                 orden.observacionesPresupuesto,
               ].whereType<String>().where((texto) => texto.isNotEmpty).join(' · '),
             ),
+            if (!esCliente && orden.fechaEnvioPresupuesto != null)
+              _Dato('Enviado al cliente', fechaHora(orden.fechaEnvioPresupuesto)),
             _Dato(
               'Gerencia',
               [
@@ -720,6 +758,25 @@ class _Aprobaciones extends StatelessWidget {
                 orden.observacionesGerencia,
               ].whereType<String>().where((texto) => texto.isNotEmpty).join(' · '),
             ),
+            if (mostrarEnviar) ...[
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
+                onPressed: ocupado || preciosPorAprobar ? null : alEnviar,
+                icon: const Icon(Icons.send_outlined),
+                label: Text(orden.fechaEnvioPresupuesto == null
+                    ? 'Enviar presupuesto al cliente'
+                    : 'Volver a enviar al cliente'),
+              ),
+              if (preciosPorAprobar)
+                const Padding(
+                  padding: EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Se envía cuando Gerencia resuelva los precios.',
+                    style: TextStyle(color: Marca.textoSecundario),
+                  ),
+                ),
+            ],
             if (respuestas.isNotEmpty) ...[
               const SizedBox(height: 8),
               Wrap(

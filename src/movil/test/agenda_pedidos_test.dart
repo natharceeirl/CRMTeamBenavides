@@ -133,7 +133,10 @@ void main() {
   testWidgets('si /api/auth/me falla, lo dice y deja reintentar', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [sesionProvider.overrideWith(SesionSinPermisos.new)],
+        overrides: [
+          sesionProvider.overrideWith(SesionSinPermisos.new),
+          conteoNotificacionesProvider.overrideWith((ref) => 0),
+        ],
         child: const MaterialApp(home: PantallaInicio()),
       ),
     );

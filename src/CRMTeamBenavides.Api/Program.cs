@@ -8,6 +8,7 @@ using CRMTeamBenavides.Api.Features.CategoriasProducto;
 using CRMTeamBenavides.Api.Features.Clientes;
 using CRMTeamBenavides.Api.Features.Compras;
 using CRMTeamBenavides.Api.Features.Configuracion;
+using CRMTeamBenavides.Api.Features.Notificaciones;
 using CRMTeamBenavides.Api.Features.Inventario;
 using CRMTeamBenavides.Api.Features.OrdenesServicio;
 using CRMTeamBenavides.Api.Features.Permisos;
@@ -28,6 +29,7 @@ using CRMTeamBenavides.Api.Features.Aprobaciones;
 using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Api.Services.Almacenamiento;
 using CRMTeamBenavides.Api.Services.Exportacion;
+using CRMTeamBenavides.Api.Services.Notificaciones;
 using CRMTeamBenavides.Api.Services.Yamaha;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Data.Seed;
@@ -71,9 +73,19 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(
-        builder.Configuration.GetConnectionString("DefaultConnection")));
+// Notificaciones: el interceptor detecta los eventos al guardar y deja los avisos
+// en la cola dentro de la misma transacción; el proceso en segundo plano los envía.
+builder.Services.Configure<NotificacionesOptions>(builder.Configuration.GetSection(NotificacionesOptions.Seccion));
+builder.Services.AddSingleton<NotificacionesInterceptor>();
+builder.Services.AddSingleton<IProveedorPush>(sp => PushFirebase.Crear(
+    sp.GetRequiredService<IOptions<NotificacionesOptions>>().Value,
+    sp.GetRequiredService<ILoggerFactory>()));
+builder.Services.AddHostedService<EnvioNotificacionesService>();
+
+builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
+    options
+        .UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+        .AddInterceptors(sp.GetRequiredService<NotificacionesInterceptor>()));
 
 builder.Services.AddDataProtection();
 
@@ -190,6 +202,7 @@ builder.Services.AddScoped<IAuditoriaService, AuditoriaService>();
 builder.Services.AddScoped<IAprobacionService, AprobacionService>();
 builder.Services.AddScoped<IProveedorService, ProveedorService>();
 builder.Services.AddScoped<ICompraService, CompraService>();
+builder.Services.AddScoped<INotificacionService, NotificacionService>();
 
 // ---------------------------------------------------------------------------
 // Yamaha API — infraestructura del conector
@@ -279,5 +292,6 @@ app.MapCitaEndpoints();
 app.MapPedidoLimaEndpoints();
 app.MapAprobacionEndpoints();
 app.MapCompraEndpoints();
+app.MapNotificacionEndpoints();
 
 app.Run();

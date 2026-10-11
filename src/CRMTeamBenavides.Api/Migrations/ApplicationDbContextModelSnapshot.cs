@@ -919,6 +919,51 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.ToTable("DetallesVenta");
                 });
 
+            modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.DispositivoNotificacion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("CreadoPorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaModificacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ModificadoPorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Plataforma")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("UltimoRegistro")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("DispositivosNotificacion", (string)null);
+                });
+
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.EventoAuditoria", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1439,6 +1484,87 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.ToTable("MovimientosInventario");
                 });
 
+            modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.Notificacion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Cantidad")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ClaveAgrupacion")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid?>("CreadoPorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Entidad")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid?>("EntidadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("EstadoEnvio")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaEnvio")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaLeida")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaModificacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Intentos")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Mensaje")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid?>("ModificadoPorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ProximoIntento")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Titulo")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("UltimoError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EstadoEnvio", "ProximoIntento");
+
+                    b.HasIndex("UsuarioId", "ClaveAgrupacion");
+
+                    b.HasIndex("UsuarioId", "FechaLeida");
+
+                    b.ToTable("Notificaciones", (string)null);
+                });
+
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.OrdenServicio", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1476,6 +1602,9 @@ namespace CRMTeamBenavides.Api.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaEnvioPresupuesto")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("FechaEstimadaEntrega")
@@ -2787,6 +2916,17 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Navigation("Venta");
                 });
 
+            modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.DispositivoNotificacion", b =>
+                {
+                    b.HasOne("CRMTeamBenavides.Domain.Entities.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.FotoOrdenServicio", b =>
                 {
                     b.HasOne("CRMTeamBenavides.Domain.Entities.OrdenServicio", "OrdenServicio")
@@ -2918,6 +3058,17 @@ namespace CRMTeamBenavides.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Producto");
+                });
+
+            modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.Notificacion", b =>
+                {
+                    b.HasOne("CRMTeamBenavides.Domain.Entities.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Usuario");
                 });
 
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.OrdenServicio", b =>

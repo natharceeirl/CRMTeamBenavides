@@ -192,6 +192,22 @@ public static class OrdenServicioEndpoints
         .RequireAuthorization(PermisosDefinidos.OrdenesCrear)
         .WithName("CreateAperturaOrdenServicio");
 
+        group.MapPost("/{id:guid}/enviar-presupuesto", async (
+            Guid id,
+            ClaimsPrincipal user,
+            IOrdenServicioService service) =>
+        {
+            var result = await service.EnviarPresupuestoAsync(id, ObtenerUsuarioId(user));
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(new { error = "Orden no encontrada." }),
+                _ => Results.BadRequest(new { error = result.Error })
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.OrdenesEditar)
+        .WithName("EnviarPresupuestoOrdenServicio");
+
         group.MapPost("/apertura", AbrirOrdenAsync)
         .RequireAuthorization(PermisosDefinidos.OrdenesCrear)
         .WithName("CreateAperturaOrdenServicioAlias");

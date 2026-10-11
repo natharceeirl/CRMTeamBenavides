@@ -10,6 +10,7 @@ import 'chatbot.dart';
 import 'citas_cliente.dart';
 import 'clientes.dart';
 import 'comunes.dart';
+import 'notificaciones.dart';
 import 'tienda.dart';
 import 'ordenes.dart';
 import 'portal_cliente.dart';
@@ -121,6 +122,8 @@ List<_Seccion> _seccionesPara(EstadoSesion sesion) {
   ];
 }
 
+enum _Opcion { aprobaciones, cambiarPassword, salir }
+
 class PantallaInicio extends ConsumerStatefulWidget {
   const PantallaInicio({super.key});
 
@@ -159,6 +162,7 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
           ],
         ),
         actions: [
+          const CampanaNotificaciones(),
           // La agenda del personal va arriba y no en la barra inferior, que ya
           // tiene cinco pestañas para Gerencia.
           if (!sesion.soloCliente && sesion.tienePermiso(Permisos.citasVer))
@@ -167,15 +171,25 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
               icon: const Icon(Icons.event_outlined),
               onPressed: () => context.go('/agenda'),
             ),
-          IconButton(
-            tooltip: 'Cambiar contraseña',
-            icon: const Icon(Icons.key_outlined),
-            onPressed: () => abrirCambioDePassword(context),
-          ),
-          IconButton(
-            tooltip: 'Cerrar sesión',
-            icon: const Icon(Icons.logout),
-            onPressed: () => ref.read(sesionProvider.notifier).salir(),
+          // Lo que se usa menos va en un menú, para no amontonar íconos en un teléfono chico.
+          PopupMenuButton<_Opcion>(
+            tooltip: 'Más opciones',
+            onSelected: (opcion) {
+              switch (opcion) {
+                case _Opcion.aprobaciones:
+                  context.push('/aprobaciones');
+                case _Opcion.cambiarPassword:
+                  abrirCambioDePassword(context);
+                case _Opcion.salir:
+                  ref.read(sesionProvider.notifier).salir();
+              }
+            },
+            itemBuilder: (context) => [
+              if (sesion.tienePermiso(Permisos.ordenesAprobarGerencia))
+                const PopupMenuItem(value: _Opcion.aprobaciones, child: Text('Aprobaciones')),
+              const PopupMenuItem(value: _Opcion.cambiarPassword, child: Text('Cambiar contraseña')),
+              const PopupMenuItem(value: _Opcion.salir, child: Text('Cerrar sesión')),
+            ],
           ),
         ],
       ),

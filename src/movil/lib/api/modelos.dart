@@ -273,6 +273,7 @@ class OrdenServicioApi {
     this.saldo,
     this.estadoPago = EstadoPago.pendiente,
     this.ventaId,
+    this.fechaEnvioPresupuesto,
   });
 
   factory OrdenServicioApi.desdeJson(Map<String, dynamic> json) => OrdenServicioApi(
@@ -319,6 +320,7 @@ class OrdenServicioApi {
         totalPagado: (json['totalPagado'] as num? ?? 0).toDouble(),
         saldo: (json['saldo'] as num?)?.toDouble(),
         estadoPago: json['estadoPago'] as String? ?? EstadoPago.pendiente,
+        fechaEnvioPresupuesto: _fecha(json['fechaEnvioPresupuesto']),
       );
 
   final String id;
@@ -370,6 +372,9 @@ class OrdenServicioApi {
   /// Null en respuestas que no lo traen: se toma como el total.
   final double? saldo;
   final String estadoPago;
+
+  /// Última vez que se avisó al cliente que su presupuesto está listo.
+  final DateTime? fechaEnvioPresupuesto;
 
   String get unidad => '$vehiculoMarca $vehiculoModelo';
 
@@ -1230,4 +1235,120 @@ class FotoOrdenApi {
   final String? observacion;
 
   String get nombreEtapa => nombresEtapaFoto[etapa] ?? etapaNombre;
+}
+
+/// Enum TipoNotificacion del backend.
+class TipoNotificacion {
+  const TipoNotificacion._();
+
+  static const solicitudAprobacion = 0;
+  static const presupuestoEnviado = 1;
+  static const ordenLista = 2;
+  static const pedidoLimaRecibido = 3;
+  static const citaConfirmada = 4;
+  static const ordenAsignada = 5;
+}
+
+/// Un aviso de la bandeja. `entidad` dice a qué pantalla lleva: «Aprobaciones»,
+/// «OrdenServicio», «Cita» o «PedidoLima».
+class NotificacionApi {
+  const NotificacionApi({
+    required this.id,
+    required this.tipo,
+    required this.titulo,
+    required this.mensaje,
+    required this.fechaCreacion,
+    this.entidad,
+    this.entidadId,
+    this.cantidad = 1,
+    this.fechaLeida,
+  });
+
+  factory NotificacionApi.desdeJson(Map<String, dynamic> json) => NotificacionApi(
+        id: json['id'] as String,
+        tipo: (json['tipo'] as num?)?.toInt() ?? 0,
+        titulo: json['titulo'] as String? ?? '',
+        mensaje: json['mensaje'] as String? ?? '',
+        fechaCreacion: DateTime.parse(json['fechaCreacion'] as String),
+        entidad: json['entidad'] as String?,
+        entidadId: json['entidadId'] as String?,
+        cantidad: (json['cantidad'] as num?)?.toInt() ?? 1,
+        fechaLeida: _fecha(json['fechaLeida']),
+      );
+
+  final String id;
+  final int tipo;
+  final String titulo;
+  final String mensaje;
+  final DateTime fechaCreacion;
+  final String? entidad;
+  final String? entidadId;
+  final int cantidad;
+  final DateTime? fechaLeida;
+
+  bool get leida => fechaLeida != null;
+}
+
+/// Solicitud a Gerencia: cambio de precio de una orden, una venta o un pedido a Lima.
+class SolicitudAprobacionApi {
+  const SolicitudAprobacionApi({
+    required this.id,
+    required this.tipo,
+    required this.entidad,
+    required this.entidadId,
+    required this.fechaSolicitud,
+    required this.estadoId,
+    required this.detalleCambio,
+    this.usuarioSolicitanteNombre,
+    this.valorAnterior,
+    this.valorSolicitado,
+    this.motivo,
+    this.usuarioAprobadorNombre,
+    this.fechaRespuesta,
+    this.observacionesRespuesta,
+  });
+
+  factory SolicitudAprobacionApi.desdeJson(Map<String, dynamic> json) => SolicitudAprobacionApi(
+        id: json['id'] as String,
+        tipo: json['tipo'] as String? ?? '',
+        entidad: json['entidad'] as String? ?? '',
+        entidadId: json['entidadId'] as String? ?? '',
+        fechaSolicitud: DateTime.parse(json['fechaSolicitud'] as String),
+        estadoId: (json['estadoId'] as num?)?.toInt() ?? EstadoGerencia.pendiente,
+        detalleCambio: json['detalleCambio'] as String? ?? '',
+        usuarioSolicitanteNombre: json['usuarioSolicitanteNombre'] as String?,
+        valorAnterior: (json['valorAnterior'] as num?)?.toDouble(),
+        valorSolicitado: (json['valorSolicitado'] as num?)?.toDouble(),
+        motivo: json['motivo'] as String?,
+        usuarioAprobadorNombre: json['usuarioAprobadorNombre'] as String?,
+        fechaRespuesta: _fecha(json['fechaRespuesta']),
+        observacionesRespuesta: json['observacionesRespuesta'] as String?,
+      );
+
+  final String id;
+  final String tipo;
+
+  /// «OrdenServicio», «Venta» o «PedidoLima».
+  final String entidad;
+  final String entidadId;
+  final DateTime fechaSolicitud;
+
+  /// EstadoGerencia: pendiente, aprobado o rechazado.
+  final int estadoId;
+  final String detalleCambio;
+  final String? usuarioSolicitanteNombre;
+  final double? valorAnterior;
+  final double? valorSolicitado;
+  final String? motivo;
+  final String? usuarioAprobadorNombre;
+  final DateTime? fechaRespuesta;
+  final String? observacionesRespuesta;
+
+  static const nombresEntidad = {
+    'OrdenServicio': 'Orden de servicio',
+    'Venta': 'Venta',
+    'PedidoLima': 'Pedido a Lima',
+  };
+
+  String get nombreEntidad => nombresEntidad[entidad] ?? entidad;
 }

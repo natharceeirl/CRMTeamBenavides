@@ -93,6 +93,7 @@ Future<void> montarInicio(
         portalComprobantesProvider.overrideWith((ref) => []),
         citasProvider.overrideWith((ref) => []),
         pedidosLimaProvider.overrideWith((ref) => []),
+        conteoNotificacionesProvider.overrideWith((ref) => 0),
       ],
       child: const MaterialApp(home: PantallaInicio()),
     ),
@@ -168,6 +169,23 @@ void main() {
     expect(find.text('Hola, Luis'), findsOneWidget);
     expect(find.descendant(of: barra, matching: find.text('Clientes')), findsNothing);
     expect(find.descendant(of: barra, matching: find.text('Tienda')), findsNothing);
+  });
+
+  testWidgets('Gerencia tiene «Aprobaciones» en el menú; el técnico no', (tester) async {
+    await montarInicio(tester);
+    expect(find.byTooltip('Notificaciones'), findsOneWidget);
+    await tester.tap(find.byTooltip('Más opciones'));
+    await tester.pumpAndSettle();
+    expect(find.text('Aprobaciones'), findsOneWidget);
+    expect(find.text('Cerrar sesión'), findsOneWidget);
+  });
+
+  testWidgets('el técnico no ve «Aprobaciones» en el menú', (tester) async {
+    await montarInicio(tester, sesion: SesionTecnico.new);
+    await tester.tap(find.byTooltip('Más opciones'));
+    await tester.pumpAndSettle();
+    expect(find.text('Aprobaciones'), findsNothing);
+    expect(find.text('Cambiar contraseña'), findsOneWidget);
   });
 
   testWidgets('el título de la barra superior sigue a la pestaña', (tester) async {

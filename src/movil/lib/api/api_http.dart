@@ -481,6 +481,72 @@ class ApiHttp {
     }
   }
 
+  // --- Notificaciones ---
+
+  Future<List<NotificacionApi>> notificaciones() async {
+    final datos = await _lista('/api/notificaciones?limite=50');
+    return datos.map(NotificacionApi.desdeJson).toList();
+  }
+
+  Future<int> conteoNotificaciones() async {
+    final datos = await _pedir<Map<String, dynamic>>('/api/notificaciones/conteo');
+    return (datos['noLeidas'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<void> marcarNotificacionLeida(String id) =>
+      _enviar(() => _dio.put<void>('/api/notificaciones/$id/leida'));
+
+  Future<void> marcarTodasLeidas() => _enviar(() => _dio.put<void>('/api/notificaciones/leidas'));
+
+  /// Registra el teléfono para recibir avisos (token de Firebase). Plataforma: 0 Android, 1 iOS.
+  Future<void> registrarDispositivo(String token, int plataforma) => _enviar(
+        () => _dio.post<void>('/api/notificaciones/dispositivos', data: {'token': token, 'plataforma': plataforma}),
+      );
+
+  /// Al cerrar sesión el teléfono deja de recibir los avisos de ese usuario.
+  Future<void> darDeBajaDispositivo(String token) => _enviar(
+        () => _dio.post<void>('/api/notificaciones/dispositivos/baja', data: {'token': token}),
+      );
+
+  // --- Aprobaciones de Gerencia ---
+
+  Future<List<SolicitudAprobacionApi>> aprobacionesPendientes() async {
+    final datos = await _lista('/api/aprobaciones/pendientes');
+    return datos.map(SolicitudAprobacionApi.desdeJson).toList();
+  }
+
+  Future<List<SolicitudAprobacionApi>> historialAprobaciones() async {
+    final datos = await _lista('/api/aprobaciones');
+    return datos.map(SolicitudAprobacionApi.desdeJson).toList();
+  }
+
+  /// Estado EstadoGerencia: aprobado o rechazado.
+  Future<void> resolverAprobacion(String id, int estado, {String? observaciones}) => _enviar(
+        () => _dio.post<void>('/api/aprobaciones/$id/resolver', data: {
+          'estado': estado,
+          'observaciones': observaciones == null || observaciones.isEmpty ? null : observaciones,
+        }),
+      );
+
+  /// Avisa al cliente, con una notificación, que su presupuesto está listo para revisar.
+  Future<OrdenServicioApi> enviarPresupuesto(String ordenId) async {
+    try {
+      final respuesta =
+          await _dio.post<Map<String, dynamic>>('/api/ordenes-servicio/$ordenId/enviar-presupuesto');
+      return OrdenServicioApi.desdeJson(respuesta.data!);
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
+  Future<void> _enviar(Future<Response<void>> Function() llamada) async {
+    try {
+      await llamada();
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
   Future<List<Map<String, dynamic>>> _lista(String ruta) async {
     final datos = await _pedir<List<dynamic>>(ruta);
     return datos.cast<Map<String, dynamic>>();

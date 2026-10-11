@@ -4,9 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import 'auth/sesion.dart';
 import 'pantallas/agenda.dart';
+import 'pantallas/aprobaciones.dart';
 import 'pantallas/cliente_detalle.dart';
 import 'pantallas/inicio.dart';
 import 'pantallas/login.dart';
+import 'pantallas/notificaciones.dart';
 import 'pantallas/orden_detalle.dart';
 
 /// Rutas de la app. El guardia vive acá: sin sesión solo se puede estar en el
@@ -52,6 +54,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'agenda',
             builder: (context, estado) => const PantallaAgenda(),
+          ),
+          GoRoute(
+            path: 'notificaciones',
+            builder: (context, estado) => const PantallaNotificaciones(),
+          ),
+          GoRoute(
+            path: 'aprobaciones',
+            builder: (context, estado) => const PantallaAprobaciones(),
           ),
           GoRoute(
             path: 'ordenes/:id',

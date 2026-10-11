@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { Logo } from '../components/Logo'
 import { ChatbotWidget } from '../components/ChatbotWidget'
 import { ModalCambiarPassword } from '../components/ModalCambiarPassword'
+import { CampanaNotificaciones } from '../components/CampanaNotificaciones'
 import { useSesion } from '../auth/sesion'
 import { cumpleAcceso, enlaces } from '../auth/acceso'
 import { useTipoCambio } from '../api/configuracion'
@@ -34,6 +35,10 @@ export function AppLayout() {
       <aside className={menuAbierto ? 'sidebar abierta' : 'sidebar'}>
         <div className="sidebar-logo">
           <Logo variante="oscuro" alto={26} />
+          {/* En todas las páginas: junto al logo en escritorio, en la barra superior en el celular. */}
+          <div className="sidebar-campana">
+            <CampanaNotificaciones />
+          </div>
           {textoTipoCambio && (
             <div className="sidebar-tipo-cambio" title="Tipo de cambio de venta registrado en Configuración">
               {textoTipoCambio}
