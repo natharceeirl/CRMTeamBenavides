@@ -2638,6 +2638,80 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.ToTable("Ventas");
                 });
 
+            modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.YamahaSyncLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("CodigoHttp")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("EsSimulacion")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<bool>("Exitoso")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("FechaFin")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("FechaInicio")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MensajeError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("ModoEnvio")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("PayloadHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("RegistrosProcesados")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RegistrosRechazados")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RegistrosValidos")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RespuestaCuerpo")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("Servicio")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid?>("UsuarioId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Estado");
+
+                    b.HasIndex("Exitoso");
+
+                    b.HasIndex("FechaInicio");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.HasIndex("Servicio", "FechaInicio");
+
+                    b.ToTable("YamahaSyncLogs", (string)null);
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserClaim<System.Guid>", b =>
                 {
                     b.Property<int>("Id")
@@ -3304,6 +3378,16 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Navigation("OrdenServicio");
 
                     b.Navigation("UsuarioAprobacionGerencia");
+                });
+
+            modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.YamahaSyncLog", b =>
+                {
+                    b.HasOne("CRMTeamBenavides.Domain.Entities.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Usuario");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserClaim<System.Guid>", b =>

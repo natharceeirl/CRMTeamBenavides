@@ -74,6 +74,9 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
     public DbSet<SolicitudAprobacion> SolicitudesAprobacion => Set<SolicitudAprobacion>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
+    // Integración Yamaha Motor del Perú v3
+    public DbSet<YamahaSyncLog> YamahaSyncLogs => Set<YamahaSyncLog>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -819,6 +822,69 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
             entity.HasIndex(n => new { n.UsuarioId, n.FechaLeida });
             entity.HasIndex(n => new { n.EstadoEnvio, n.ProximoIntento });
             entity.HasIndex(n => new { n.UsuarioId, n.ClaveAgrupacion });
+        });
+
+        // --- Integración Yamaha v3: Auditoría y Trazabilidad ---
+        modelBuilder.Entity<YamahaSyncLog>(entity =>
+        {
+            entity.ToTable("YamahaSyncLogs");
+
+            entity.HasKey(l => l.Id);
+
+            entity.Property(l => l.Servicio)
+                .HasConversion<string>()
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(l => l.Estado)
+                .HasConversion<string>()
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(l => l.FechaInicio)
+                .IsRequired();
+
+            entity.Property(l => l.FechaFin);
+
+            entity.Property(l => l.RegistrosProcesados)
+                .IsRequired();
+
+            entity.Property(l => l.RegistrosValidos)
+                .IsRequired();
+
+            entity.Property(l => l.RegistrosRechazados)
+                .IsRequired();
+
+            entity.Property(l => l.PayloadHash)
+                .HasMaxLength(YamahaSyncLog.MaxPayloadHashLongitud);
+
+            entity.Property(l => l.CodigoHttp);
+
+            entity.Property(l => l.RespuestaCuerpo)
+                .HasMaxLength(YamahaSyncLog.MaxRespuestaCuerpoLongitud);
+
+            entity.Property(l => l.MensajeError)
+                .HasMaxLength(YamahaSyncLog.MaxMensajeErrorLongitud);
+
+            entity.Property(l => l.ModoEnvio)
+                .HasMaxLength(YamahaSyncLog.MaxModoEnvioLongitud);
+
+            entity.Property(l => l.Exitoso)
+                .IsRequired();
+
+            entity.Property(l => l.EsSimulacion)
+                .IsRequired();
+
+            entity.HasOne(l => l.Usuario)
+                .WithMany()
+                .HasForeignKey(l => l.UsuarioId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Índices operativos sin unicidad para permitir reintentos legítimos
+            entity.HasIndex(l => new { l.Servicio, l.FechaInicio });
+            entity.HasIndex(l => l.Estado);
+            entity.HasIndex(l => l.FechaInicio);
+            entity.HasIndex(l => l.Exitoso);
         });
     }
 }
