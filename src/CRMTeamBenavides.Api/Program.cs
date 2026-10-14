@@ -198,6 +198,7 @@ builder.Services.AddScoped<IAlmacenamientoArchivoService, AlmacenamientoLocalSer
 builder.Services.AddScoped<IFotoOrdenServicioService, FotoOrdenServicioService>();
 builder.Services.AddScoped<IYamahaService, YamahaMockService>();
 builder.Services.AddScoped<IYamahaDryRunService, YamahaDryRunService>();
+builder.Services.AddSingleton<IYamahaMappingService, YamahaMappingService>();
 builder.Services.AddScoped<IExportacionExcelService, ExportacionExcelService>();
 builder.Services.AddScoped<IImportadorExcelService, ImportadorExcelService>();
 builder.Services.AddScoped<ICitaService, CitaService>();
