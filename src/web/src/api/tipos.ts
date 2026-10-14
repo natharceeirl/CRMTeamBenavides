@@ -1596,3 +1596,54 @@ export type NotificacionResponse = {
 }
 
 export type ConteoNotificacionesResponse = { noLeidas: number }
+
+// ---------------------------------------------------------------------------
+// Importación de Excel: clientes y catálogo (Features/Importaciones)
+// ---------------------------------------------------------------------------
+/** Un problema del archivo. `fila` 0 es del archivo o de la hoja entera, no de una fila. */
+export type ErrorFilaImportacion = {
+  hoja: string
+  fila: number
+  columna: string
+  valorLeido: string | null
+  mensaje: string
+}
+
+export type ResumenHojaImportacion = {
+  totalFilasLeidas: number
+  filasValidas: number
+  filasConError: number
+  /** Solo distinto de 0 después de importar. */
+  registrosCreados: number
+}
+
+/**
+ * POST /api/importaciones/validar y /ejecutar. Con un solo error no se importa
+ * nada: `exitoso` es false y los resúmenes quedan con 0 creados.
+ */
+export type ResultadoImportacionExcel = {
+  exitoso: boolean
+  soloValidacion: boolean
+  nombreArchivo: string
+  fechaProceso: string
+  categoriaId: string | null
+  clientes: ResumenHojaImportacion
+  catalogo: ResumenHojaImportacion
+  errores: ErrorFilaImportacion[]
+}
+
+/** GET /api/importaciones/historial. Solo guarda los intentos de importar, no las validaciones. */
+export type HistorialImportacionItem = {
+  id: string
+  fecha: string
+  usuarioId: string | null
+  usuarioNombre: string | null
+  accion: string
+  nombreArchivo: string
+  exitoso: boolean
+  soloValidacion: boolean
+  categoriaId: string | null
+  clientesProcesados: number
+  catalogoProcesados: number
+  totalErrores: number
+}

@@ -26,6 +26,7 @@ import { PedidosLimaPage } from './pages/PedidosLimaPage'
 import { AprobacionesPage } from './pages/AprobacionesPage'
 import { ComprasPage } from './pages/ComprasPage'
 import { NuevaCompraPage } from './pages/NuevaCompraPage'
+import { ImportacionesPage } from './pages/ImportacionesPage'
 
 export default function App() {
   return (
@@ -90,6 +91,7 @@ export default function App() {
           </Route>
           <Route element={<RutaConPermiso permiso={PERMISOS.configuracionEditar} />}>
             <Route path="configuracion" element={<ConfiguracionPage />} />
+            <Route path="importaciones" element={<ImportacionesPage />} />
           </Route>
         </Route>
       </Route>

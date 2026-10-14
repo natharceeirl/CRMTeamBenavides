@@ -60,6 +60,13 @@ describe('solicitar', () => {
     await expect(solicitar('/clientes')).rejects.toMatchObject({ estado: 502, message: 'No se pudo completar la operación.' })
   })
 
+  it('un error con cuerpo JSON lo guarda en el error', async () => {
+    const cuerpo = { exitoso: false, errores: [{ hoja: 'Clientes', fila: 3 }] }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(respuesta(cuerpo, 400)))
+
+    await expect(solicitar('/importaciones/ejecutar', { metodo: 'POST' })).rejects.toMatchObject({ estado: 400, cuerpo })
+  })
+
   it('manda el token de la sesión en cada llamada', async () => {
     guardarSesion(sesionCon('token-1', 'refresco-1'))
     const llamar = vi.fn().mockResolvedValue(respuesta([{ id: '1' }]))

@@ -13,6 +13,7 @@ export const nombresEntidad: Record<string, string> = {
   Vehiculo: 'Unidad',
   Producto: 'Repuesto',
   Usuario: 'Usuario',
+  ImportacionExcel: 'Importación de Excel',
 }
 
 export const nombreEntidad = (entidad: string) => nombresEntidad[entidad] ?? entidad
@@ -31,6 +32,8 @@ export const nombresAccion: Record<string, string> = {
   Cierre: 'Cierre',
   IngresoCaja: 'Ingreso de caja',
   EgresoCaja: 'Egreso de caja',
+  ImportarExcel: 'Importación',
+  ImportarExcelFallido: 'Importación rechazada',
 }
 
 export const nombreAccion = (accion: string) => nombresAccion[accion] ?? accion

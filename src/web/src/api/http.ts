@@ -10,11 +10,14 @@ export type Sesion = RespuestaLogin
 
 export class ErrorApi extends Error {
   readonly estado: number
+  /** El JSON que vino con el error, si vino: el importador manda ahí los errores por fila. */
+  readonly cuerpo: unknown
 
-  constructor(estado: number, mensaje: string) {
+  constructor(estado: number, mensaje: string, cuerpo: unknown = null) {
     super(mensaje)
     this.name = 'ErrorApi'
     this.estado = estado
+    this.cuerpo = cuerpo
   }
 }
 
@@ -83,7 +86,8 @@ async function interpretar<T>(respuesta: Response): Promise<T> {
   const texto = vacia ? '' : await respuesta.text()
 
   if (!respuesta.ok) {
-    throw new ErrorApi(respuesta.status, mensajeDeError(respuesta.status, leerJson(texto)))
+    const datos = leerJson(texto)
+    throw new ErrorApi(respuesta.status, mensajeDeError(respuesta.status, datos), datos)
   }
 
   return (vacia ? undefined : texto ? JSON.parse(texto) : null) as T

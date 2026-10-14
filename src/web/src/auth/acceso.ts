@@ -156,6 +156,7 @@ export const enlaces: EnlaceMenu[] = [
   { ruta: '/usuarios', texto: 'Usuarios', permiso: PERMISOS.usuariosVer },
   { ruta: '/auditoria', texto: 'Auditoría', permiso: PERMISOS.auditoriaVer },
   { ruta: '/configuracion', texto: 'Configuración', permiso: PERMISOS.configuracionEditar },
+  { ruta: '/importaciones', texto: 'Importar datos', permiso: PERMISOS.configuracionEditar },
 ]
 
 /** Primera pantalla del menú a la que puede entrar, o null si no tiene ninguna. */
