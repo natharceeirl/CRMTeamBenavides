@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using CRMTeamBenavides.Api.Features.Yamaha;
 using CRMTeamBenavides.Api.Services.Yamaha;
@@ -325,5 +328,168 @@ public class YamahaSyncOrchestratorTests
         // Comprueba que el watermark ignora el log fallido y toma el log completado
         var puntoCorte = await watermarkService.ObtenerPuntoCorteDesdeUtcAsync(YamahaServicioSincronizacion.Ventas);
         Assert.Equal(logPrevioCompletado.FechaInicio, puntoCorte);
+    }
+
+    private sealed class TrackingVentasExporter : IYamahaVentasExporter
+    {
+        public int LlamadasExportar { get; private set; }
+        public IReadOnlyList<YamahaVentaV3Dto> RegistrosRetornados { get; set; } = new List<YamahaVentaV3Dto>();
+
+        public Task<YamahaExportacionResultado<YamahaVentaV3Dto>> ExportarVentasAsync(
+            DateTime? desdeUtc = null,
+            DateTime? hastaUtc = null,
+            bool soloVentasMostrador = true,
+            CancellationToken cancellationToken = default)
+        {
+            LlamadasExportar++;
+            return Task.FromResult(new YamahaExportacionResultado<YamahaVentaV3Dto>(
+                RegistrosValidos: RegistrosRetornados,
+                TotalEntidadesLeidas: RegistrosRetornados.Count,
+                TotalRegistrosValidos: RegistrosRetornados.Count,
+                TotalRegistrosOmitidos: 0,
+                ObservacionesYAdvertencias: new List<string>(),
+                RangoDesdeUtc: desdeUtc,
+                RangoHastaUtc: hastaUtc
+            ));
+        }
+    }
+
+    [Fact]
+    public async Task SincronizarServicioAsync_ModoReal_DebeReutilizarExtraccionValidadaSinReconsultar()
+    {
+        using var context = CrearDbContextMemoria();
+        var mappingService = new YamahaMappingService();
+        var settings = Options.Create(new YamahaSettings
+        {
+            Enabled = true,
+            CodigoPuntoVenta = "TB-AQP-01",
+            TipoPuntoVenta = "3S"
+        });
+
+        var dummyDto = new YamahaVentaV3Dto
+        {
+            RazonSocial = "Team Benavides S.R.L.",
+            RUC = "20601234567",
+            CodigoPuntoVenta = "TB-AQP-01",
+            NombreComercialPuntoVenta = "Team Benavides Arequipa",
+            TipoPuntoVenta = "3S",
+            FechaFacturacion = "14/10/2026",
+            TipoDocumentoVenta = "FACTURA",
+            NumeroComprobante = "F001-0000123",
+            Canal = "MOSTRADOR",
+            LineaNegocio = "SP",
+            CodigoYamaha = "90793-AJ412",
+            Descripcion = "Aceite Yamalube",
+            CantidadVendida = 2,
+            MontoSinIGV = 50.00m,
+            MontoConIGV = 59.00m,
+            PrecioFinal = 59.00m,
+            DescuentoPorcentaje = 0.00m,
+            DescuentoSoles = 0.00m,
+            PrecioUnitarioConIGV = 29.50m,
+            TipoPago = "CONTADO",
+            EntidadFinanciera = "CONTADO",
+            TipoCliente = "CLIENTE FINAL",
+            NombreCompletoCliente = "Juan Perez",
+            TipoDocumentoCliente = "DNI",
+            NumeroDocumentoCliente = "12345678",
+            CanalContactoCliente = "PRESENCIAL",
+            CelularCliente = "987654321",
+            CorreoCliente = "juan@example.com",
+            DireccionCliente = "Av. Ejercito 123",
+            CiudadCliente = "Arequipa",
+            DepartamentoCliente = "Arequipa"
+        };
+
+        var trackingExporter = new TrackingVentasExporter
+        {
+            RegistrosRetornados = new[] { dummyDto }
+        };
+
+        var stockExporter = new YamahaStockExporter(context, mappingService, settings);
+        var steExporter = new YamahaServicioTecnicoExporter(context, mappingService, settings);
+        var watermarkService = new YamahaWatermarkService(context);
+        var fakeClient = new FakeYamahaApiClient
+        {
+            RespuestaSimulada = new YamahaHttpRespuestaDto(200, true, "{\"status\":\"ok\"}", null, TimeSpan.FromMilliseconds(10))
+        };
+
+        var orchestrator = new YamahaSyncOrchestrator(
+            context,
+            trackingExporter,
+            stockExporter,
+            steExporter,
+            watermarkService,
+            fakeClient,
+            settings,
+            NullLogger<YamahaSyncOrchestrator>.Instance);
+
+        var res = await orchestrator.SincronizarServicioAsync(
+            YamahaServicioSincronizacion.Ventas,
+            esSimulacion: false,
+            modoEnvio: "Programado");
+
+        Assert.True(res.Exitoso);
+        // H-01: Se verifica que el exportador solo fue consultado exactamente UNA vez
+        Assert.Equal(1, trackingExporter.LlamadasExportar);
+        Assert.Equal(1, fakeClient.TotalLlamadasEnvio);
+        Assert.NotNull(fakeClient.UltimoLoteVentas);
+        Assert.Single(fakeClient.UltimoLoteVentas);
+        Assert.Same(dummyDto, fakeClient.UltimoLoteVentas[0]);
+
+        // Verificar que el PayloadHash corresponde exactamente al lote enviado
+        var jsonEsperado = YamahaJsonSerializer.SerializarVentas(new[] { dummyDto }, indented: false);
+        var hashEsperado = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(jsonEsperado))).ToLowerInvariant();
+        Assert.Equal(hashEsperado, res.PayloadHash);
+    }
+
+    [Fact]
+    public async Task SincronizarServicioAsync_CuandoExisteEjecucionEnCurso_DebeRechazarPorConcurrencia()
+    {
+        using var context = CrearDbContextMemoria();
+        var mappingService = new YamahaMappingService();
+        var settings = Options.Create(new YamahaSettings
+        {
+            Enabled = false,
+            ConcurrenciaEsperaSegundos = 0 // Falla inmediatamente si el semáforo está ocupado
+        });
+
+        var stockExporter = new YamahaStockExporter(context, mappingService, settings);
+        var ventasExporter = new YamahaVentasExporter(context, mappingService, settings);
+        var steExporter = new YamahaServicioTecnicoExporter(context, mappingService, settings);
+        var watermarkService = new YamahaWatermarkService(context);
+        var fakeClient = new FakeYamahaApiClient();
+
+        var orchestrator = new YamahaSyncOrchestrator(
+            context,
+            ventasExporter,
+            stockExporter,
+            steExporter,
+            watermarkService,
+            fakeClient,
+            settings,
+            NullLogger<YamahaSyncOrchestrator>.Instance);
+
+        // Simulamos una ejecución activa adquiriendo el semáforo del servicio ServicioTecnico
+        var field = typeof(YamahaSyncOrchestrator).GetField("_serviceSemaphores", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var semaphores = (ConcurrentDictionary<YamahaServicioSincronizacion, SemaphoreSlim>)field.GetValue(null)!;
+        var sem = semaphores[YamahaServicioSincronizacion.ServicioTecnico];
+
+        await sem.WaitAsync();
+        try
+        {
+            var resConcurrente = await orchestrator.SincronizarServicioAsync(
+                YamahaServicioSincronizacion.ServicioTecnico,
+                esSimulacion: true,
+                modoEnvio: "Manual");
+
+            Assert.False(resConcurrente.Exitoso);
+            Assert.Contains("Concurrencia detectada", resConcurrente.ErroresOAdvertencias[0]);
+            Assert.Contains("en curso", resConcurrente.Mensaje);
+        }
+        finally
+        {
+            sem.Release();
+        }
     }
 }

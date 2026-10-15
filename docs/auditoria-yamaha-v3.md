@@ -502,3 +502,23 @@ En la iteración de robustez se corrigieron los tres hallazgos técnicos detecta
    - **Base de datos real:** Las pruebas de integración se ejecutan con `Microsoft.EntityFrameworkCore.InMemory`. No se ejecutaron contra un motor PostgreSQL real para no conectar ni migrar bases de datos activas en este entorno.
    - **Decisiones pendientes:** Las decisiones **D-01 a D-07** y la ambigüedad **AMB-3.4-8** permanecen sin resolver a la espera de la reunión con gerencia y confirmación de Yamaha.
    - **Idempotencia remota:** No existe garantía documental de que Yamaha haga `UPSERT` en lugar de `INSERT` ante respuestas HTTP perdidas; el riesgo de duplicación en el receptor ante fallos de red TCP permanece abierto.
+
+---
+
+## 13. Resolución de Hallazgos de Robustez H-01, H-02 y H-04
+
+1. **H-01 — Reutilización de Payload Validado:**
+   - En `YamahaSyncOrchestrator`, se suprimió la segunda lectura de base de datos en el Paso 6 del flujo real de envío.
+   - La lista de DTOs validada localmente en el Paso 2 es la misma que se transmite a `_apiClient.Enviar...Async`.
+   - El hash SHA-256 (`PayloadHash`) registrado en `YamahaSyncLogs` coincide exactamente con el contenido enviado a Yamaha.
+2. **H-02 — Resiliencia en Reintentos de Stock:**
+   - En `YamahaSyncBackgroundService`, los fallos en el cierre diario de stock no bloquean la jornada. Se permite el reintento tras un tiempo de enfriamiento configurable (`IntervaloReintentoStockMinutos`, default 15 min).
+   - El éxito persistido en base de datos (`YaSeEjecutoStockCierreHoyAsync`) evita ejecuciones duplicadas tras reinicios del servicio.
+   - Las simulaciones no son contabilizadas como cierres reales.
+   - La hora de cierre (`HoraCierreStockPeru = "22:00"`) continúa sujeta a confirmación en reunión de negocio.
+3. **H-04 — Exclusión Mutua Concurrente a Nivel de Servicio:**
+   - En `YamahaSyncOrchestrator`, se incorporaron semáforos en proceso por servicio (`ConcurrentDictionary<YamahaServicioSincronizacion, SemaphoreSlim>`).
+   - Sincronizaciones concurrentes sobre el mismo servicio (ej. llamada manual desde endpoint mientras corre la programada) son serializadas o rechazadas de forma limpia según `ConcurrenciaEsperaSegundos` (default 5s).
+   - Se documenta que este mecanismo es *in-process* para despliegues de una sola instancia de API; para arquitecturas multi-instancia horizontal se requerirá cerrojo distribuido (ej. `pg_advisory_lock` o Redis).
+4. **Verificación Automatizada:**
+   - Total de pruebas automatizadas: **172 pruebas pasando al 100 %** (0 errores, 0 omitidas).

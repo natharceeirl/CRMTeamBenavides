@@ -85,6 +85,17 @@ public class YamahaSettings
     public int TiempoExpiracionEnProcesoMinutos { get; set; } = 30;
 
     /// <summary>
+    /// Intervalo en minutos para reintentar el envio diario de Stock en caso de fallo tecnico o de red (por defecto 15 minutos).
+    /// Evita bucles intensivos mientras permite recuperar el cierre en la misma jornada.
+    /// </summary>
+    public int IntervaloReintentoStockMinutos { get; set; } = 15;
+
+    /// <summary>
+    /// Tiempo maximo en segundos de espera para adquirir la exclusion mutua por servicio antes de rechazar una sincronizacion concurrente (por defecto 5 segundos).
+    /// </summary>
+    public int ConcurrenciaEsperaSegundos { get; set; } = 5;
+
+    /// <summary>
     /// Obtiene la hora de cierre de Stock parseada como TimeOnly (hora local de Peru).
     /// Si el valor configurado no es valido, retorna 22:00 por defecto.
     /// </summary>
