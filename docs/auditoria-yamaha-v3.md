@@ -438,3 +438,38 @@ Antes de pasar a la etapa de diseño detallado e implementación, se requiere de
    - ¿Todos los productos activos de la tabla `Productos` son repuestos oficiales Yamaha que deben informarse en `ReceiveRetailStock`, o existen productos de otras marcas/insumos internos que deben filtrarse (por ejemplo, mediante el campo `Producto.Marca` o una categoría específica)?
 7. **Datos de identificación del punto de venta:**
    - ¿Cuál es el `CodigoPuntoVenta` oficial asignado por Yamaha Motor del Perú a Team Benavides, el `RUC` definitivo de producción y la `Hora de Cierre` operativa en la que debe dispararse el envío diario de Stock?
+
+---
+
+## 11. Estado de Implementación Técnica de Infraestructura Yamaha v3 (Octubre 2026)
+
+Tras la auditoría inicial, se implementaron de forma modular todos los componentes técnicos desacoplados que no dependen de la resolución de decisiones de negocio pendientes, garantizando cero impacto en la operación del CRM y manteniendo la integración productiva desactivada (`YamahaSettings.Enabled = false`):
+
+1. **Persistencia de Auditoría de Sincronización:**
+   - Entidad `YamahaSyncLog` creada con ciclo de vida `Iniciar` -> `RegistrarExito` / `RegistrarFallo`.
+   - Migración EF Core aditiva `20261014042542_AgregarYamahaSyncLog` con índices para `(Servicio, FechaInicio)`, `PayloadHash` y `Exitoso`.
+2. **Contratos y Serialización v3:**
+   - DTOs inmutables para los 3 servicios con nombres PascalCase exactos: `YamahaVentaV3Dto` (39 campos), `YamahaStockV3Dto` (12 campos) y `YamahaServicioTecnicoV3Dto` (30 campos).
+   - Serializador genérico `YamahaJsonSerializer` y convertidor `YamahaV3Converters` (fechas `dd/MM/yyyy`, decimales con `.`, vacíos para nulos).
+   - Validador estricto `YamahaV3Validator` que verifica reglas de formato, consistencia de 6 campos de cabecera en OT, `OT-`, `YAMAHA`, regex de chasis/placa.
+3. **Cliente HTTP Yamaha v3 y Resiliencia:**
+   - Interfaz `IYamahaApiClient`, implementación `YamahaApiClient` y simulador `FakeYamahaApiClient`.
+   - Soporte para `ReceiveRetailVentas`, `ReceiveRetailStock` y `ReceiveRetailServicioTecnico`.
+   - Sanitización absoluta de secretos en URIs (`?code=***`) y cuerpos de error.
+   - Reintentos exponenciales para errores transitorios (408, 429, 500, 502, 503, 504).
+   - Bloqueo en ejecución real si `Enabled == false`.
+4. **Extractores PostgreSQL con EF Core AsNoTracking:**
+   - `YamahaStockExporter`: Cierre de inventario activo con SKU, parámetro `soloMarcaYamaha` para aislar D-07.
+   - `YamahaVentasExporter`: Ventas facturadas, parámetro `soloVentasMostrador` para aislar D-02.
+   - `YamahaServicioTecnicoExporter`: Órdenes con comprobantes emitidos, correlativo no destructivo `OT-` (D-08), mapeo determinístico `TipoAtencion` (D-09), repuestos vinculados con `Producto`.
+5. **Servicio Watermark (Sin tablas adicionales):**
+   - `YamahaWatermarkService`: Deriva marcas temporales de la última sincronización no simulada exitosa en `YamahaSyncLogs`. Carga inicial de 3 meses conforme a la sección 3.1 de la especificación.
+6. **Orquestador Central y Scheduler:**
+   - `YamahaSyncOrchestrator`: Pipeline extracción -> mapeo -> validación estricta -> cálculo SHA-256 -> auditoría -> despacho HTTP.
+   - `YamahaSyncBackgroundService`: Tarea en segundo plano con semáforo unitario, inactiva por defecto.
+7. **Endpoints Administrativos y Diagnóstico:**
+   - `POST /api/yamaha/sincronizar/{servicio}` (con soporte de parámetro `simulacion`).
+   - `GET /api/yamaha/watermarks` (diagnóstico de marcas temporales).
+   - `GET /api/yamaha/historial` (trazabilidad y auditoría paginada).
+8. **Pruebas Automatizadas:**
+   - Suite completa de 161 pruebas unitarias y de integración en memoria pasando exitosamente (0 errores, 0 omitidas).

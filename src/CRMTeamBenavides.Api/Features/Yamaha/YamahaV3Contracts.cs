@@ -625,6 +625,9 @@ public static class YamahaJsonSerializer
         return options;
     }
 
+    public static string Serializar<T>(T valor, bool indented = false) =>
+        JsonSerializer.Serialize(valor, indented ? IndentedOptions : Options);
+
     public static string SerializarVentas(IEnumerable<YamahaVentaV3Dto> registros, bool indented = false) =>
         JsonSerializer.Serialize(registros, indented ? IndentedOptions : Options);
 

@@ -5,26 +5,36 @@ namespace CRMTeamBenavides.Api.Features.Yamaha;
 ///
 /// Permite testear todo el código que depende de <see cref="IYamahaApiClient"/>
 /// sin requerir acceso real a la API de Yamaha.
-///
-/// Comportamiento por defecto:
-///   - <see cref="VerificarConectividadAsync"/>: retorna <c>true</c> (simulando éxito).
-///
-/// Las pruebas pueden asignar <see cref="ResultadoConectividad"/> para simular éxito o fallo,
-/// y <see cref="ExcepcionSimulada"/> para simular errores de red, timeouts u otras excepciones.
 /// </summary>
 public sealed class FakeYamahaApiClient : IYamahaApiClient
 {
     /// <summary>
     /// Resultado que devolverá <see cref="VerificarConectividadAsync"/>.
-    /// Las pruebas pueden cambiar este valor antes de invocar el método.
     /// </summary>
     public bool ResultadoConectividad { get; set; } = true;
 
     /// <summary>
-    /// Si se asigna, <see cref="VerificarConectividadAsync"/> lanzará esta excepción.
-    /// Útil para simular errores de red o timeouts en pruebas.
+    /// Si se asigna, las operaciones lanzarán esta excepción.
     /// </summary>
     public Exception? ExcepcionSimulada { get; set; }
+
+    /// <summary>
+    /// Respuesta HTTP predeterminada a devolver en los envíos.
+    /// </summary>
+    public YamahaHttpRespuestaDto RespuestaSimulada { get; set; } =
+        new(200, true, "{\"status\":\"ok\",\"mensaje\":\"Lote recibido exitosamente por el simulador\"}", null, TimeSpan.FromMilliseconds(15));
+
+    /// <summary>Último lote de ventas recibido en pruebas.</summary>
+    public IReadOnlyList<YamahaVentaV3Dto>? UltimoLoteVentas { get; private set; }
+
+    /// <summary>Último lote de stock recibido en pruebas.</summary>
+    public IReadOnlyList<YamahaStockV3Dto>? UltimoLoteStock { get; private set; }
+
+    /// <summary>Último lote de servicio técnico recibido en pruebas.</summary>
+    public IReadOnlyList<YamahaServicioTecnicoV3Dto>? UltimoLoteServicioTecnico { get; private set; }
+
+    /// <summary>Contador de llamadas totales a métodos de envío.</summary>
+    public int TotalLlamadasEnvio { get; private set; }
 
     /// <inheritdoc />
     public Task<bool> VerificarConectividadAsync(CancellationToken cancellationToken = default)
@@ -35,5 +45,56 @@ public sealed class FakeYamahaApiClient : IYamahaApiClient
             throw ExcepcionSimulada;
 
         return Task.FromResult(ResultadoConectividad);
+    }
+
+    /// <inheritdoc />
+    public Task<YamahaHttpRespuestaDto> EnviarVentasAsync(
+        IReadOnlyList<YamahaVentaV3Dto> registros,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (ExcepcionSimulada is not null)
+            throw ExcepcionSimulada;
+
+        UltimoLoteVentas = registros;
+        TotalLlamadasEnvio++;
+        return Task.FromResult(RespuestaSimulada);
+    }
+
+    /// <inheritdoc />
+    public Task<YamahaHttpRespuestaDto> EnviarStockAsync(
+        IReadOnlyList<YamahaStockV3Dto> registros,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (ExcepcionSimulada is not null)
+            throw ExcepcionSimulada;
+
+        UltimoLoteStock = registros;
+        TotalLlamadasEnvio++;
+        return Task.FromResult(RespuestaSimulada);
+    }
+
+    /// <inheritdoc />
+    public Task<YamahaHttpRespuestaDto> EnviarServicioTecnicoAsync(
+        IReadOnlyList<YamahaServicioTecnicoV3Dto> registros,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (ExcepcionSimulada is not null)
+            throw ExcepcionSimulada;
+
+        UltimoLoteServicioTecnico = registros;
+        TotalLlamadasEnvio++;
+        return Task.FromResult(RespuestaSimulada);
+    }
+
+    public void LimpiarHistorial()
+    {
+        UltimoLoteVentas = null;
+        UltimoLoteStock = null;
+        UltimoLoteServicioTecnico = null;
+        TotalLlamadasEnvio = 0;
+        ExcepcionSimulada = null;
     }
 }

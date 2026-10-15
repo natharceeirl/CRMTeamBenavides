@@ -498,12 +498,25 @@ Para poder iniciar la codificación sin suposiciones, se requiere tu decisión o
 
 ## 8. Orden de Implementación Propuesto (Entregas Pequeñas y Verificables)
 
-Para minimizar el riesgo y facilitar la revisión de código, se propone dividir la implementación en **5 entregas incrementales**, donde cada entrega compila con `0 errores y 0 advertencias` y puede probarse de forma aislada:
+Para minimizar el riesgo y facilitar la revisión de código, se dividió la implementación en entregas incrementales verificadas mediante pruebas automatizadas:
 
-| Entrega | Alcance Técnico Acotado | Archivos Afectados / Nuevos | Dependencias |
-| :---: | :--- | :--- | :--- |
-| **Entrega 1** | **Seguridad, Configuración y Contratos JSON v3:** Ampliar `YamahaSettings`, sanitizar logs en `YamahaApiClient`, crear los 3 DTOs de salida con sus 39, 12 y 30 campos exactos, y el `YamahaPayloadValidator`. | `Features/Yamaha/YamahaSettings.cs`, `Features/Yamaha/YamahaContracts.cs`, `Features/Yamaha/YamahaPayloadValidator.cs` (nuevo), `Features/Yamaha/YamahaApiClient.cs` | Confirmación de decisiones básicas de formato. |
-| **Entrega 2** | **Extractor y Envío del Servicio 2 — Stock:** Implementar el servicio generador del cierre de inventario (`SP`), conexión con `IYamahaApiClient` (`ReceiveRetailStock`) y endpoint dry-run de Stock. | `Services/Yamaha/YamahaStockExporter.cs` (nuevo), `Features/Yamaha/IYamahaApiClient.cs`, `Features/Yamaha/FakeYamahaApiClient.cs` | Entrega 1 + Decisiones **D-03** y **D-07**. |
-| **Entrega 3** | **Extractor y Envío del Servicio 3 — Servicio Técnico (`STE`):** Implementar proyección de órdenes facturadas, transformación `OS-` -> `OT-`, validación de consistencia de los 6 campos de cabecera por OT, validación de `Placa`/`Chasis` en vehículos Yamaha y envío a `ReceiveRetailServicioTecnico`. | `Services/Yamaha/YamahaServicioTecnicoExporter.cs` (nuevo), ajustes de validación no destructiva en `VehiculoService.cs` / `OrdenServicioService.cs` | Entrega 1 + Decisiones **D-08** y **D-09**. |
-| **Entrega 4** | **Extractor y Envío del Servicio 1 — Ventas y Notas de Crédito:** Implementar proyección de ventas facturadas, mapeo de `TipoDocumentoVenta`, regla de signo negativo para `NOTA DE CREDITO`, aislamiento frente a OT y envío a `ReceiveRetailVentas`. | `Services/Yamaha/YamahaVentasExporter.cs` (nuevo), ajustes acordados en `ClienteService.cs` / `VentaService.cs` | Entrega 1 + Decisiones **D-01**, **D-02**, **D-04**, **D-05**, **D-06**. |
-| **Entrega 5** | **Orquestador Incremental (Watermark), Scheduler (`BackgroundService`), Auditoría y Pruebas:** Implementar control de carga inicial (3 meses) vs deltas (cada 4h), cierre diario de Stock, trazabilidad de lotes y suite completa de pruebas automatizadas. | `Services/Yamaha/YamahaSyncOrchestrator.cs` (nuevo), `Services/Yamaha/YamahaSyncBackgroundService.cs` (nuevo), `Features/Yamaha/YamahaEndpoints.cs`, `Program.cs` | Entregas 2, 3 y 4 completadas. |
+| Entrega | Alcance Técnico Acotado | Archivos Afectados / Nuevos | Estado Técnico |
+| :---: | :--- | :--- | :---: |
+| **Entrega 1** | **Seguridad, Configuración y Contratos JSON v3:** DTOs v3 (39, 12 y 30 campos), serializador genérico con formato regional, `YamahaV3Validator`, sanitización de secretos en URI/logs, y reintentos HTTP en `YamahaApiClient`. | `Features/Yamaha/YamahaSettings.cs`, `Features/Yamaha/YamahaV3Contracts.cs`, `Features/Yamaha/YamahaV3Validator.cs`, `Features/Yamaha/YamahaApiClient.cs`, `Features/Yamaha/FakeYamahaApiClient.cs` | **IMPLEMENTADO Y VERIFICADO** |
+| **Entrega 2** | **Persistencia de Auditoría:** Entidad `YamahaSyncLog`, migración EF Core aditiva, índices y repositorio/DbContext. | `Domain/Entities/YamahaSyncLog.cs`, `Data/Migrations/*_AgregarYamahaSyncLog.cs`, `Data/ApplicationDbContext.cs` | **IMPLEMENTADO Y VERIFICADO** |
+| **Entrega 3** | **Extractores PostgreSQL (AsNoTracking):** Extractores para Stock (`soloMarcaYamaha`), Ventas (`soloVentasMostrador`) y Servicio Técnico (transformación no destructiva `OS-` -> `OT-` y traducción determinística `TipoAtencion`). | `Services/Yamaha/Exportadores/IYamahaStockExporter.cs`, `YamahaStockExporter.cs`, `IYamahaVentasExporter.cs`, `YamahaVentasExporter.cs`, `IYamahaServicioTecnicoExporter.cs`, `YamahaServicioTecnicoExporter.cs` | **IMPLEMENTADO Y VERIFICADO** |
+| **Entrega 4** | **Servicio de Watermarks y Orquestador Central:** Derivación de cursor temporal desde `YamahaSyncLogs` sin tablas adicionales, orquestación de extracción, cálculo de SHA-256, validación y auditoría. | `Services/Yamaha/IYamahaWatermarkService.cs`, `YamahaWatermarkService.cs`, `IYamahaSyncOrchestrator.cs`, `YamahaSyncOrchestrator.cs` | **IMPLEMENTADO Y VERIFICADO** |
+| **Entrega 5** | **Scheduler, Endpoints Administrativos y Suite de Pruebas:** BackgroundService protegido por semáforo (inactivo si `Enabled = false`), endpoints de sincronización/diagnóstico/historial y suite de 161 pruebas pasando. | `Services/Yamaha/YamahaSyncBackgroundService.cs`, `Features/Yamaha/YamahaEndpoints.cs`, `Program.cs`, `tests/CRMTeamBenavides.Api.Tests/*` | **IMPLEMENTADO Y VERIFICADO** |
+
+---
+
+## 9. Estado Actual del Sistema y Próximos Pasos de Negocio
+
+1. **Estado de Producción:** La integración permanece en **modo inactivo seguro** (`YamahaSettings.Enabled = false`). Ningún dato se envía a endpoints reales de Yamaha y ninguna conexión saliente es ejecutada.
+2. **Desacoplamiento de Decisiones Pendientes:**
+   - **D-01 (Unidades MC/ATV/OM):** El sistema exporta `"SP"` y no asume inventario de motos comerciales sin definición.
+   - **D-02 (Repuestos Taller en Ventas):** El exportador de ventas soporta el flag `soloVentasMostrador` para conmutar fácilmente entre ambas alternativas sin rehacer código.
+   - **D-03 (Costo vs Precio en Stock):** Mapeado a costo de adquisición configurable.
+   - **D-04 (Notas de Crédito):** Excluidas de la proyección hasta implementar el tipo de comprobante formal.
+   - **D-07 (Filtro Marca Yamaha):** El exportador de stock incluye el flag `soloMarcaYamaha`.
+3. **Próximo Paso Requerido:** Resolver en la reunión de negocio los puntos D-01 a D-07 con Team Benavides y Yamaha, y cargar las `Function_Key` reales en User Secrets o variables de entorno del servidor.

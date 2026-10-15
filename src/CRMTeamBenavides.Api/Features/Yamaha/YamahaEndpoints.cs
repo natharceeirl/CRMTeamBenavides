@@ -2,6 +2,8 @@ using System.Security.Claims;
 using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Services.Yamaha;
 using CRMTeamBenavides.Data;
+using CRMTeamBenavides.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace CRMTeamBenavides.Api.Features.Yamaha;
 
@@ -142,6 +144,122 @@ public static class YamahaEndpoints
                 dbContext,
                 lote => dryRunService.SimularLoteServicioTecnico(lote, indentarJson: true)))
         .WithName("SimularDryRunYamahaServicioTecnico");
+
+        // ---------------------------------------------------------------------
+        // Disparo de sincronización y diagnóstico de watermarks / auditoría
+        // ---------------------------------------------------------------------
+        var syncGroup = app.MapGroup("/api/yamaha")
+            .RequireAuthorization(PermisosDefinidos.ConfiguracionEditar);
+
+        syncGroup.MapPost("/sincronizar/{servicio}", async (
+            string servicio,
+            bool? simulacion,
+            ClaimsPrincipal user,
+            IYamahaSyncOrchestrator orchestrator,
+            ApplicationDbContext dbContext,
+            CancellationToken ct) =>
+        {
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+            if (!isolation.UsuarioId.HasValue || !isolation.EsStaff || isolation.EsCliente || isolation.DebeDenegarAcceso)
+            {
+                return Results.Forbid();
+            }
+
+            YamahaServicioSincronizacion servicioEnum;
+            var servNormalizado = servicio.Trim().ToLowerInvariant();
+            if (servNormalizado is "ventas" or "retail-ventas")
+            {
+                servicioEnum = YamahaServicioSincronizacion.Ventas;
+            }
+            else if (servNormalizado is "stock" or "retail-stock")
+            {
+                servicioEnum = YamahaServicioSincronizacion.Stock;
+            }
+            else if (servNormalizado is "servicio-tecnico" or "serviciotecnico" or "retail-servicio-tecnico" or "taller")
+            {
+                servicioEnum = YamahaServicioSincronizacion.ServicioTecnico;
+            }
+            else
+            {
+                return Results.BadRequest(new
+                {
+                    error = $"Servicio '{servicio}' no reconocido. Valores permitidos: ventas, stock, servicio-tecnico."
+                });
+            }
+
+            // Por defecto, simulacion = true si no se especifica explícitamente false
+            bool esSimulacion = simulacion ?? true;
+
+            var resultado = await orchestrator.SincronizarServicioAsync(
+                servicioEnum,
+                esSimulacion: esSimulacion,
+                modoEnvio: "Manual",
+                usuarioId: isolation.UsuarioId,
+                cancellationToken: ct);
+
+            return Results.Ok(resultado);
+        })
+        .WithName("DispararSincronizacionYamaha");
+
+        syncGroup.MapGet("/watermarks", async (
+            IYamahaWatermarkService watermarkService,
+            ClaimsPrincipal user,
+            ApplicationDbContext dbContext,
+            CancellationToken ct) =>
+        {
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+            if (!isolation.UsuarioId.HasValue || !isolation.EsStaff || isolation.EsCliente || isolation.DebeDenegarAcceso)
+            {
+                return Results.Forbid();
+            }
+
+            var diagnostico = await watermarkService.ObtenerDiagnosticoWatermarksAsync(ct);
+            return Results.Ok(diagnostico);
+        })
+        .WithName("ConsultarDiagnosticoWatermarksYamaha");
+
+        syncGroup.MapGet("/historial", async (
+            int? limite,
+            ClaimsPrincipal user,
+            ApplicationDbContext dbContext,
+            CancellationToken ct) =>
+        {
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+            if (!isolation.UsuarioId.HasValue || !isolation.EsStaff || isolation.EsCliente || isolation.DebeDenegarAcceso)
+            {
+                return Results.Forbid();
+            }
+
+            int top = Math.Clamp(limite ?? 50, 1, 200);
+            var logs = await dbContext.YamahaSyncLogs
+                .AsNoTracking()
+                .Include(l => l.Usuario)
+                .OrderByDescending(l => l.FechaInicio)
+                .Take(top)
+                .Select(l => new
+                {
+                    l.Id,
+                    Servicio = l.Servicio.ToString(),
+                    Estado = l.Estado.ToString(),
+                    l.FechaInicio,
+                    l.FechaFin,
+                    l.RegistrosProcesados,
+                    l.RegistrosValidos,
+                    l.RegistrosRechazados,
+                    l.PayloadHash,
+                    l.CodigoHttp,
+                    l.RespuestaCuerpo,
+                    l.MensajeError,
+                    l.Exitoso,
+                    l.EsSimulacion,
+                    l.ModoEnvio,
+                    UsuarioNombre = l.Usuario != null ? l.Usuario.NombreCompleto : null
+                })
+                .ToListAsync(ct);
+
+            return Results.Ok(logs);
+        })
+        .WithName("ConsultarHistorialYamahaSyncLogs");
     }
 
     public const int MaxRegistrosDryRun = 5000;
