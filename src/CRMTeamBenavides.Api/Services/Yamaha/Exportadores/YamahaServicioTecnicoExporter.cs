@@ -57,26 +57,55 @@ public sealed class YamahaServicioTecnicoExporter : IYamahaServicioTecnicoExport
 
         query = query.Where(os => os.Comprobantes.Any(c => c.Estado == "Emitido" && c.FechaCreacion <= hastaUtc.Value));
 
-        var ordenes = await query
-            .OrderBy(os => os.FechaIngreso)
-            .ToListAsync(cancellationToken);
+        int tamanioLote = _settings.TamanioLoteExportacion > 0 ? _settings.TamanioLoteExportacion : 500;
+        int offset = 0;
+        int totalLeidas = 0;
+        int totalValidos = 0;
+        int totalOmitidos = 0;
+        var dtosValidos = new List<YamahaServicioTecnicoV3Dto>();
+        var observaciones = new HashSet<string>();
 
-        var resultadoMapeo = _mappingService.MapearLoteOrdenesServicio(ordenes, contexto);
+        while (true)
+        {
+            var paginaOrdenes = await query
+                .OrderBy(os => os.FechaIngreso)
+                .ThenBy(os => os.Id)
+                .Skip(offset)
+                .Take(tamanioLote)
+                .ToListAsync(cancellationToken);
 
-        var observaciones = resultadoMapeo.Registros
-            .SelectMany(r => r.Observaciones)
-            .Distinct()
-            .ToList();
+            if (paginaOrdenes.Count == 0)
+            {
+                break;
+            }
+
+            totalLeidas += paginaOrdenes.Count;
+            var resultadoMapeo = _mappingService.MapearLoteOrdenesServicio(paginaOrdenes, contexto);
+            dtosValidos.AddRange(resultadoMapeo.DtosProyectados);
+            totalValidos += resultadoMapeo.TotalValidos;
+            totalOmitidos += resultadoMapeo.TotalNoProyectables;
+
+            foreach (var obs in resultadoMapeo.Registros.SelectMany(r => r.Observaciones))
+            {
+                observaciones.Add(obs);
+            }
+
+            offset += paginaOrdenes.Count;
+            if (paginaOrdenes.Count < tamanioLote)
+            {
+                break;
+            }
+        }
 
         observaciones.Add("D-08: Prefijo correlativo OS- transformado a OT- de forma no destructiva en proyección.");
         observaciones.Add("D-09: Clasificación TipoAtencion traducida determinísticamente a códigos TipoServicio de Yamaha v3.");
 
         return new YamahaExportacionResultado<YamahaServicioTecnicoV3Dto>(
-            RegistrosValidos: resultadoMapeo.DtosProyectados,
-            TotalEntidadesLeidas: ordenes.Count,
-            TotalRegistrosValidos: resultadoMapeo.TotalValidos,
-            TotalRegistrosOmitidos: resultadoMapeo.TotalNoProyectables,
-            ObservacionesYAdvertencias: observaciones,
+            RegistrosValidos: dtosValidos,
+            TotalEntidadesLeidas: totalLeidas,
+            TotalRegistrosValidos: totalValidos,
+            TotalRegistrosOmitidos: totalOmitidos,
+            ObservacionesYAdvertencias: observaciones.ToList(),
             RangoDesdeUtc: desdeUtc,
             RangoHastaUtc: hastaUtc
         );

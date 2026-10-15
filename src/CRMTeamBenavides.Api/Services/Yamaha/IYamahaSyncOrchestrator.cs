@@ -45,4 +45,13 @@ public interface IYamahaSyncOrchestrator
         DateTime? rangoDesdeUtc = null,
         DateTime? rangoHastaUtc = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Recupera registros de sincronizacion que quedaron en estado 'EnProceso' debido a caidas abruptas
+    /// del proceso o reinicios del servidor, marcandolos como 'Fallido' si superan el tiempo de expiracion
+    /// configurado en <see cref="YamahaSettings.TiempoExpiracionEnProcesoMinutos"/>.
+    /// </summary>
+    /// <param name="cancellationToken">Token de cancelacion.</param>
+    /// <returns>Total de registros recuperados y marcados como fallidos.</returns>
+    Task<int> RecuperarEjecucionesAbandonadasAsync(CancellationToken cancellationToken = default);
 }

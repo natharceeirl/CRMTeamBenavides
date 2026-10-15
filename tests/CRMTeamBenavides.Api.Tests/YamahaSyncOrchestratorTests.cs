@@ -237,4 +237,93 @@ public class YamahaSyncOrchestratorTests
         Assert.Equal(400, log.CodigoHttp);
         Assert.NotNull(log.MensajeError);
     }
+
+    [Fact]
+    public async Task RecuperarEjecucionesAbandonadasAsync_DebeRecuperarSoloLogsExpiradosYPreservarRecientes()
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        using var context = new ApplicationDbContext(options);
+
+        // 1. Log abandonado (> 30 min)
+        var logAbandonado = new YamahaSyncLog
+        {
+            Id = Guid.NewGuid(),
+            Servicio = YamahaServicioSincronizacion.Ventas,
+            Estado = YamahaEstadoSincronizacion.EnProceso,
+            FechaInicio = DateTime.UtcNow.AddMinutes(-45),
+            Exitoso = false,
+            EsSimulacion = false
+        };
+
+        // 2. Log reciente en curso (< 30 min) - NO debe ser tocado
+        var logReciente = new YamahaSyncLog
+        {
+            Id = Guid.NewGuid(),
+            Servicio = YamahaServicioSincronizacion.Ventas,
+            Estado = YamahaEstadoSincronizacion.EnProceso,
+            FechaInicio = DateTime.UtcNow.AddMinutes(-5),
+            Exitoso = false,
+            EsSimulacion = false
+        };
+
+        // 3. Log completado previo
+        var logPrevioCompletado = new YamahaSyncLog
+        {
+            Id = Guid.NewGuid(),
+            Servicio = YamahaServicioSincronizacion.Ventas,
+            Estado = YamahaEstadoSincronizacion.Completado,
+            FechaInicio = DateTime.UtcNow.AddHours(-2),
+            FechaFin = DateTime.UtcNow.AddHours(-2).AddMinutes(1),
+            Exitoso = true,
+            EsSimulacion = false
+        };
+
+        context.YamahaSyncLogs.AddRange(logAbandonado, logReciente, logPrevioCompletado);
+        await context.SaveChangesAsync();
+
+        var settings = Options.Create(new YamahaSettings
+        {
+            TiempoExpiracionEnProcesoMinutos = 30
+        });
+
+        var mappingService = new YamahaMappingService();
+        var stockExporter = new YamahaStockExporter(context, mappingService, settings);
+        var ventasExporter = new YamahaVentasExporter(context, mappingService, settings);
+        var steExporter = new YamahaServicioTecnicoExporter(context, mappingService, settings);
+        var watermarkService = new YamahaWatermarkService(context);
+        var fakeClient = new FakeYamahaApiClient();
+
+        var orchestrator = new YamahaSyncOrchestrator(
+            context,
+            ventasExporter,
+            stockExporter,
+            steExporter,
+            watermarkService,
+            fakeClient,
+            settings,
+            NullLogger<YamahaSyncOrchestrator>.Instance);
+
+        var totalRecuperadas = await orchestrator.RecuperarEjecucionesAbandonadasAsync();
+
+        Assert.Equal(1, totalRecuperadas);
+
+        var log1Recuperado = await context.YamahaSyncLogs.FindAsync(logAbandonado.Id);
+        Assert.NotNull(log1Recuperado);
+        Assert.Equal(YamahaEstadoSincronizacion.Fallido, log1Recuperado.Estado);
+        Assert.False(log1Recuperado.Exitoso);
+        Assert.NotNull(log1Recuperado.FechaFin);
+        Assert.Contains("expiracion", log1Recuperado.MensajeError, StringComparison.OrdinalIgnoreCase);
+
+        var log2NoTocado = await context.YamahaSyncLogs.FindAsync(logReciente.Id);
+        Assert.NotNull(log2NoTocado);
+        Assert.Equal(YamahaEstadoSincronizacion.EnProceso, log2NoTocado.Estado);
+        Assert.Null(log2NoTocado.FechaFin);
+
+        // Comprueba que el watermark ignora el log fallido y toma el log completado
+        var puntoCorte = await watermarkService.ObtenerPuntoCorteDesdeUtcAsync(YamahaServicioSincronizacion.Ventas);
+        Assert.Equal(logPrevioCompletado.FechaInicio, puntoCorte);
+    }
 }

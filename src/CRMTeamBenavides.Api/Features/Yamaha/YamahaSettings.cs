@@ -56,6 +56,48 @@ public class YamahaSettings
     public string TipoPuntoVenta { get; set; } = "3S";
 
     // -------------------------------------------------------------------------
+    // Programacion, Scheduler y Rendimiento (Seccion 3.1)
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Hora operativa local de Peru (America/Lima) para el envio diario de Stock al cierre de operaciones (formato "HH:mm").
+    /// Valor por defecto: "22:00". El valor exacto debe ser confirmado con la gerencia del concesionario
+    /// antes de activar la integracion productiva.
+    /// </summary>
+    public string HoraCierreStockPeru { get; set; } = "22:00";
+
+    /// <summary>
+    /// Intervalo en horas para la sincronizacion periodica de Ventas y Servicio Tecnico.
+    /// Valor fijado por la Seccion 3.1 de la especificacion tecnica de Yamaha: 4 horas.
+    /// </summary>
+    public int IntervaloVentasServicioTecnicoHoras { get; set; } = 4;
+
+    /// <summary>
+    /// Tamano maximo de lote (chunk) para paginacion estable en memoria durante la extraccion desde PostgreSQL.
+    /// Previene consumo excesivo de memoria en lecturas de varios meses. Valor por defecto: 500 registros.
+    /// </summary>
+    public int TamanioLoteExportacion { get; set; } = 500;
+
+    /// <summary>
+    /// Tiempo maximo en minutos para considerar una ejecucion 'EnProceso' como abandonada o interrumpida por caida de proceso.
+    /// Valor por defecto: 30 minutos (ampliamente superior a cualquier timeout HTTP transitorio).
+    /// </summary>
+    public int TiempoExpiracionEnProcesoMinutos { get; set; } = 30;
+
+    /// <summary>
+    /// Obtiene la hora de cierre de Stock parseada como TimeOnly (hora local de Peru).
+    /// Si el valor configurado no es valido, retorna 22:00 por defecto.
+    /// </summary>
+    public TimeOnly ObtenerHoraCierreStock()
+    {
+        if (TimeOnly.TryParse(HoraCierreStockPeru, out var hora))
+        {
+            return hora;
+        }
+        return new TimeOnly(22, 0);
+    }
+
+    // -------------------------------------------------------------------------
     // Endpoints de los 3 servicios de datos (Especificación Yamaha v3 — Sección 7)
     // -------------------------------------------------------------------------
 

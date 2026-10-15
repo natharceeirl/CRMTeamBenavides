@@ -395,4 +395,58 @@ public class YamahaExportersTests
         Assert.Contains(res.RegistrosValidos, r => r.SubLineaNegocio == "SP" && r.CodigoYamaha == "2DP-E4451-00");
         Assert.Contains(res.RegistrosValidos, r => r.SubLineaNegocio == "STE" && r.TipoServicio == "MP");
     }
+
+    [Fact]
+    public async Task ExportarStockAsync_ConPaginacionDeterminista_DebeRecuperarTodosLosRegistrosSinOmisiones()
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        using var context = new ApplicationDbContext(options);
+
+        var categoria = new CategoriaProducto { Id = Guid.NewGuid(), Nombre = "Repuestos" };
+        context.CategoriasProducto.Add(categoria);
+
+        // Se insertan 7 productos con codigos desordenados
+        var codigos = new[] { "Y-007", "Y-002", "Y-005", "Y-001", "Y-004", "Y-003", "Y-006" };
+        foreach (var cod in codigos)
+        {
+            context.Productos.Add(new Producto
+            {
+                Id = Guid.NewGuid(),
+                CategoriaId = categoria.Id,
+                Categoria = categoria,
+                Codigo = cod,
+                Nombre = $"Producto {cod}",
+                Marca = "YAMAHA",
+                PrecioVenta = 50m,
+                Costo = 30m,
+                StockActual = 5,
+                Activo = true
+            });
+        }
+        await context.SaveChangesAsync();
+
+        var mappingService = new YamahaMappingService();
+        // Configuramos un lote pequeño de 3 para forzar multiples páginas (3, 3, 1)
+        var settings = Options.Create(new YamahaSettings
+        {
+            CodigoPuntoVenta = "TB-AQP-01",
+            TipoPuntoVenta = "3S",
+            TamanioLoteExportacion = 3
+        });
+
+        var exporter = new YamahaStockExporter(context, mappingService, settings);
+        var res = await exporter.ExportarStockAsync();
+
+        Assert.Equal(7, res.TotalEntidadesLeidas);
+        Assert.Equal(7, res.TotalRegistrosValidos);
+        Assert.Equal(7, res.RegistrosValidos.Count);
+
+        // Verifica que la paginación determinista respeta el orden alfabético de SKU sin perder ninguno
+        var codigosOrdenados = res.RegistrosValidos.Select(r => r.CodigoYamaha).ToList();
+        var codigosEsperados = codigos.OrderBy(c => c).ToList();
+        Assert.Equal(codigosEsperados, codigosOrdenados);
+    }
 }

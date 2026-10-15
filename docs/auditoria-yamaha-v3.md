@@ -472,4 +472,33 @@ Tras la auditoría inicial, se implementaron de forma modular todos los componen
    - `GET /api/yamaha/watermarks` (diagnóstico de marcas temporales).
    - `GET /api/yamaha/historial` (trazabilidad y auditoría paginada).
 8. **Pruebas Automatizadas:**
-   - Suite completa de 161 pruebas unitarias y de integración en memoria pasando exitosamente (0 errores, 0 omitidas).
+   - Suite inicial de 161 pruebas unitarias y de integración en memoria pasando exitosamente (0 errores, 0 omitidas).
+
+---
+
+## 12. Corrección de Defectos Técnicos y Diagnóstico de Robustez (Cierre Técnico)
+
+En la iteración de robustez se corrigieron los tres hallazgos técnicos detectados en la auditoría sin resolver unilateralmente ninguna decisión de negocio pendiente:
+
+1. **Programación Automática Diaria de Stock (`YamahaSyncBackgroundService`):**
+   - Se incorporó la evaluación diaria de Stock en el scheduler en segundo plano según la hora local de Perú (`America/Lima`) utilizando `HoraPeru`.
+   - Se añadió la propiedad configurable `HoraCierreStockPeru` (por defecto `"22:00"`, documentando que el valor operativo definitivo debe ser confirmado por la gerencia antes de la activación).
+   - Prevención robusta de duplicados: se verifica contra `YamahaSyncLogs` (`YaSeEjecutoStockCierreHoyAsync`) si ya existe un cierre de Stock exitoso no simulado ejecutado a partir de la hora de cierre para el día local de Perú. Si ya se ejecutó o si el proceso se reinicia después del horario de cierre, no se repite el envío.
+2. **Paginación Determinista y Control de Memoria en Exportadores:**
+   - Se implementó lectura por bloques (`TamanioLoteExportacion`, por defecto 500 registros) con ordenamiento determinista de doble clave:
+     - Ventas: `OrderBy(v => v.Fecha).ThenBy(v => v.Id)`
+     - Stock: `OrderBy(p => p.Codigo).ThenBy(p => p.Id)`
+     - Servicio Técnico: `OrderBy(os => os.FechaIngreso).ThenBy(os => os.Id)`
+   - Cada bloque de entidades EF Core es mapeado y liberado para recolección de basura, evitando materializar miles de grafos de entidades en memoria durante la carga inicial de 3 meses.
+   - El resultado se consolida en un único payload JSON conforme al contrato de Azure Functions de Yamaha (que no admite fragmentación HTTP).
+3. **Recuperación Segura de Ejecuciones `EnProceso` Abandonadas:**
+   - Se implementó `RecuperarEjecucionesAbandonadasAsync` en `IYamahaSyncOrchestrator` y `YamahaSyncOrchestrator`.
+   - Criterio de expiración explícito (`TiempoExpiracionEnProcesoMinutos`, por defecto 30 minutos). No marca registros recientes para no interferir con procesos en curso.
+   - Las ejecuciones abandonadas se marcan como `Estado = Fallido`, `Exitoso = false` con fecha de fin y mensaje descriptivo. Esto asegura que el cursor de `YamahaWatermarkService` no avance y el lote se reintente sin pérdida de datos.
+   - Se ejecuta automáticamente al arrancar `YamahaSyncBackgroundService` y se expone en el endpoint administrativo `POST /api/yamaha/recuperar-abandonadas`.
+4. **Resultados de Verificación y Cobertura:**
+   - Se añadieron 6 pruebas automatizadas específicas para agenda de Stock, prevención de duplicados, recuperación de abandonadas y paginación determinista. Total de la suite: **167 pruebas pasando (0 errores, 0 omitidas)**.
+5. **Declaración Explícita de Limitaciones Técnicas y Riesgos Externos:**
+   - **Base de datos real:** Las pruebas de integración se ejecutan con `Microsoft.EntityFrameworkCore.InMemory`. No se ejecutaron contra un motor PostgreSQL real para no conectar ni migrar bases de datos activas en este entorno.
+   - **Decisiones pendientes:** Las decisiones **D-01 a D-07** y la ambigüedad **AMB-3.4-8** permanecen sin resolver a la espera de la reunión con gerencia y confirmación de Yamaha.
+   - **Idempotencia remota:** No existe garantía documental de que Yamaha haga `UPSERT` en lugar de `INSERT` ante respuestas HTTP perdidas; el riesgo de duplicación en el receptor ante fallos de red TCP permanece abierto.

@@ -65,16 +65,45 @@ public sealed class YamahaVentasExporter : IYamahaVentasExporter
             query = query.Where(v => v.OrdenServicioId == null);
         }
 
-        var ventas = await query
-            .OrderBy(v => v.Fecha)
-            .ToListAsync(cancellationToken);
+        int tamanioLote = _settings.TamanioLoteExportacion > 0 ? _settings.TamanioLoteExportacion : 500;
+        int offset = 0;
+        int totalLeidas = 0;
+        int totalValidos = 0;
+        int totalOmitidos = 0;
+        var dtosValidos = new List<YamahaVentaV3Dto>();
+        var observaciones = new HashSet<string>();
 
-        var resultadoMapeo = _mappingService.MapearLoteVentas(ventas, contexto);
+        while (true)
+        {
+            var paginaVentas = await query
+                .OrderBy(v => v.Fecha)
+                .ThenBy(v => v.Id)
+                .Skip(offset)
+                .Take(tamanioLote)
+                .ToListAsync(cancellationToken);
 
-        var observaciones = resultadoMapeo.Registros
-            .SelectMany(r => r.Observaciones)
-            .Distinct()
-            .ToList();
+            if (paginaVentas.Count == 0)
+            {
+                break;
+            }
+
+            totalLeidas += paginaVentas.Count;
+            var resultadoMapeo = _mappingService.MapearLoteVentas(paginaVentas, contexto);
+            dtosValidos.AddRange(resultadoMapeo.DtosProyectados);
+            totalValidos += resultadoMapeo.TotalValidos;
+            totalOmitidos += resultadoMapeo.TotalNoProyectables;
+
+            foreach (var obs in resultadoMapeo.Registros.SelectMany(r => r.Observaciones))
+            {
+                observaciones.Add(obs);
+            }
+
+            offset += paginaVentas.Count;
+            if (paginaVentas.Count < tamanioLote)
+            {
+                break;
+            }
+        }
 
         if (soloVentasMostrador)
         {
@@ -86,11 +115,11 @@ public sealed class YamahaVentasExporter : IYamahaVentasExporter
         }
 
         return new YamahaExportacionResultado<YamahaVentaV3Dto>(
-            RegistrosValidos: resultadoMapeo.DtosProyectados,
-            TotalEntidadesLeidas: ventas.Count,
-            TotalRegistrosValidos: resultadoMapeo.TotalValidos,
-            TotalRegistrosOmitidos: resultadoMapeo.TotalNoProyectables,
-            ObservacionesYAdvertencias: observaciones,
+            RegistrosValidos: dtosValidos,
+            TotalEntidadesLeidas: totalLeidas,
+            TotalRegistrosValidos: totalValidos,
+            TotalRegistrosOmitidos: totalOmitidos,
+            ObservacionesYAdvertencias: observaciones.ToList(),
             RangoDesdeUtc: desdeUtc,
             RangoHastaUtc: hastaUtc
         );

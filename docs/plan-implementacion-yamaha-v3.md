@@ -506,7 +506,8 @@ Para minimizar el riesgo y facilitar la revisión de código, se dividió la imp
 | **Entrega 2** | **Persistencia de Auditoría:** Entidad `YamahaSyncLog`, migración EF Core aditiva, índices y repositorio/DbContext. | `Domain/Entities/YamahaSyncLog.cs`, `Data/Migrations/*_AgregarYamahaSyncLog.cs`, `Data/ApplicationDbContext.cs` | **IMPLEMENTADO Y VERIFICADO** |
 | **Entrega 3** | **Extractores PostgreSQL (AsNoTracking):** Extractores para Stock (`soloMarcaYamaha`), Ventas (`soloVentasMostrador`) y Servicio Técnico (transformación no destructiva `OS-` -> `OT-` y traducción determinística `TipoAtencion`). | `Services/Yamaha/Exportadores/IYamahaStockExporter.cs`, `YamahaStockExporter.cs`, `IYamahaVentasExporter.cs`, `YamahaVentasExporter.cs`, `IYamahaServicioTecnicoExporter.cs`, `YamahaServicioTecnicoExporter.cs` | **IMPLEMENTADO Y VERIFICADO** |
 | **Entrega 4** | **Servicio de Watermarks y Orquestador Central:** Derivación de cursor temporal desde `YamahaSyncLogs` sin tablas adicionales, orquestación de extracción, cálculo de SHA-256, validación y auditoría. | `Services/Yamaha/IYamahaWatermarkService.cs`, `YamahaWatermarkService.cs`, `IYamahaSyncOrchestrator.cs`, `YamahaSyncOrchestrator.cs` | **IMPLEMENTADO Y VERIFICADO** |
-| **Entrega 5** | **Scheduler, Endpoints Administrativos y Suite de Pruebas:** BackgroundService protegido por semáforo (inactivo si `Enabled = false`), endpoints de sincronización/diagnóstico/historial y suite de 161 pruebas pasando. | `Services/Yamaha/YamahaSyncBackgroundService.cs`, `Features/Yamaha/YamahaEndpoints.cs`, `Program.cs`, `tests/CRMTeamBenavides.Api.Tests/*` | **IMPLEMENTADO Y VERIFICADO** |
+| **Entrega 5** | **Scheduler, Endpoints Administrativos y Suite de Pruebas:** BackgroundService protegido por semáforo (inactivo si `Enabled = false`), endpoints de sincronización/diagnóstico/historial y suite inicial de 161 pruebas pasando. | `Services/Yamaha/YamahaSyncBackgroundService.cs`, `Features/Yamaha/YamahaEndpoints.cs`, `Program.cs`, `tests/CRMTeamBenavides.Api.Tests/*` | **IMPLEMENTADO Y VERIFICADO** |
+| **Entrega 6** | **Robustez Técnica, Paginación y Resiliencia de Scheduler:** Programación diaria de Stock a hora de cierre local (`HoraCierreStockPeru`), paginación determinista por bloques en PostgreSQL (`TamanioLoteExportacion`), recuperación segura de ejecuciones `EnProceso` abandonadas (`TiempoExpiracionEnProcesoMinutos`), endpoint administrativo y 167 pruebas pasando. | `Features/Yamaha/YamahaSettings.cs`, `Services/Yamaha/Exportadores/*`, `Services/Yamaha/YamahaSyncOrchestrator.cs`, `Services/Yamaha/YamahaSyncBackgroundService.cs`, `Features/Yamaha/YamahaEndpoints.cs` | **IMPLEMENTADO Y VERIFICADO** |
 
 ---
 
@@ -520,3 +521,32 @@ Para minimizar el riesgo y facilitar la revisión de código, se dividió la imp
    - **D-04 (Notas de Crédito):** Excluidas de la proyección hasta implementar el tipo de comprobante formal.
    - **D-07 (Filtro Marca Yamaha):** El exportador de stock incluye el flag `soloMarcaYamaha`.
 3. **Próximo Paso Requerido:** Resolver en la reunión de negocio los puntos D-01 a D-07 con Team Benavides y Yamaha, y cargar las `Function_Key` reales en User Secrets o variables de entorno del servidor.
+
+---
+
+## 10. Actualización de Robustez Técnica y Cierre de Implementación
+
+En la fase de cierre técnico se resolvieron los tres hallazgos de robustez identificados sin afectar la arquitectura desacoplada ni resolver decisiones de negocio pendientes:
+
+1. **Programación Automática Diaria de Stock (`YamahaSyncBackgroundService`):**
+   - El worker en segundo plano evalúa en cada ciclo el horario local de Perú (`America/Lima`) mediante `HoraPeru`.
+   - Se configuró la propiedad `HoraCierreStockPeru` (por defecto `"22:00"`).
+   - Para evitar duplicaciones tras reinicios o desviaciones horarias, `YaSeEjecutoStockCierreHoyAsync` consulta `YamahaSyncLogs` para verificar si ya existe un cierre de Stock exitoso no simulado ejecutado a partir de la hora de cierre en el día local. Si ya existe, se omite la ejecución.
+2. **Paginación Determinista en PostgreSQL y Control de Memoria:**
+   - Los exportadores (`YamahaVentasExporter`, `YamahaStockExporter`, `YamahaServicioTecnicoExporter`) leen la base de datos en bloques de tamaño configurable (`TamanioLoteExportacion`, predeterminado en 500 registros) con ordenamiento determinista de doble clave:
+     - Ventas: `OrderBy(v => v.Fecha).ThenBy(v => v.Id)`
+     - Stock: `OrderBy(p => p.Codigo).ThenBy(p => p.Id)`
+     - Servicio Técnico: `OrderBy(os => os.FechaIngreso).ThenBy(os => os.Id)`
+   - Cada bloque materializa entidades EF Core con `AsNoTracking()`, las proyecta a DTOs v3 inmutables y libera los grafos para recolección de basura.
+   - La lista completa de DTOs se consolida en un único payload JSON final para cumplir con el contrato de Azure Functions de Yamaha (que no admite payloads fraccionados).
+3. **Recuperación Segura de Ejecuciones Abandonadas:**
+   - Se implementó `RecuperarEjecucionesAbandonadasAsync` en el orquestador (`IYamahaSyncOrchestrator`), ejecutado al iniciar el servicio en segundo plano y expuesto mediante `POST /api/yamaha/recuperar-abandonadas`.
+   - Recupera únicamente registros con `Estado == YamahaSyncEstado.EnProceso` cuya `FechaInicio` supere el umbral de expiración (`TiempoExpiracionEnProcesoMinutos`, por defecto 30 minutos).
+   - Los registros recientes (< 30 minutos) permanecen intactos para proteger ejecuciones concurrentes o en vuelo.
+   - Las ejecuciones expiradas se marcan como fallidas (`Estado = Fallido`, `Exitoso = false`), liberando el estado y garantizando que el cursor de `YamahaWatermarkService` no avance y el lote se reintente sin pérdida de datos.
+4. **Verificación Automatizada:**
+   - Se incrementó la suite de pruebas a **167 pruebas unitarias y de integración pasando exitosamente** (0 errores, 0 omitidas).
+5. **Limitaciones Técnicas y Riesgos Externos Declarados:**
+   - **Entorno de pruebas:** Las pruebas se ejecutan sobre `Microsoft.EntityFrameworkCore.InMemory`. No se ejecutaron contra un motor PostgreSQL real ni se aplicaron migraciones a bases activas.
+   - **Decisiones pendientes:** Las definiciones D-01 a D-07 y la ambigüedad AMB-3.4-8 continúan pendientes de validación con gerencia y YMDP.
+   - **Riesgo de idempotencia remota:** Ante fallos de red TCP o timeouts donde Yamaha haya procesado el payload pero la respuesta HTTP no llegue al CRM, el reintento podría generar duplicados si los endpoints de Yamaha operan mediante `INSERT` en lugar de `UPSERT`. Este comportamiento debe ser aclarado con YMDP.

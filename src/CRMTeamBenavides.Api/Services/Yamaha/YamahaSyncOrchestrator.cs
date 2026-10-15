@@ -5,6 +5,7 @@ using CRMTeamBenavides.Api.Features.Yamaha;
 using CRMTeamBenavides.Api.Services.Yamaha.Exportadores;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace CRMTeamBenavides.Api.Services.Yamaha;
@@ -324,5 +325,46 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                 ErroresOAdvertencias: new[] { errorSanitizado },
                 Duracion: stopwatch.Elapsed);
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<int> RecuperarEjecucionesAbandonadasAsync(CancellationToken cancellationToken = default)
+    {
+        var minutosExpiracion = _settings.TiempoExpiracionEnProcesoMinutos > 0
+            ? _settings.TiempoExpiracionEnProcesoMinutos
+            : 30;
+
+        var umbralUtc = DateTime.UtcNow.AddMinutes(-minutosExpiracion);
+
+        // Selecciona exclusivamente registros EnProceso cuya FechaInicio sea anterior al umbral de expiración
+        // No afecta ejecuciones recientes (que podrían pertenecer a un proceso concurrentemente activo)
+        var logsAbandonados = await _context.YamahaSyncLogs
+            .Where(l => l.Estado == YamahaEstadoSincronizacion.EnProceso && l.FechaInicio <= umbralUtc)
+            .ToListAsync(cancellationToken);
+
+        if (logsAbandonados.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (var log in logsAbandonados)
+        {
+            log.RegistrarFallo(
+                mensajeError: $"Ejecucion interrumpida o abandonada. Supero el tiempo limite de expiracion de {minutosExpiracion} minutos (iniciada {log.FechaInicio:u}). Marcada como fallida automaticamente para permitir reintentos seguros.",
+                codigoHttp: null,
+                respuestaCuerpo: null,
+                procesados: log.RegistrosProcesados,
+                validos: 0,
+                rechazados: log.RegistrosRechazados);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogWarning(
+            "Se recuperaron {Count} ejecuciones de YamahaSyncLog abandonadas en estado 'EnProceso' anteriores a {UmbralUtc:u}.",
+            logsAbandonados.Count,
+            umbralUtc);
+
+        return logsAbandonados.Count;
     }
 }

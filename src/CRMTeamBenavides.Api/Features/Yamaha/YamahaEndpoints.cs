@@ -260,6 +260,27 @@ public static class YamahaEndpoints
             return Results.Ok(logs);
         })
         .WithName("ConsultarHistorialYamahaSyncLogs");
+
+        syncGroup.MapPost("/recuperar-abandonadas", async (
+            IYamahaSyncOrchestrator orchestrator,
+            ClaimsPrincipal user,
+            ApplicationDbContext dbContext,
+            CancellationToken ct) =>
+        {
+            var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext);
+            if (!isolation.UsuarioId.HasValue || !isolation.EsStaff || isolation.EsCliente || isolation.DebeDenegarAcceso)
+            {
+                return Results.Forbid();
+            }
+
+            var totalRecuperadas = await orchestrator.RecuperarEjecucionesAbandonadasAsync(ct);
+            return Results.Ok(new
+            {
+                mensaje = $"Se recuperaron {totalRecuperadas} ejecuciones abandonadas.",
+                totalRecuperadas
+            });
+        })
+        .WithName("RecuperarEjecucionesYamahaAbandonadas");
     }
 
     public const int MaxRegistrosDryRun = 5000;
