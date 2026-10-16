@@ -29,13 +29,15 @@ public static class ImportacionEndpoints
         group.MapPost("/validar", async (
             [FromForm] IFormFile? archivo,
             [FromForm] Guid? categoriaId,
+            [FromForm] string? modoDuplicados,
             HttpContext httpContext,
             ClaimsPrincipal user,
             IImportadorExcelService service,
             CancellationToken ct) =>
         {
             var categoriaResuelta = ResolverCategoriaId(categoriaId, httpContext);
-            var errorArchivo = ValidarArchivoSubido(archivo, categoriaResuelta, soloValidacion: true);
+            var modoResuelto = ResolverModoDuplicados(modoDuplicados, httpContext);
+            var errorArchivo = ValidarArchivoSubido(archivo, categoriaResuelta, modoResuelto, soloValidacion: true);
             if (errorArchivo is not null)
             {
                 return Results.BadRequest(errorArchivo);
@@ -48,6 +50,7 @@ public static class ImportacionEndpoints
                 archivo.FileName,
                 categoriaResuelta,
                 usuarioId,
+                modoResuelto,
                 ct);
 
             return Results.Ok(resultado);
@@ -59,13 +62,15 @@ public static class ImportacionEndpoints
         group.MapPost("/ejecutar", async (
             [FromForm] IFormFile? archivo,
             [FromForm] Guid? categoriaId,
+            [FromForm] string? modoDuplicados,
             HttpContext httpContext,
             ClaimsPrincipal user,
             IImportadorExcelService service,
             CancellationToken ct) =>
         {
             var categoriaResuelta = ResolverCategoriaId(categoriaId, httpContext);
-            var errorArchivo = ValidarArchivoSubido(archivo, categoriaResuelta, soloValidacion: false);
+            var modoResuelto = ResolverModoDuplicados(modoDuplicados, httpContext);
+            var errorArchivo = ValidarArchivoSubido(archivo, categoriaResuelta, modoResuelto, soloValidacion: false);
             if (errorArchivo is not null)
             {
                 return Results.BadRequest(errorArchivo);
@@ -78,6 +83,7 @@ public static class ImportacionEndpoints
                 archivo.FileName,
                 categoriaResuelta,
                 usuarioId,
+                modoResuelto,
                 ct);
 
             return resultado.Exitoso
@@ -100,6 +106,33 @@ public static class ImportacionEndpoints
         .WithName("ObtenerHistorialImportacionesExcel");
     }
 
+    private static string ResolverModoDuplicados(string? modoDuplicadosForm, HttpContext httpContext)
+    {
+        if (!string.IsNullOrWhiteSpace(modoDuplicadosForm))
+        {
+            return NormalizarModoDuplicados(modoDuplicadosForm);
+        }
+
+        if (httpContext.Request.Query.TryGetValue("modoDuplicados", out var qVal)
+            && !string.IsNullOrWhiteSpace(qVal.FirstOrDefault()))
+        {
+            return NormalizarModoDuplicados(qVal.FirstOrDefault()!);
+        }
+
+        return "ErrorSiExiste";
+    }
+
+    private static string NormalizarModoDuplicados(string modo)
+    {
+        if (string.Equals(modo.Trim(), "OmitirExistentes", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(modo.Trim(), "omitir", StringComparison.OrdinalIgnoreCase))
+        {
+            return "OmitirExistentes";
+        }
+
+        return "ErrorSiExiste";
+    }
+
     private static Guid? ResolverCategoriaId(Guid? categoriaIdForm, HttpContext httpContext)
     {
         if (categoriaIdForm.HasValue && categoriaIdForm.Value != Guid.Empty)
@@ -120,9 +153,10 @@ public static class ImportacionEndpoints
     private static ResultadoImportacionExcelDto? ValidarArchivoSubido(
         IFormFile? archivo,
         Guid? categoriaId,
+        string modoDuplicados,
         bool soloValidacion)
     {
-        var vacio = new ResumenHojaImportacionDto(0, 0, 0, 0);
+        var vacio = new ResumenHojaImportacionDto(0, 0, 0, 0, 0);
 
         if (archivo is null || archivo.Length == 0)
         {
@@ -142,7 +176,10 @@ public static class ImportacionEndpoints
                         Columna: "Archivo",
                         ValorLeido: null,
                         Mensaje: "Debe adjuntar un archivo Excel (.xlsx) con contenido.")
-                ]);
+                ],
+                Unidades: vacio,
+                Repuestos: vacio,
+                ModoDuplicados: modoDuplicados);
         }
 
         if (archivo.Length > TamanioMaximoBytes)
@@ -163,7 +200,10 @@ public static class ImportacionEndpoints
                         Columna: "Tamanio",
                         ValorLeido: $"{archivo.Length} bytes",
                         Mensaje: "El archivo supera el tamaño máximo permitido de 10 MB.")
-                ]);
+                ],
+                Unidades: vacio,
+                Repuestos: vacio,
+                ModoDuplicados: modoDuplicados);
         }
 
         var ext = Path.GetExtension(archivo.FileName);
@@ -185,7 +225,10 @@ public static class ImportacionEndpoints
                         Columna: "Extension",
                         ValorLeido: ext,
                         Mensaje: "Solo se admiten archivos en formato Excel (.xlsx).")
-                ]);
+                ],
+                Unidades: vacio,
+                Repuestos: vacio,
+                ModoDuplicados: modoDuplicados);
         }
 
         return null;

@@ -12,7 +12,8 @@ public record ResumenHojaImportacionDto(
     int TotalFilasLeidas,
     int FilasValidas,
     int FilasConError,
-    int RegistrosCreados
+    int RegistrosCreados,
+    int RegistrosOmitidos = 0
 );
 
 public record ResultadoImportacionExcelDto(
@@ -23,7 +24,10 @@ public record ResultadoImportacionExcelDto(
     Guid? CategoriaId,
     ResumenHojaImportacionDto Clientes,
     ResumenHojaImportacionDto Catalogo,
-    IReadOnlyList<ErrorFilaImportacionDto> Errores
+    IReadOnlyList<ErrorFilaImportacionDto> Errores,
+    ResumenHojaImportacionDto? Unidades = null,
+    ResumenHojaImportacionDto? Repuestos = null,
+    string ModoDuplicados = "ErrorSiExiste"
 );
 
 public record HistorialImportacionItemDto(
@@ -38,5 +42,8 @@ public record HistorialImportacionItemDto(
     Guid? CategoriaId,
     int ClientesProcesados,
     int CatalogoProcesados,
-    int TotalErrores
+    int TotalErrores,
+    int UnidadesProcesadas = 0,
+    int RepuestosProcesados = 0,
+    string? ModoDuplicados = null
 );

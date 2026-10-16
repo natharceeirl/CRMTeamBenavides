@@ -11,6 +11,7 @@ public interface IImportadorExcelService
         string nombreArchivo,
         Guid? categoriaId,
         Guid? usuarioId,
+        string modoDuplicados = "ErrorSiExiste",
         CancellationToken ct = default);
 
     Task<ResultadoImportacionExcelDto> EjecutarImportacionAsync(
@@ -18,6 +19,7 @@ public interface IImportadorExcelService
         string nombreArchivo,
         Guid? categoriaId,
         Guid? usuarioId,
+        string modoDuplicados = "ErrorSiExiste",
         CancellationToken ct = default);
 
     Task<List<HistorialImportacionItemDto>> ObtenerHistorialAsync(

@@ -18,7 +18,12 @@ public class ImportadorExcelService : IImportadorExcelService
     public const string AccionEjecutar = "ImportarExcel";
     public const string AccionEjecutarFallido = "ImportarExcelFallido";
 
+    public const string ModoErrorSiExiste = "ErrorSiExiste";
+    public const string ModoOmitirExistentes = "OmitirExistentes";
+
     private const string HojaClientes = "Clientes";
+    private const string HojaUnidades = "Unidades";
+    private const string HojaRepuestos = "Repuestos";
     private const string HojaCatalogo = "Catalogo";
 
     private readonly ApplicationDbContext _context;
@@ -35,7 +40,8 @@ public class ImportadorExcelService : IImportadorExcelService
         using var workbook = new XLWorkbook();
 
         GenerarHojaClientes(workbook);
-        GenerarHojaCatalogo(workbook);
+        GenerarHojaUnidades(workbook);
+        GenerarHojaRepuestos(workbook);
 
         using var ms = new MemoryStream();
         workbook.SaveAs(ms);
@@ -47,12 +53,14 @@ public class ImportadorExcelService : IImportadorExcelService
         string nombreArchivo,
         Guid? categoriaId,
         Guid? usuarioId,
+        string modoDuplicados = ModoErrorSiExiste,
         CancellationToken ct = default)
     {
         var parseo = await ProcesarYValidarLibroAsync(
             archivoStream,
             nombreArchivo,
             categoriaId,
+            modoDuplicados,
             soloValidacion: true,
             ct);
 
@@ -64,12 +72,14 @@ public class ImportadorExcelService : IImportadorExcelService
         string nombreArchivo,
         Guid? categoriaId,
         Guid? usuarioId,
+        string modoDuplicados = ModoErrorSiExiste,
         CancellationToken ct = default)
     {
         var parseo = await ProcesarYValidarLibroAsync(
             archivoStream,
             nombreArchivo,
             categoriaId,
+            modoDuplicados,
             soloValidacion: false,
             ct);
 
@@ -90,7 +100,7 @@ public class ImportadorExcelService : IImportadorExcelService
         await using var transaction = await _context.Database.BeginTransactionAsync(ct);
         try
         {
-            // Revalidación inmediatamente previa a la inserción si hay productos nuevos en Catalogo
+            // Revalidación para hoja legada Catalogo si tiene productos nuevos
             if (parseo.CatalogoValidos.Count > 0)
             {
                 bool categoriaSigueActiva = categoriaId.HasValue
@@ -117,6 +127,8 @@ public class ImportadorExcelService : IImportadorExcelService
                     {
                         Exitoso = false,
                         Clientes = parseo.Resultado.Clientes with { RegistrosCreados = 0 },
+                        Unidades = parseo.Resultado.Unidades is not null ? parseo.Resultado.Unidades with { RegistrosCreados = 0 } : null,
+                        Repuestos = parseo.Resultado.Repuestos is not null ? parseo.Resultado.Repuestos with { RegistrosCreados = 0 } : null,
                         Catalogo = parseo.Resultado.Catalogo with { RegistrosCreados = 0 },
                         Errores = erroresCat
                     };
@@ -132,21 +144,44 @@ public class ImportadorExcelService : IImportadorExcelService
                 }
             }
 
-            // 1. Crear únicamente clientes nuevos (sin sobrescribir existentes)
+            // 1. Crear dinámicamente las categorías de Repuestos que no existan en la base de datos
+            var mapaCategoriasActual = await _context.CategoriasProducto
+                .Where(c => c.Activo)
+                .ToDictionaryAsync(c => c.Nombre.Trim(), c => c.Id, StringComparer.OrdinalIgnoreCase, ct);
+
+            foreach (var nombreCat in parseo.CategoriasNuevas)
+            {
+                if (!mapaCategoriasActual.TryGetValue(nombreCat, out var catExistenteId))
+                {
+                    var nuevaCat = new CategoriaProducto
+                    {
+                        Id = Guid.NewGuid(),
+                        Nombre = nombreCat,
+                        StockMinimoDefault = 4,
+                        FechaCreacion = ahora,
+                        CreadoPorId = usuarioId,
+                        Activo = true
+                    };
+                    _context.CategoriasProducto.Add(nuevaCat);
+                    mapaCategoriasActual[nombreCat] = nuevaCat.Id;
+                }
+            }
+
+            // 2. Crear Clientes nuevos (sin sobrescribir existentes)
             var nuevosClientes = new List<Cliente>(parseo.ClientesValidos.Count);
-            foreach (var filaCliente in parseo.ClientesValidos)
+            foreach (var fc in parseo.ClientesValidos)
             {
                 nuevosClientes.Add(new Cliente
                 {
-                    Id = Guid.NewGuid(),
-                    TipoDocumento = filaCliente.TipoDocumento,
-                    NumeroDocumento = filaCliente.NumeroDocumento,
-                    DocumentoIdentidad = filaCliente.NumeroDocumento,
-                    NombreCompleto = filaCliente.NombreCompleto,
-                    RazonSocial = filaCliente.TipoDocumento == TipoDocumentoCliente.RUC ? filaCliente.NombreCompleto : null,
-                    Telefono = filaCliente.Telefono,
-                    Email = filaCliente.Email,
-                    Direccion = filaCliente.Direccion,
+                    Id = fc.Id,
+                    TipoDocumento = fc.TipoDocumento,
+                    NumeroDocumento = fc.NumeroDocumento,
+                    DocumentoIdentidad = fc.NumeroDocumento,
+                    NombreCompleto = fc.NombreCompleto,
+                    RazonSocial = fc.TipoDocumento == TipoDocumentoCliente.RUC ? fc.NombreCompleto : null,
+                    Telefono = fc.Telefono,
+                    Email = fc.Email,
+                    Direccion = fc.Direccion,
                     FechaCreacion = ahora,
                     CreadoPorId = usuarioId,
                     Activo = true
@@ -158,29 +193,69 @@ public class ImportadorExcelService : IImportadorExcelService
                 _context.Clientes.AddRange(nuevosClientes);
             }
 
-            // 2. Crear únicamente productos nuevos del catálogo (Codigo y Nombre)
-            //    con los valores predeterminados de la entidad y sin movimientos de Kardex.
-            var nuevosProductos = new List<Producto>(parseo.CatalogoValidos.Count);
-            foreach (var filaCatalogo in parseo.CatalogoValidos)
+            // 3. Crear Repuestos / Catalogo y registrar exactamente un MovimientoInventario inicial en Kardex si StockActual > 0
+            var nuevosProductos = new List<Producto>(parseo.RepuestosValidos.Count + parseo.CatalogoValidos.Count);
+            var movimientosKardex = new List<MovimientoInventario>();
+
+            foreach (var fr in parseo.RepuestosValidos)
             {
-                nuevosProductos.Add(new Producto
+                Guid catId = mapaCategoriasActual.TryGetValue(fr.Categoria, out var cId)
+                    ? cId
+                    : (categoriaId ?? Guid.Empty);
+
+                var prod = new Producto
+                {
+                    Id = Guid.NewGuid(),
+                    CategoriaId = catId,
+                    Codigo = fr.Codigo,
+                    Nombre = fr.Nombre,
+                    Unidad = fr.UnidadMedida,
+                    Marca = fr.Marca,
+                    Costo = fr.Costo,
+                    PrecioVenta = fr.PrecioVenta,
+                    StockActual = fr.StockActual,
+                    StockMinimo = fr.StockMinimo,
+                    FechaCreacion = ahora,
+                    CreadoPorId = usuarioId,
+                    Activo = true
+                };
+                nuevosProductos.Add(prod);
+
+                if (fr.StockActual > 0)
+                {
+                    movimientosKardex.Add(new MovimientoInventario
+                    {
+                        Id = Guid.NewGuid(),
+                        ProductoId = prod.Id,
+                        Tipo = TipoMovimientoInventario.Entrada,
+                        Cantidad = fr.StockActual,
+                        CostoUnitario = fr.Costo,
+                        Motivo = "Carga inicial de inventario",
+                        FechaCreacion = ahora,
+                        CreadoPorId = usuarioId,
+                        Activo = true
+                    });
+                }
+            }
+
+            foreach (var fcat in parseo.CatalogoValidos)
+            {
+                var prod = new Producto
                 {
                     Id = Guid.NewGuid(),
                     CategoriaId = categoriaId!.Value,
-                    Codigo = filaCatalogo.Codigo,
-                    Nombre = filaCatalogo.Nombre,
+                    Codigo = fcat.Codigo,
+                    Nombre = fcat.Nombre,
                     Unidad = "unidad",
                     PrecioVenta = 0m,
                     Costo = 0m,
                     StockActual = 0,
                     StockMinimo = null,
-                    Descripcion = null,
-                    Marca = null,
-                    FotoUrl = null,
                     FechaCreacion = ahora,
                     CreadoPorId = usuarioId,
                     Activo = true
-                });
+                };
+                nuevosProductos.Add(prod);
             }
 
             if (nuevosProductos.Count > 0)
@@ -188,7 +263,42 @@ public class ImportadorExcelService : IImportadorExcelService
                 _context.Productos.AddRange(nuevosProductos);
             }
 
-            // 3. Registrar evento de auditoría dentro de la misma transacción
+            if (movimientosKardex.Count > 0)
+            {
+                _context.MovimientosInventario.AddRange(movimientosKardex);
+            }
+
+            // 4. Crear Unidades vinculadas a su propietario (cliente nuevo o preexistente)
+            var nuevasUnidades = new List<Vehiculo>(parseo.UnidadesValidas.Count);
+            foreach (var fu in parseo.UnidadesValidas)
+            {
+                nuevasUnidades.Add(new Vehiculo
+                {
+                    Id = Guid.NewGuid(),
+                    ClienteId = fu.ClienteId,
+                    TipoUnidad = fu.TipoUnidad,
+                    Placa = fu.Placa,
+                    NumeroSerieVIN = fu.NumeroSerieVIN,
+                    NumeroMotor = fu.NumeroMotor,
+                    Marca = fu.Marca,
+                    Modelo = fu.Modelo,
+                    Anio = fu.Anio,
+                    TipoMedidor = fu.TipoMedidor,
+                    LecturaMedidorActual = fu.LecturaMedidor,
+                    Kilometraje = fu.TipoMedidor == TipoMedidor.Kilometraje ? (int?)Math.Round(fu.LecturaMedidor) : null,
+                    HorasUso = fu.TipoMedidor == TipoMedidor.Horas ? fu.LecturaMedidor : null,
+                    FechaCreacion = ahora,
+                    CreadoPorId = usuarioId,
+                    Activo = true
+                });
+            }
+
+            if (nuevasUnidades.Count > 0)
+            {
+                _context.Vehiculos.AddRange(nuevasUnidades);
+            }
+
+            // 5. Registrar evento de auditoría dentro de la misma transacción
             var eventoAuditoria = ConstruirEventoAuditoria(
                 usuarioId,
                 AccionEjecutar,
@@ -221,6 +331,8 @@ public class ImportadorExcelService : IImportadorExcelService
             {
                 Exitoso = false,
                 Clientes = parseo.Resultado.Clientes with { RegistrosCreados = 0 },
+                Unidades = parseo.Resultado.Unidades is not null ? parseo.Resultado.Unidades with { RegistrosCreados = 0 } : null,
+                Repuestos = parseo.Resultado.Repuestos is not null ? parseo.Resultado.Repuestos with { RegistrosCreados = 0 } : null,
                 Catalogo = parseo.Resultado.Catalogo with { RegistrosCreados = 0 },
                 Errores = errores
             };
@@ -259,7 +371,8 @@ public class ImportadorExcelService : IImportadorExcelService
             bool exitoso = ev.Accion == AccionEjecutar;
             bool soloValidacion = ev.Accion == AccionValidar;
             Guid? categoriaId = null;
-            int clientes = 0, catalogo = 0, errores = 0;
+            int clientes = 0, catalogo = 0, unidades = 0, repuestos = 0, errores = 0;
+            string? modoDuplicados = null;
 
             if (!string.IsNullOrWhiteSpace(ev.Detalle))
             {
@@ -273,10 +386,16 @@ public class ImportadorExcelService : IImportadorExcelService
                         soloValidacion = pSoloVal.GetBoolean();
                     if (root.TryGetProperty("CategoriaId", out var pCatId) && pCatId.ValueKind == JsonValueKind.String && Guid.TryParse(pCatId.GetString(), out var gCat))
                         categoriaId = gCat;
+                    if (root.TryGetProperty("ModoDuplicados", out var pModo) && pModo.ValueKind == JsonValueKind.String)
+                        modoDuplicados = pModo.GetString();
                     if (root.TryGetProperty("ClientesProcesados", out var pCli) && pCli.TryGetInt32(out var vCli))
                         clientes = vCli;
                     if (root.TryGetProperty("CatalogoProcesados", out var pCat) && pCat.TryGetInt32(out var vCat))
                         catalogo = vCat;
+                    if (root.TryGetProperty("UnidadesProcesadas", out var pUni) && pUni.TryGetInt32(out var vUni))
+                        unidades = vUni;
+                    if (root.TryGetProperty("RepuestosProcesados", out var pRep) && pRep.TryGetInt32(out var vRep))
+                        repuestos = vRep;
                     if (root.TryGetProperty("TotalErrores", out var pErr) && pErr.TryGetInt32(out var vErr))
                         errores = vErr;
                 }
@@ -298,7 +417,10 @@ public class ImportadorExcelService : IImportadorExcelService
                 categoriaId,
                 clientes,
                 catalogo,
-                errores
+                errores,
+                unidades,
+                repuestos,
+                modoDuplicados
             ));
         }
 
@@ -313,11 +435,13 @@ public class ImportadorExcelService : IImportadorExcelService
         Stream archivoStream,
         string nombreArchivo,
         Guid? categoriaId,
+        string modoDuplicados,
         bool soloValidacion,
         CancellationToken ct)
     {
         var ahora = DateTime.UtcNow;
         var errores = new List<ErrorFilaImportacionDto>();
+        bool omitirExistentes = string.Equals(modoDuplicados, ModoOmitirExistentes, StringComparison.OrdinalIgnoreCase);
 
         XLWorkbook workbook;
         try
@@ -333,12 +457,14 @@ public class ImportadorExcelService : IImportadorExcelService
                 ValorLeido: nombreArchivo,
                 Mensaje: "El archivo proporcionado no es un libro de Excel (.xlsx) válido o está dañado."));
 
-            return CrearResultadoVacioConErrores(nombreArchivo, categoriaId, soloValidacion, ahora, errores);
+            return CrearResultadoVacioConErrores(nombreArchivo, categoriaId, modoDuplicados, soloValidacion, ahora, errores);
         }
 
         using (workbook)
         {
             var wsClientes = BuscarHoja(workbook, HojaClientes);
+            var wsUnidades = BuscarHoja(workbook, HojaUnidades);
+            var wsRepuestos = BuscarHoja(workbook, HojaRepuestos);
             var wsCatalogo = BuscarHoja(workbook, HojaCatalogo);
 
             if (wsClientes is null)
@@ -351,71 +477,125 @@ public class ImportadorExcelService : IImportadorExcelService
                     Mensaje: $"No se encontró la hoja obligatoria '{HojaClientes}' en el archivo Excel."));
             }
 
-            if (wsCatalogo is null)
+            if (wsUnidades is null && wsRepuestos is null && wsCatalogo is null)
             {
                 errores.Add(new ErrorFilaImportacionDto(
-                    Hoja: HojaCatalogo,
+                    Hoja: "Archivo",
                     Fila: 1,
                     Columna: "Hoja",
                     ValorLeido: null,
-                    Mensaje: $"No se encontró la hoja obligatoria '{HojaCatalogo}' en el archivo Excel."));
+                    Mensaje: $"El archivo debe contener además de '{HojaClientes}' al menos una de las hojas '{HojaUnidades}' o '{HojaRepuestos}'."));
             }
 
-            // Rechazar hojas no autorizadas (ej. Unidades) para garantizar el alcance de 2 hojas
+            // Rechazar hojas no autorizadas
+            var hojasPermitidas = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                NormalizarClaveTexto(HojaClientes),
+                NormalizarClaveTexto(HojaUnidades),
+                NormalizarClaveTexto(HojaRepuestos),
+                NormalizarClaveTexto(HojaCatalogo)
+            };
+
             foreach (var sheet in workbook.Worksheets)
             {
                 var claveHoja = NormalizarClaveTexto(sheet.Name);
-                if (claveHoja != NormalizarClaveTexto(HojaClientes) && claveHoja != NormalizarClaveTexto(HojaCatalogo))
+                if (!hojasPermitidas.Contains(claveHoja))
                 {
                     errores.Add(new ErrorFilaImportacionDto(
                         Hoja: sheet.Name,
                         Fila: 1,
                         Columna: "Hoja",
                         ValorLeido: sheet.Name,
-                        Mensaje: $"La hoja '{sheet.Name}' no está permitida. La plantilla admite únicamente las hojas '{HojaClientes}' y '{HojaCatalogo}'."));
+                        Mensaje: $"La hoja '{sheet.Name}' no está permitida. Hojas autorizadas: {HojaClientes}, {HojaUnidades}, {HojaRepuestos}."));
                 }
             }
 
             if (errores.Count > 0)
             {
-                return CrearResultadoVacioConErrores(nombreArchivo, categoriaId, soloValidacion, ahora, errores);
+                return CrearResultadoVacioConErrores(nombreArchivo, categoriaId, modoDuplicados, soloValidacion, ahora, errores);
             }
 
-            // Validar cabeceras exactas de las 2 hojas
+            // Validar cabeceras exactas de las hojas presentes
             string[] colsClientes = ["TipoDocumento", "NumeroDocumento", "NombreCompleto", "Telefono", "Email", "Direccion"];
+            string[] colsUnidades = ["DocumentoPropietario", "TipoUnidad", "Placa", "NumeroSerieVIN", "NumeroMotor", "Marca", "Modelo", "Anio", "TipoMedidor", "LecturaMedidor"];
+            string[] colsRepuestosObligatorias = ["Codigo", "Nombre", "Categoria", "UnidadMedida", "Costo", "PrecioVenta", "StockActual", "StockMinimo"];
+            string[] colsRepuestosOpcionales = ["Marca"];
             string[] colsCatalogo = ["Codigo", "Nombre"];
 
-            var mapaColsClientes = ValidarYMapearCabeceras(wsClientes!, HojaClientes, colsClientes, permitirColumnasExtra: false, errores);
-            var mapaColsCatalogo = ValidarYMapearCabeceras(wsCatalogo!, HojaCatalogo, colsCatalogo, permitirColumnasExtra: false, errores);
+            var mapaColsClientes = ValidarYMapearCabeceras(wsClientes!, HojaClientes, colsClientes, null, permitirColumnasExtra: false, errores);
+
+            Dictionary<string, int>? mapaColsUnidades = null;
+            if (wsUnidades is not null)
+            {
+                mapaColsUnidades = ValidarYMapearCabeceras(wsUnidades, HojaUnidades, colsUnidades, null, permitirColumnasExtra: false, errores);
+            }
+
+            Dictionary<string, int>? mapaColsRepuestos = null;
+            if (wsRepuestos is not null)
+            {
+                mapaColsRepuestos = ValidarYMapearCabeceras(wsRepuestos, HojaRepuestos, colsRepuestosObligatorias, colsRepuestosOpcionales, permitirColumnasExtra: false, errores);
+            }
+
+            Dictionary<string, int>? mapaColsCatalogo = null;
+            if (wsCatalogo is not null && wsRepuestos is null)
+            {
+                mapaColsCatalogo = ValidarYMapearCabeceras(wsCatalogo, HojaCatalogo, colsCatalogo, null, permitirColumnasExtra: false, errores);
+            }
 
             if (errores.Count > 0)
             {
-                return CrearResultadoVacioConErrores(nombreArchivo, categoriaId, soloValidacion, ahora, errores);
+                return CrearResultadoVacioConErrores(nombreArchivo, categoriaId, modoDuplicados, soloValidacion, ahora, errores);
             }
 
-            // Consultas de solo lectura (AsNoTracking) para verificar duplicados contra la BD
+            // Consultas de solo lectura (AsNoTracking) para verificar duplicados y resolver propietarios en BD
             var clientesBdList = await _context.Clientes
                 .AsNoTracking()
                 .Where(c => c.Activo && (c.NumeroDocumento != null || c.DocumentoIdentidad != null))
-                .Select(c => (c.NumeroDocumento ?? c.DocumentoIdentidad)!.Trim())
+                .Select(c => new { c.Id, Documento = (c.NumeroDocumento ?? c.DocumentoIdentidad)!.Trim() })
                 .ToListAsync(ct);
 
-            var documentosClientesEnBd = new HashSet<string>(
-                clientesBdList.Where(d => !string.IsNullOrWhiteSpace(d)),
-                StringComparer.OrdinalIgnoreCase);
+            var mapaClientesBd = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+            foreach (var c in clientesBdList)
+            {
+                if (!string.IsNullOrWhiteSpace(c.Documento) && !mapaClientesBd.ContainsKey(c.Documento))
+                {
+                    mapaClientesBd[c.Documento] = c.Id;
+                }
+            }
 
             var codigosProductosEnBd = new HashSet<string>(
-                await _context.Productos.AsNoTracking().Select(p => p.Codigo.Trim()).ToListAsync(ct),
+                await _context.Productos.AsNoTracking().Where(p => p.Activo).Select(p => p.Codigo.Trim()).ToListAsync(ct),
                 StringComparer.OrdinalIgnoreCase);
+
+            var vehiculosBdList = await _context.Vehiculos
+                .AsNoTracking()
+                .Where(v => v.Activo && ((v.Placa != null && v.Placa != "") || (v.NumeroSerieVIN != null && v.NumeroSerieVIN != "")))
+                .Select(v => new { Placa = v.Placa != null ? v.Placa.Trim() : null, VIN = v.NumeroSerieVIN != null ? v.NumeroSerieVIN.Trim() : null })
+                .ToListAsync(ct);
+
+            var placasEnBd = new HashSet<string>(
+                vehiculosBdList.Where(v => !string.IsNullOrWhiteSpace(v.Placa)).Select(v => v.Placa!),
+                StringComparer.OrdinalIgnoreCase);
+
+            var vinsEnBd = new HashSet<string>(
+                vehiculosBdList.Where(v => !string.IsNullOrWhiteSpace(v.VIN)).Select(v => v.VIN!),
+                StringComparer.OrdinalIgnoreCase);
+
+            var mapaCategoriasBd = await _context.CategoriasProducto
+                .AsNoTracking()
+                .Where(c => c.Activo)
+                .ToDictionaryAsync(c => c.Nombre.Trim(), c => c.Id, StringComparer.OrdinalIgnoreCase, ct);
 
             // -----------------------------------------------------------------
             // 1. Validar Hoja Clientes
             // -----------------------------------------------------------------
             var clientesValidos = new List<FilaClienteValidada>();
+            var mapaDocumentoAClienteId = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
             var documentosEnHojaClientes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
             int filasLeidasClientes = 0;
             int filasConErrorClientes = 0;
+            int filasOmitidasClientes = 0;
 
             int ultimaFilaClientes = wsClientes!.LastRowUsed()?.RowNumber() ?? 1;
             for (int r = 2; r <= ultimaFilaClientes; r++)
@@ -461,6 +641,7 @@ public class ImportadorExcelService : IImportadorExcelService
                     errores.Add(new ErrorFilaImportacionDto(HojaClientes, r, "TipoDocumento", rawTipoDoc, "TipoDocumento inválido. Valores permitidos: DNI, RUC, CE."));
                 }
 
+                bool documentoEnBd = false;
                 if (string.IsNullOrWhiteSpace(rawNumDoc))
                 {
                     errores.Add(new ErrorFilaImportacionDto(HojaClientes, r, "NumeroDocumento", rawNumDoc, "El NumeroDocumento es obligatorio."));
@@ -483,6 +664,7 @@ public class ImportadorExcelService : IImportadorExcelService
                         }
                     }
 
+                    // Duplicados dentro del mismo archivo Excel SIEMPRE son un error
                     if (documentosEnHojaClientes.TryGetValue(rawNumDoc, out int filaPrevia))
                     {
                         errores.Add(new ErrorFilaImportacionDto(HojaClientes, r, "NumeroDocumento", rawNumDoc, $"El número de documento '{rawNumDoc}' está duplicado en la hoja Clientes (ya aparece en la fila {filaPrevia})."));
@@ -492,9 +674,19 @@ public class ImportadorExcelService : IImportadorExcelService
                         documentosEnHojaClientes[rawNumDoc] = r;
                     }
 
-                    if (documentosClientesEnBd.Contains(rawNumDoc))
+                    // Duplicados contra la base de datos
+                    if (mapaClientesBd.TryGetValue(rawNumDoc, out var idClienteExistente))
                     {
-                        errores.Add(new ErrorFilaImportacionDto(HojaClientes, r, "NumeroDocumento", rawNumDoc, $"Ya existe un cliente activo en la base de datos con el número de documento '{rawNumDoc}'."));
+                        documentoEnBd = true;
+                        if (!omitirExistentes)
+                        {
+                            errores.Add(new ErrorFilaImportacionDto(HojaClientes, r, "NumeroDocumento", rawNumDoc, $"Ya existe un cliente activo en la base de datos con el número de documento '{rawNumDoc}'."));
+                        }
+                        else
+                        {
+                            // En modo OmitirExistentes, vinculamos al cliente preexistente para que sus unidades puedan asociarse
+                            mapaDocumentoAClienteId[rawNumDoc] = idClienteExistente;
+                        }
                     }
                 }
 
@@ -525,9 +717,17 @@ public class ImportadorExcelService : IImportadorExcelService
                 {
                     filasConErrorClientes++;
                 }
+                else if (documentoEnBd && omitirExistentes)
+                {
+                    filasOmitidasClientes++;
+                }
                 else
                 {
+                    var nuevoId = Guid.NewGuid();
+                    mapaDocumentoAClienteId[rawNumDoc] = nuevoId;
+
                     clientesValidos.Add(new FilaClienteValidada(
+                        nuevoId,
                         r,
                         tipoDoc,
                         rawNumDoc,
@@ -539,104 +739,450 @@ public class ImportadorExcelService : IImportadorExcelService
             }
 
             // -----------------------------------------------------------------
-            // 2. Validar Hoja Catalogo (Únicamente Codigo y Nombre)
+            // 2. Validar Hoja Unidades (si existe)
             // -----------------------------------------------------------------
-            var catalogoValidos = new List<FilaCatalogoValidada>();
-            var codigosEnHojaCatalogo = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var unidadesValidas = new List<FilaUnidadValidada>();
+            var placasEnHojaUnidades = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var vinsEnHojaUnidades = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-            int filasLeidasCatalogo = 0;
-            int filasConErrorCatalogo = 0;
+            int filasLeidasUnidades = 0;
+            int filasConErrorUnidades = 0;
+            int filasOmitidasUnidades = 0;
 
-            int ultimaFilaCatalogo = wsCatalogo!.LastRowUsed()?.RowNumber() ?? 1;
-            for (int r = 2; r <= ultimaFilaCatalogo; r++)
+            if (wsUnidades is not null && mapaColsUnidades is not null)
             {
-                var row = wsCatalogo.Row(r);
-                if (FilaEstaVacia(row, mapaColsCatalogo.Values))
-                    continue;
-
-                filasLeidasCatalogo++;
-                int erroresAntes = errores.Count;
-
-                var rawCodigo = LeerTextoDocumentoOCodigo(row, mapaColsCatalogo["Codigo"]);
-                var rawNombre = LeerTexto(row, mapaColsCatalogo["Nombre"]);
-
-                if (string.IsNullOrWhiteSpace(rawCodigo))
+                int ultimaFilaUnidades = wsUnidades.LastRowUsed()?.RowNumber() ?? 1;
+                for (int r = 2; r <= ultimaFilaUnidades; r++)
                 {
-                    errores.Add(new ErrorFilaImportacionDto(HojaCatalogo, r, "Codigo", rawCodigo, "El Codigo del producto es obligatorio."));
-                }
-                else
-                {
-                    if (codigosEnHojaCatalogo.TryGetValue(rawCodigo, out int filaCodPrevia))
+                    var row = wsUnidades.Row(r);
+                    if (FilaEstaVacia(row, mapaColsUnidades.Values))
+                        continue;
+
+                    filasLeidasUnidades++;
+                    int erroresAntes = errores.Count;
+
+                    var rawDocProp = LeerTextoDocumentoOCodigo(row, mapaColsUnidades["DocumentoPropietario"]);
+                    var rawTipoUnidad = LeerTexto(row, mapaColsUnidades["TipoUnidad"]);
+                    var rawPlaca = LeerTexto(row, mapaColsUnidades["Placa"]);
+                    var rawVIN = LeerTextoDocumentoOCodigo(row, mapaColsUnidades["NumeroSerieVIN"]);
+                    var rawMotor = LeerTexto(row, mapaColsUnidades["NumeroMotor"]);
+                    var rawMarca = LeerTexto(row, mapaColsUnidades["Marca"]);
+                    var rawModelo = LeerTexto(row, mapaColsUnidades["Modelo"]);
+                    var rawAnio = LeerTextoDocumentoOCodigo(row, mapaColsUnidades["Anio"]);
+                    var rawTipoMedidor = LeerTexto(row, mapaColsUnidades["TipoMedidor"]);
+
+                    // Propietario: resolver contra mapaDocumentoAClienteId o mapaClientesBd
+                    Guid clienteIdResuelto = Guid.Empty;
+                    if (string.IsNullOrWhiteSpace(rawDocProp))
                     {
-                        errores.Add(new ErrorFilaImportacionDto(HojaCatalogo, r, "Codigo", rawCodigo, $"El código '{rawCodigo}' está duplicado en la hoja Catalogo (ya aparece en la fila {filaCodPrevia})."));
+                        errores.Add(new ErrorFilaImportacionDto(HojaUnidades, r, "DocumentoPropietario", rawDocProp, "El DocumentoPropietario es obligatorio."));
+                    }
+                    else if (mapaDocumentoAClienteId.TryGetValue(rawDocProp, out var cId))
+                    {
+                        clienteIdResuelto = cId;
+                    }
+                    else if (mapaClientesBd.TryGetValue(rawDocProp, out var dbClienteId))
+                    {
+                        clienteIdResuelto = dbClienteId;
+                        mapaDocumentoAClienteId[rawDocProp] = dbClienteId;
                     }
                     else
                     {
-                        codigosEnHojaCatalogo[rawCodigo] = r;
+                        errores.Add(new ErrorFilaImportacionDto(HojaUnidades, r, "DocumentoPropietario", rawDocProp, $"No se encontró ningún cliente registrado con el documento '{rawDocProp}' ni en la base de datos ni en la hoja Clientes."));
                     }
 
-                    if (codigosProductosEnBd.Contains(rawCodigo))
+                    // TipoUnidad
+                    TipoUnidad tipoUnidad = TipoUnidad.Motocicleta;
+                    if (string.IsNullOrWhiteSpace(rawTipoUnidad))
                     {
-                        errores.Add(new ErrorFilaImportacionDto(HojaCatalogo, r, "Codigo", rawCodigo, $"Ya existe un producto registrado en la base de datos con el código '{rawCodigo}'."));
+                        errores.Add(new ErrorFilaImportacionDto(HojaUnidades, r, "TipoUnidad", rawTipoUnidad, "El TipoUnidad es obligatorio (Motocicleta, Cuatrimoto, MotoAcuatica, Generador, Otro)."));
                     }
-                }
+                    else if (!TryParseTipoUnidad(rawTipoUnidad, out tipoUnidad))
+                    {
+                        errores.Add(new ErrorFilaImportacionDto(HojaUnidades, r, "TipoUnidad", rawTipoUnidad, $"TipoUnidad inválido ('{rawTipoUnidad}'). Valores permitidos: Motocicleta, Cuatrimoto, MotoAcuatica, Generador, Otro."));
+                    }
 
-                if (string.IsNullOrWhiteSpace(rawNombre))
-                {
-                    errores.Add(new ErrorFilaImportacionDto(HojaCatalogo, r, "Nombre", rawNombre, "El Nombre del producto es obligatorio."));
-                }
+                    // Placa y Serie/VIN
+                    string? placaLimpia = string.IsNullOrWhiteSpace(rawPlaca) ? null : rawPlaca.Trim().ToUpperInvariant();
+                    string? vinLimpio = string.IsNullOrWhiteSpace(rawVIN) ? null : rawVIN.Trim().ToUpperInvariant();
 
-                if (errores.Count > erroresAntes)
-                {
-                    filasConErrorCatalogo++;
-                }
-                else
-                {
-                    catalogoValidos.Add(new FilaCatalogoValidada(
-                        r,
-                        rawCodigo.Trim(),
-                        rawNombre.Trim()));
+                    if (tipoUnidad == TipoUnidad.Motocicleta && string.IsNullOrWhiteSpace(placaLimpia))
+                    {
+                        errores.Add(new ErrorFilaImportacionDto(HojaUnidades, r, "Placa", rawPlaca, "La Placa es obligatoria para unidades de tipo Motocicleta."));
+                    }
+                    else if (string.IsNullOrWhiteSpace(placaLimpia) && string.IsNullOrWhiteSpace(vinLimpio))
+                    {
+                        errores.Add(new ErrorFilaImportacionDto(HojaUnidades, r, "NumeroSerieVIN", rawVIN, "Debe especificar al menos la Placa o el NumeroSerieVIN (obligatorio para unidades sin placa)."));
+                    }
+
+                    bool unidadEnBd = false;
+
+                    // Validación de duplicados de Placa
+                    if (!string.IsNullOrWhiteSpace(placaLimpia))
+                    {
+                        if (placasEnHojaUnidades.TryGetValue(placaLimpia, out int filaPlacaPrev))
+                        {
+                            errores.Add(new ErrorFilaImportacionDto(HojaUnidades, r, "Placa", placaLimpia, $"La placa '{placaLimpia}' está duplicada en la hoja Unidades (ya aparece en la fila {filaPlacaPrev})."));
+                        }
+                        else
+                        {
+                            placasEnHojaUnidades[placaLimpia] = r;
+                        }
+
+                        if (placasEnBd.Contains(placaLimpia))
+                        {
+                            unidadEnBd = true;
+                            if (!omitirExistentes)
+                            {
+                                errores.Add(new ErrorFilaImportacionDto(HojaUnidades, r, "Placa", placaLimpia, $"Ya existe un vehículo activo en la base de datos con la placa '{placaLimpia}'."));
+                            }
+                        }
+                    }
+
+                    // Validación de duplicados de VIN
+                    if (!string.IsNullOrWhiteSpace(vinLimpio))
+                    {
+                        if (vinsEnHojaUnidades.TryGetValue(vinLimpio, out int filaVinPrev))
+                        {
+                            errores.Add(new ErrorFilaImportacionDto(HojaUnidades, r, "NumeroSerieVIN", vinLimpio, $"El número de serie/VIN '{vinLimpio}' está duplicado en la hoja Unidades (ya aparece en la fila {filaVinPrev})."));
+                        }
+                        else
+                        {
+                            vinsEnHojaUnidades[vinLimpio] = r;
+                        }
+
+                        if (vinsEnBd.Contains(vinLimpio))
+                        {
+                            unidadEnBd = true;
+                            if (!omitirExistentes)
+                            {
+                                errores.Add(new ErrorFilaImportacionDto(HojaUnidades, r, "NumeroSerieVIN", vinLimpio, $"Ya existe un vehículo activo en la base de datos con el número de serie/VIN '{vinLimpio}'."));
+                            }
+                        }
+                    }
+
+                    // Marca y Modelo
+                    if (string.IsNullOrWhiteSpace(rawMarca))
+                    {
+                        errores.Add(new ErrorFilaImportacionDto(HojaUnidades, r, "Marca", rawMarca, "La Marca de la unidad es obligatoria."));
+                    }
+
+                    if (string.IsNullOrWhiteSpace(rawModelo))
+                    {
+                        errores.Add(new ErrorFilaImportacionDto(HojaUnidades, r, "Modelo", rawModelo, "El Modelo de la unidad es obligatorio."));
+                    }
+
+                    // Año opcional
+                    int? anio = null;
+                    if (!string.IsNullOrWhiteSpace(rawAnio))
+                    {
+                        if (LeerEntero(row, mapaColsUnidades["Anio"], out int aVal))
+                        {
+                            int anioMax = DateTime.UtcNow.Year + 2;
+                            if (aVal < 1950 || aVal > anioMax)
+                            {
+                                errores.Add(new ErrorFilaImportacionDto(HojaUnidades, r, "Anio", rawAnio, $"El Año de la unidad debe encontrarse entre 1950 y {anioMax}."));
+                            }
+                            else
+                            {
+                                anio = aVal;
+                            }
+                        }
+                        else
+                        {
+                            errores.Add(new ErrorFilaImportacionDto(HojaUnidades, r, "Anio", rawAnio, "El Año debe ser un número entero válido."));
+                        }
+                    }
+
+                    // TipoMedidor
+                    TipoMedidor tipoMedidor = TipoMedidor.Kilometraje;
+                    if (string.IsNullOrWhiteSpace(rawTipoMedidor))
+                    {
+                        errores.Add(new ErrorFilaImportacionDto(HojaUnidades, r, "TipoMedidor", rawTipoMedidor, "El TipoMedidor es obligatorio (Kilometros u Horas)."));
+                    }
+                    else if (!TryParseTipoMedidor(rawTipoMedidor, out tipoMedidor))
+                    {
+                        errores.Add(new ErrorFilaImportacionDto(HojaUnidades, r, "TipoMedidor", rawTipoMedidor, $"TipoMedidor inválido ('{rawTipoMedidor}'). Valores permitidos: Kilometros, Horas."));
+                    }
+
+                    // LecturaMedidor
+                    decimal lectura = 0m;
+                    if (!LeerDecimal(row, mapaColsUnidades["LecturaMedidor"], out lectura) || lectura < 0m)
+                    {
+                        errores.Add(new ErrorFilaImportacionDto(HojaUnidades, r, "LecturaMedidor", LeerTexto(row, mapaColsUnidades["LecturaMedidor"]), "La LecturaMedidor debe ser un valor numérico mayor o igual a 0."));
+                    }
+
+                    if (errores.Count > erroresAntes)
+                    {
+                        filasConErrorUnidades++;
+                    }
+                    else if (unidadEnBd && omitirExistentes)
+                    {
+                        filasOmitidasUnidades++;
+                    }
+                    else
+                    {
+                        unidadesValidas.Add(new FilaUnidadValidada(
+                            r,
+                            clienteIdResuelto,
+                            rawDocProp,
+                            tipoUnidad,
+                            placaLimpia,
+                            vinLimpio,
+                            string.IsNullOrWhiteSpace(rawMotor) ? null : rawMotor.Trim(),
+                            rawMarca.Trim(),
+                            rawModelo.Trim(),
+                            anio,
+                            tipoMedidor,
+                            lectura
+                        ));
+                    }
                 }
             }
 
-            // Validar parámetro explícito categoriaId SOLO si la hoja Catalogo contiene productos nuevos que deban insertarse
-            if (catalogoValidos.Count > 0)
-            {
-                if (!categoriaId.HasValue || categoriaId.Value == Guid.Empty)
-                {
-                    errores.Add(new ErrorFilaImportacionDto(
-                        Hoja: HojaCatalogo,
-                        Fila: 0,
-                        Columna: "CategoriaId",
-                        ValorLeido: null,
-                        Mensaje: "Debe proporcionar un 'categoriaId' explícito de una categoría existente y activa cuando la hoja Catalogo contiene productos nuevos."));
-                }
-                else
-                {
-                    bool categoriaExisteActiva = await _context.CategoriasProducto
-                        .AsNoTracking()
-                        .AnyAsync(c => c.Id == categoriaId.Value && c.Activo, ct);
+            // -----------------------------------------------------------------
+            // 3. Validar Hoja Repuestos (o Hoja Catalogo legada)
+            // -----------------------------------------------------------------
+            var repuestosValidos = new List<FilaRepuestoValidada>();
+            var catalogoValidos = new List<FilaCatalogoValidada>();
+            var categoriasNuevas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var codigosEnHojaRepuestos = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-                    if (!categoriaExisteActiva)
+            int filasLeidasRepuestos = 0;
+            int filasConErrorRepuestos = 0;
+            int filasOmitidasRepuestos = 0;
+
+            if (wsRepuestos is not null && mapaColsRepuestos is not null)
+            {
+                int ultimaFilaRepuestos = wsRepuestos.LastRowUsed()?.RowNumber() ?? 1;
+                for (int r = 2; r <= ultimaFilaRepuestos; r++)
+                {
+                    var row = wsRepuestos.Row(r);
+                    if (FilaEstaVacia(row, mapaColsRepuestos.Values))
+                        continue;
+
+                    filasLeidasRepuestos++;
+                    int erroresAntes = errores.Count;
+
+                    var rawCodigo = LeerTextoDocumentoOCodigo(row, mapaColsRepuestos["Codigo"]);
+                    var rawNombre = LeerTexto(row, mapaColsRepuestos["Nombre"]);
+                    var rawCategoria = LeerTexto(row, mapaColsRepuestos["Categoria"]);
+                    var rawUnidad = LeerTexto(row, mapaColsRepuestos["UnidadMedida"]);
+
+                    string? rawMarca = null;
+                    if (mapaColsRepuestos.TryGetValue("Marca", out int colMarca))
+                    {
+                        rawMarca = LeerTexto(row, colMarca);
+                    }
+
+                    bool productoEnBd = false;
+                    if (string.IsNullOrWhiteSpace(rawCodigo))
+                    {
+                        errores.Add(new ErrorFilaImportacionDto(HojaRepuestos, r, "Codigo", rawCodigo, "El Codigo del repuesto es obligatorio."));
+                    }
+                    else
+                    {
+                        if (codigosEnHojaRepuestos.TryGetValue(rawCodigo, out int filaCodPrevia))
+                        {
+                            errores.Add(new ErrorFilaImportacionDto(HojaRepuestos, r, "Codigo", rawCodigo, $"El código '{rawCodigo}' está duplicado en la hoja Repuestos (ya aparece en la fila {filaCodPrevia})."));
+                        }
+                        else
+                        {
+                            codigosEnHojaRepuestos[rawCodigo] = r;
+                        }
+
+                        if (codigosProductosEnBd.Contains(rawCodigo))
+                        {
+                            productoEnBd = true;
+                            if (!omitirExistentes)
+                            {
+                                errores.Add(new ErrorFilaImportacionDto(HojaRepuestos, r, "Codigo", rawCodigo, $"Ya existe un producto registrado en la base de datos con el código '{rawCodigo}'."));
+                            }
+                        }
+                    }
+
+                    if (string.IsNullOrWhiteSpace(rawNombre))
+                    {
+                        errores.Add(new ErrorFilaImportacionDto(HojaRepuestos, r, "Nombre", rawNombre, "El Nombre del repuesto es obligatorio."));
+                    }
+
+                    if (string.IsNullOrWhiteSpace(rawCategoria))
+                    {
+                        errores.Add(new ErrorFilaImportacionDto(HojaRepuestos, r, "Categoria", rawCategoria, "La Categoria del repuesto es obligatoria."));
+                    }
+                    else
+                    {
+                        var catLimpia = rawCategoria.Trim();
+                        if (!mapaCategoriasBd.ContainsKey(catLimpia))
+                        {
+                            categoriasNuevas.Add(catLimpia);
+                        }
+                    }
+
+                    // Costo >= 0
+                    decimal costo = 0m;
+                    if (!LeerDecimal(row, mapaColsRepuestos["Costo"], out costo) || costo < 0m)
+                    {
+                        errores.Add(new ErrorFilaImportacionDto(HojaRepuestos, r, "Costo", LeerTexto(row, mapaColsRepuestos["Costo"]), "El Costo debe ser un valor numérico decimal mayor o igual a 0."));
+                    }
+
+                    // PrecioVenta >= 0
+                    decimal precioVenta = 0m;
+                    if (!LeerDecimal(row, mapaColsRepuestos["PrecioVenta"], out precioVenta) || precioVenta < 0m)
+                    {
+                        errores.Add(new ErrorFilaImportacionDto(HojaRepuestos, r, "PrecioVenta", LeerTexto(row, mapaColsRepuestos["PrecioVenta"]), "El PrecioVenta debe ser un valor numérico decimal mayor o igual a 0."));
+                    }
+
+                    // StockActual >= 0
+                    int stockActual = 0;
+                    if (!LeerEntero(row, mapaColsRepuestos["StockActual"], out stockActual) || stockActual < 0)
+                    {
+                        errores.Add(new ErrorFilaImportacionDto(HojaRepuestos, r, "StockActual", LeerTexto(row, mapaColsRepuestos["StockActual"]), "El StockActual debe ser un número entero mayor o igual a 0."));
+                    }
+
+                    // StockMinimo opcional
+                    int? stockMinimo = null;
+                    var cellMin = row.Cell(mapaColsRepuestos["StockMinimo"]);
+                    if (!cellMin.IsEmpty() && !string.IsNullOrWhiteSpace(cellMin.GetFormattedString()))
+                    {
+                        if (LeerEntero(row, mapaColsRepuestos["StockMinimo"], out int sMinVal) && sMinVal >= 0)
+                        {
+                            stockMinimo = sMinVal;
+                        }
+                        else
+                        {
+                            errores.Add(new ErrorFilaImportacionDto(HojaRepuestos, r, "StockMinimo", LeerTexto(row, mapaColsRepuestos["StockMinimo"]), "El StockMinimo debe ser un número entero mayor o igual a 0 si se especifica."));
+                        }
+                    }
+
+                    if (errores.Count > erroresAntes)
+                    {
+                        filasConErrorRepuestos++;
+                    }
+                    else if (productoEnBd && omitirExistentes)
+                    {
+                        filasOmitidasRepuestos++;
+                    }
+                    else
+                    {
+                        repuestosValidos.Add(new FilaRepuestoValidada(
+                            r,
+                            rawCodigo.Trim(),
+                            rawNombre.Trim(),
+                            rawCategoria.Trim(),
+                            string.IsNullOrWhiteSpace(rawUnidad) ? "unidad" : rawUnidad.Trim(),
+                            costo,
+                            precioVenta,
+                            stockActual,
+                            stockMinimo,
+                            string.IsNullOrWhiteSpace(rawMarca) ? null : rawMarca.Trim()
+                        ));
+                    }
+                }
+            }
+            else if (wsCatalogo is not null && mapaColsCatalogo is not null)
+            {
+                // Soporte de hoja Catalogo legada (Codigo y Nombre)
+                int ultimaFilaCatalogo = wsCatalogo.LastRowUsed()?.RowNumber() ?? 1;
+                for (int r = 2; r <= ultimaFilaCatalogo; r++)
+                {
+                    var row = wsCatalogo.Row(r);
+                    if (FilaEstaVacia(row, mapaColsCatalogo.Values))
+                        continue;
+
+                    filasLeidasRepuestos++;
+                    int erroresAntes = errores.Count;
+
+                    var rawCodigo = LeerTextoDocumentoOCodigo(row, mapaColsCatalogo["Codigo"]);
+                    var rawNombre = LeerTexto(row, mapaColsCatalogo["Nombre"]);
+
+                    bool productoEnBd = false;
+                    if (string.IsNullOrWhiteSpace(rawCodigo))
+                    {
+                        errores.Add(new ErrorFilaImportacionDto(HojaCatalogo, r, "Codigo", rawCodigo, "El Codigo del producto es obligatorio."));
+                    }
+                    else
+                    {
+                        if (codigosEnHojaRepuestos.TryGetValue(rawCodigo, out int filaCodPrevia))
+                        {
+                            errores.Add(new ErrorFilaImportacionDto(HojaCatalogo, r, "Codigo", rawCodigo, $"El código '{rawCodigo}' está duplicado en la hoja Catalogo (ya aparece en la fila {filaCodPrevia})."));
+                        }
+                        else
+                        {
+                            codigosEnHojaRepuestos[rawCodigo] = r;
+                        }
+
+                        if (codigosProductosEnBd.Contains(rawCodigo))
+                        {
+                            productoEnBd = true;
+                            if (!omitirExistentes)
+                            {
+                                errores.Add(new ErrorFilaImportacionDto(HojaCatalogo, r, "Codigo", rawCodigo, $"Ya existe un producto registrado en la base de datos con el código '{rawCodigo}'."));
+                            }
+                        }
+                    }
+
+                    if (string.IsNullOrWhiteSpace(rawNombre))
+                    {
+                        errores.Add(new ErrorFilaImportacionDto(HojaCatalogo, r, "Nombre", rawNombre, "El Nombre del producto es obligatorio."));
+                    }
+
+                    if (errores.Count > erroresAntes)
+                    {
+                        filasConErrorRepuestos++;
+                    }
+                    else if (productoEnBd && omitirExistentes)
+                    {
+                        filasOmitidasRepuestos++;
+                    }
+                    else
+                    {
+                        catalogoValidos.Add(new FilaCatalogoValidada(
+                            r,
+                            rawCodigo.Trim(),
+                            rawNombre.Trim()));
+                    }
+                }
+
+                // Para Catalogo legado, requiere categoriaId explícito si hay productos nuevos
+                if (catalogoValidos.Count > 0)
+                {
+                    if (!categoriaId.HasValue || categoriaId.Value == Guid.Empty)
                     {
                         errores.Add(new ErrorFilaImportacionDto(
                             Hoja: HojaCatalogo,
                             Fila: 0,
                             Columna: "CategoriaId",
-                            ValorLeido: categoriaId.Value.ToString(),
-                            Mensaje: $"La categoría con Id '{categoriaId.Value}' no existe o está inactiva."));
+                            ValorLeido: null,
+                            Mensaje: "Debe proporcionar un 'categoriaId' explícito de una categoría existente y activa cuando la hoja Catalogo contiene productos nuevos."));
+                    }
+                    else
+                    {
+                        bool categoriaExisteActiva = await _context.CategoriasProducto
+                            .AsNoTracking()
+                            .AnyAsync(c => c.Id == categoriaId.Value && c.Activo, ct);
+
+                        if (!categoriaExisteActiva)
+                        {
+                            errores.Add(new ErrorFilaImportacionDto(
+                                Hoja: HojaCatalogo,
+                                Fila: 0,
+                                Columna: "CategoriaId",
+                                ValorLeido: categoriaId.Value.ToString(),
+                                Mensaje: $"La categoría con Id '{categoriaId.Value}' no existe o está inactiva."));
+                        }
                     }
                 }
             }
 
-            if (filasLeidasClientes == 0 && filasLeidasCatalogo == 0)
+            if (filasLeidasClientes == 0 && filasLeidasUnidades == 0 && filasLeidasRepuestos == 0)
             {
                 errores.Add(new ErrorFilaImportacionDto(
                     Hoja: "Archivo",
                     Fila: 2,
                     Columna: "Datos",
                     ValorLeido: null,
-                    Mensaje: "El archivo no contiene ninguna fila con datos para importar en las hojas Clientes o Catalogo."));
+                    Mensaje: "El archivo no contiene ninguna fila con datos para importar en las hojas Clientes, Unidades o Repuestos."));
             }
 
             bool exitoso = errores.Count == 0;
@@ -646,13 +1192,28 @@ public class ImportadorExcelService : IImportadorExcelService
                 TotalFilasLeidas: filasLeidasClientes,
                 FilasValidas: clientesValidos.Count,
                 FilasConError: filasConErrorClientes,
-                RegistrosCreados: cuentaCreados ? clientesValidos.Count : 0);
+                RegistrosCreados: cuentaCreados ? clientesValidos.Count : 0,
+                RegistrosOmitidos: filasOmitidasClientes);
 
-            var resumenCatalogo = new ResumenHojaImportacionDto(
-                TotalFilasLeidas: filasLeidasCatalogo,
-                FilasValidas: catalogoValidos.Count,
-                FilasConError: filasConErrorCatalogo,
-                RegistrosCreados: cuentaCreados ? catalogoValidos.Count : 0);
+            var resumenUnidades = wsUnidades is not null
+                ? new ResumenHojaImportacionDto(
+                    TotalFilasLeidas: filasLeidasUnidades,
+                    FilasValidas: unidadesValidas.Count,
+                    FilasConError: filasConErrorUnidades,
+                    RegistrosCreados: cuentaCreados ? unidadesValidas.Count : 0,
+                    RegistrosOmitidos: filasOmitidasUnidades)
+                : new ResumenHojaImportacionDto(0, 0, 0, 0, 0);
+
+            int repuestosOmitidos = filasOmitidasRepuestos;
+            int repuestosCreados = cuentaCreados ? (repuestosValidos.Count + catalogoValidos.Count) : 0;
+            int repuestosValidosTotal = repuestosValidos.Count + catalogoValidos.Count;
+
+            var resumenRepuestos = new ResumenHojaImportacionDto(
+                TotalFilasLeidas: filasLeidasRepuestos,
+                FilasValidas: repuestosValidosTotal,
+                FilasConError: filasConErrorRepuestos,
+                RegistrosCreados: repuestosCreados,
+                RegistrosOmitidos: repuestosOmitidos);
 
             var resultadoDto = new ResultadoImportacionExcelDto(
                 Exitoso: exitoso,
@@ -661,18 +1222,24 @@ public class ImportadorExcelService : IImportadorExcelService
                 FechaProceso: ahora,
                 CategoriaId: categoriaId,
                 Clientes: resumenClientes,
-                Catalogo: resumenCatalogo,
-                Errores: errores);
+                Catalogo: resumenRepuestos,
+                Errores: errores,
+                Unidades: resumenUnidades,
+                Repuestos: resumenRepuestos,
+                ModoDuplicados: modoDuplicados);
 
             return new ResultadoParseoInterno(
                 resultadoDto,
                 clientesValidos,
-                catalogoValidos);
+                unidadesValidas,
+                repuestosValidos,
+                catalogoValidos,
+                categoriasNuevas);
         }
     }
 
     // =========================================================================
-    // Generación de Hojas de la Plantilla Estandarizada (Clientes y Catalogo)
+    // Generación de Hojas de la Plantilla Estandarizada de 3 Hojas
     // =========================================================================
 
     private static void GenerarHojaClientes(XLWorkbook workbook)
@@ -704,21 +1271,89 @@ public class ImportadorExcelService : IImportadorExcelService
         ws.Columns().AdjustToContents();
     }
 
-    private static void GenerarHojaCatalogo(XLWorkbook workbook)
+    private static void GenerarHojaUnidades(XLWorkbook workbook)
     {
-        var ws = workbook.Worksheets.Add(HojaCatalogo);
-        string[] headers = ["Codigo", "Nombre"];
+        var ws = workbook.Worksheets.Add(HojaUnidades);
+        string[] headers = ["DocumentoPropietario", "TipoUnidad", "Placa", "NumeroSerieVIN", "NumeroMotor", "Marca", "Modelo", "Anio", "TipoMedidor", "LecturaMedidor"];
         EstilizarCabeceras(ws, headers);
 
         ws.Column(1).Style.NumberFormat.Format = "@";
+        ws.Column(3).Style.NumberFormat.Format = "@";
+        ws.Column(4).Style.NumberFormat.Format = "@";
+        ws.Column(5).Style.NumberFormat.Format = "@";
+        ws.Column(8).Style.NumberFormat.Format = "0";
+        ws.Column(10).Style.NumberFormat.Format = "#,##0.00";
+
+        // Fila ejemplo 1: Motocicleta con placa y odómetro en Km
+        ws.Cell(2, 1).Value = "45871236";
+        ws.Cell(2, 2).Value = "Motocicleta";
+        ws.Cell(2, 3).Value = "1234-5A";
+        ws.Cell(2, 4).Value = "9C6KE0480N0001234";
+        ws.Cell(2, 5).Value = "E3T4E-012345";
+        ws.Cell(2, 6).Value = "Yamaha";
+        ws.Cell(2, 7).Value = "YZF-R3";
+        ws.Cell(2, 8).Value = 2023;
+        ws.Cell(2, 9).Value = "Kilometros";
+        ws.Cell(2, 10).Value = 4500;
+
+        // Fila ejemplo 2: Moto Acuática sin placa con horómetro
+        ws.Cell(3, 1).Value = "20601234567";
+        ws.Cell(3, 2).Value = "MotoAcuatica";
+        ws.Cell(3, 3).Value = "";
+        ws.Cell(3, 4).Value = "YDV12345L223";
+        ws.Cell(3, 5).Value = "6EY-1002345";
+        ws.Cell(3, 6).Value = "Yamaha";
+        ws.Cell(3, 7).Value = "WaveRunner VX-C";
+        ws.Cell(3, 8).Value = 2023;
+        ws.Cell(3, 9).Value = "Horas";
+        ws.Cell(3, 10).Value = 120.5;
+
+        // Fila ejemplo 3: Generador sin placa con horómetro
+        ws.Cell(4, 1).Value = "20601234567";
+        ws.Cell(4, 2).Value = "Generador";
+        ws.Cell(4, 3).Value = "";
+        ws.Cell(4, 4).Value = "7PB-2001456";
+        ws.Cell(4, 5).Value = "MZ175-987654";
+        ws.Cell(4, 6).Value = "Yamaha";
+        ws.Cell(4, 7).Value = "EF2200iS";
+        ws.Cell(4, 8).Value = 2022;
+        ws.Cell(4, 9).Value = "Horas";
+        ws.Cell(4, 10).Value = 35.0;
+
+        ws.Columns().AdjustToContents();
+    }
+
+    private static void GenerarHojaRepuestos(XLWorkbook workbook)
+    {
+        var ws = workbook.Worksheets.Add(HojaRepuestos);
+        string[] headers = ["Codigo", "Nombre", "Categoria", "UnidadMedida", "Costo", "PrecioVenta", "StockActual", "StockMinimo"];
+        EstilizarCabeceras(ws, headers);
+
+        ws.Column(1).Style.NumberFormat.Format = "@";
+        ws.Column(5).Style.NumberFormat.Format = "#,##0.00";
+        ws.Column(6).Style.NumberFormat.Format = "#,##0.00";
+        ws.Column(7).Style.NumberFormat.Format = "0";
+        ws.Column(8).Style.NumberFormat.Format = "0";
 
         // Fila ejemplo 1
         ws.Cell(2, 1).Value = "90793-38046";
         ws.Cell(2, 2).Value = "Aceite Yamalube 4T 10W-40 Full Sintético";
+        ws.Cell(2, 3).Value = "Lubricantes";
+        ws.Cell(2, 4).Value = "litro";
+        ws.Cell(2, 5).Value = 32.50;
+        ws.Cell(2, 6).Value = 48.00;
+        ws.Cell(2, 7).Value = 24;
+        ws.Cell(2, 8).Value = 6;
 
         // Fila ejemplo 2
         ws.Cell(3, 1).Value = "5GH-13440-80";
         ws.Cell(3, 2).Value = "Filtro de Aceite Original Yamaha";
+        ws.Cell(3, 3).Value = "Filtros";
+        ws.Cell(3, 4).Value = "unidad";
+        ws.Cell(3, 5).Value = 28.00;
+        ws.Cell(3, 6).Value = 42.00;
+        ws.Cell(3, 7).Value = 10;
+        ws.Cell(3, 8).Value = 4;
 
         ws.Columns().AdjustToContents();
     }
@@ -750,20 +1385,31 @@ public class ImportadorExcelService : IImportadorExcelService
     private static Dictionary<string, int> ValidarYMapearCabeceras(
         IXLWorksheet ws,
         string nombreHoja,
-        string[] columnasEsperadas,
+        string[] columnasObligatorias,
+        string[]? columnasOpcionales,
         bool permitirColumnasExtra,
         List<ErrorFilaImportacionDto> errores)
     {
         var mapa = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var filaCabecera = ws.Row(1);
-        int ultimaColumna = ws.LastColumnUsed()?.ColumnNumber() ?? columnasEsperadas.Length;
+        int totalColsEsperadas = columnasObligatorias.Length + (columnasOpcionales?.Length ?? 0);
+        int ultimaColumna = ws.LastColumnUsed()?.ColumnNumber() ?? totalColsEsperadas;
 
-        var clavesEsperadas = new HashSet<string>(
-            columnasEsperadas.Select(NormalizarClaveTexto),
-            StringComparer.OrdinalIgnoreCase);
+        var clavesPermitidas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var col in columnasObligatorias)
+        {
+            clavesPermitidas.Add(NormalizarClaveTexto(col));
+        }
+        if (columnasOpcionales is not null)
+        {
+            foreach (var col in columnasOpcionales)
+            {
+                clavesPermitidas.Add(NormalizarClaveTexto(col));
+            }
+        }
 
         var cabecerasEnHoja = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        for (int col = 1; col <= Math.Max(ultimaColumna, columnasEsperadas.Length); col++)
+        for (int col = 1; col <= Math.Max(ultimaColumna, totalColsEsperadas); col++)
         {
             var texto = filaCabecera.Cell(col).GetFormattedString().Trim();
             if (!string.IsNullOrWhiteSpace(texto))
@@ -774,19 +1420,19 @@ public class ImportadorExcelService : IImportadorExcelService
                     cabecerasEnHoja[clave] = col;
                 }
 
-                if (!permitirColumnasExtra && !clavesEsperadas.Contains(clave))
+                if (!permitirColumnasExtra && !clavesPermitidas.Contains(clave))
                 {
                     errores.Add(new ErrorFilaImportacionDto(
                         Hoja: nombreHoja,
                         Fila: 1,
                         Columna: texto,
                         ValorLeido: texto,
-                        Mensaje: $"La columna '{texto}' no está permitida en la hoja '{nombreHoja}'. Columnas esperadas: {string.Join(", ", columnasEsperadas)}."));
+                        Mensaje: $"La columna '{texto}' no está permitida en la hoja '{nombreHoja}'. Columnas esperadas: {string.Join(", ", columnasObligatorias)}."));
                 }
             }
         }
 
-        foreach (var colEsperada in columnasEsperadas)
+        foreach (var colEsperada in columnasObligatorias)
         {
             var claveEsperada = NormalizarClaveTexto(colEsperada);
             if (cabecerasEnHoja.TryGetValue(claveEsperada, out int colIndex))
@@ -801,6 +1447,18 @@ public class ImportadorExcelService : IImportadorExcelService
                     Columna: colEsperada,
                     ValorLeido: null,
                     Mensaje: $"Falta la columna obligatoria '{colEsperada}' en el encabezado (fila 1) de la hoja '{nombreHoja}'."));
+            }
+        }
+
+        if (columnasOpcionales is not null)
+        {
+            foreach (var colOpcional in columnasOpcionales)
+            {
+                var claveOpcional = NormalizarClaveTexto(colOpcional);
+                if (cabecerasEnHoja.TryGetValue(claveOpcional, out int colIndex))
+                {
+                    mapa[colOpcional] = colIndex;
+                }
             }
         }
 
@@ -845,6 +1503,112 @@ public class ImportadorExcelService : IImportadorExcelService
         return cell.GetFormattedString().Trim();
     }
 
+    private static bool LeerDecimal(IXLRow row, int col, out decimal valor)
+    {
+        valor = 0m;
+        var cell = row.Cell(col);
+        if (cell.IsEmpty()) return false;
+
+        if (cell.DataType == XLDataType.Number)
+        {
+            valor = Convert.ToDecimal(cell.GetDouble(), CultureInfo.InvariantCulture);
+            return true;
+        }
+
+        var texto = cell.GetFormattedString().Trim()
+            .Replace("S/", "", StringComparison.OrdinalIgnoreCase)
+            .Replace("$", "")
+            .Trim();
+
+        if (string.IsNullOrWhiteSpace(texto)) return false;
+
+        if (decimal.TryParse(texto, NumberStyles.Any, CultureInfo.InvariantCulture, out valor))
+        {
+            return true;
+        }
+        if (decimal.TryParse(texto, NumberStyles.Any, new CultureInfo("es-PE"), out valor))
+        {
+            return true;
+        }
+        return false;
+    }
+
+    private static bool LeerEntero(IXLRow row, int col, out int valor)
+    {
+        valor = 0;
+        var cell = row.Cell(col);
+        if (cell.IsEmpty()) return false;
+
+        if (cell.DataType == XLDataType.Number)
+        {
+            double d = cell.GetDouble();
+            if (Math.Abs(d - Math.Truncate(d)) < 1e-9)
+            {
+                valor = (int)Math.Truncate(d);
+                return true;
+            }
+            return false;
+        }
+
+        var texto = cell.GetFormattedString().Trim();
+        if (int.TryParse(texto, NumberStyles.Integer, CultureInfo.InvariantCulture, out valor))
+        {
+            return true;
+        }
+        return false;
+    }
+
+    private static bool TryParseTipoUnidad(string raw, out TipoUnidad tipo)
+    {
+        var clave = NormalizarClaveTexto(raw);
+        switch (clave)
+        {
+            case "MOTOCICLETA":
+            case "MOTO":
+                tipo = TipoUnidad.Motocicleta;
+                return true;
+            case "CUATRIMOTO":
+            case "ATV":
+                tipo = TipoUnidad.Cuatrimoto;
+                return true;
+            case "MOTOACUATICA":
+            case "WAVERUNNER":
+            case "JETSKI":
+                tipo = TipoUnidad.MotoAcuatica;
+                return true;
+            case "GENERADOR":
+                tipo = TipoUnidad.Generador;
+                return true;
+            case "OTRO":
+                tipo = TipoUnidad.Otro;
+                return true;
+            default:
+                tipo = TipoUnidad.Otro;
+                return false;
+        }
+    }
+
+    private static bool TryParseTipoMedidor(string raw, out TipoMedidor tipo)
+    {
+        var clave = NormalizarClaveTexto(raw);
+        switch (clave)
+        {
+            case "KILOMETROS":
+            case "KILOMETRAJE":
+            case "KM":
+                tipo = TipoMedidor.Kilometraje;
+                return true;
+            case "HORAS":
+            case "HORASUSO":
+            case "HOROMETRO":
+                tipo = TipoMedidor.Horas;
+                return true;
+            default:
+                tipo = TipoMedidor.Kilometraje;
+                return false;
+        }
+    }
+
     private static string NormalizarClaveTexto(string? input)
     {
         if (string.IsNullOrWhiteSpace(input)) return string.Empty;
@@ -878,11 +1642,12 @@ public class ImportadorExcelService : IImportadorExcelService
     private static ResultadoParseoInterno CrearResultadoVacioConErrores(
         string nombreArchivo,
         Guid? categoriaId,
+        string modoDuplicados,
         bool soloValidacion,
         DateTime fechaProceso,
         List<ErrorFilaImportacionDto> errores)
     {
-        var vacio = new ResumenHojaImportacionDto(0, 0, 0, 0);
+        var vacio = new ResumenHojaImportacionDto(0, 0, 0, 0, 0);
         return new ResultadoParseoInterno(
             new ResultadoImportacionExcelDto(
                 Exitoso: false,
@@ -892,7 +1657,13 @@ public class ImportadorExcelService : IImportadorExcelService
                 CategoriaId: categoriaId,
                 Clientes: vacio,
                 Catalogo: vacio,
-                Errores: errores),
+                Errores: errores,
+                Unidades: vacio,
+                Repuestos: vacio,
+                ModoDuplicados: modoDuplicados),
+            [],
+            [],
+            [],
             [],
             []);
     }
@@ -942,8 +1713,14 @@ public class ImportadorExcelService : IImportadorExcelService
             resultado.SoloValidacion,
             resultado.NombreArchivo,
             resultado.CategoriaId,
-            ClientesProcesados = resultado.Exitoso ? resultado.Clientes.FilasValidas : 0,
-            CatalogoProcesados = resultado.Exitoso ? resultado.Catalogo.FilasValidas : 0,
+            resultado.ModoDuplicados,
+            ClientesProcesados = resultado.Exitoso ? resultado.Clientes.RegistrosCreados : 0,
+            CatalogoProcesados = resultado.Exitoso ? resultado.Catalogo.RegistrosCreados : 0,
+            UnidadesProcesadas = resultado.Exitoso ? (resultado.Unidades?.RegistrosCreados ?? 0) : 0,
+            RepuestosProcesados = resultado.Exitoso ? (resultado.Repuestos?.RegistrosCreados ?? 0) : 0,
+            ClientesOmitidos = resultado.Clientes.RegistrosOmitidos,
+            UnidadesOmitidas = resultado.Unidades?.RegistrosOmitidos ?? 0,
+            RepuestosOmitidos = resultado.Repuestos?.RegistrosOmitidos ?? 0,
             TotalErrores = resultado.Errores.Count,
             PrimerosErrores = resultado.Errores.Take(20).ToList()
         };
@@ -954,6 +1731,7 @@ public class ImportadorExcelService : IImportadorExcelService
     // =========================================================================
 
     private sealed record FilaClienteValidada(
+        Guid Id,
         int Fila,
         TipoDocumentoCliente TipoDocumento,
         string NumeroDocumento,
@@ -961,6 +1739,34 @@ public class ImportadorExcelService : IImportadorExcelService
         string? Telefono,
         string? Email,
         string? Direccion
+    );
+
+    private sealed record FilaUnidadValidada(
+        int Fila,
+        Guid ClienteId,
+        string DocumentoPropietario,
+        TipoUnidad TipoUnidad,
+        string? Placa,
+        string? NumeroSerieVIN,
+        string? NumeroMotor,
+        string Marca,
+        string Modelo,
+        int? Anio,
+        TipoMedidor TipoMedidor,
+        decimal LecturaMedidor
+    );
+
+    private sealed record FilaRepuestoValidada(
+        int Fila,
+        string Codigo,
+        string Nombre,
+        string Categoria,
+        string UnidadMedida,
+        decimal Costo,
+        decimal PrecioVenta,
+        int StockActual,
+        int? StockMinimo,
+        string? Marca
     );
 
     private sealed record FilaCatalogoValidada(
@@ -972,6 +1778,9 @@ public class ImportadorExcelService : IImportadorExcelService
     private sealed record ResultadoParseoInterno(
         ResultadoImportacionExcelDto Resultado,
         List<FilaClienteValidada> ClientesValidos,
-        List<FilaCatalogoValidada> CatalogoValidos
+        List<FilaUnidadValidada> UnidadesValidas,
+        List<FilaRepuestoValidada> RepuestosValidos,
+        List<FilaCatalogoValidada> CatalogoValidos,
+        HashSet<string> CategoriasNuevas
     );
 }
