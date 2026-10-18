@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -636,4 +638,14 @@ public static class YamahaJsonSerializer
 
     public static string SerializarServicioTecnico(IEnumerable<YamahaServicioTecnicoV3Dto> registros, bool indented = false) =>
         JsonSerializer.Serialize(registros, indented ? IndentedOptions : Options);
+
+    /// <summary>Bytes UTF-8 (sin BOM) que viajan como cuerpo HTTP para el JSON indicado.</summary>
+    public static byte[] ABytes(string json) => Encoding.UTF8.GetBytes(json);
+
+    /// <summary>SHA-256 en hexadecimal minúscula de los bytes indicados.</summary>
+    public static string CalcularHash(byte[] bytes) =>
+        Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+
+    /// <summary>SHA-256 del cuerpo HTTP que produce el JSON indicado.</summary>
+    public static string CalcularHash(string json) => CalcularHash(ABytes(json));
 }

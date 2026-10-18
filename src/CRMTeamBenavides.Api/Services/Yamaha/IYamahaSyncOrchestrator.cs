@@ -21,7 +21,13 @@ public enum YamahaResultadoSincronizacion
     Fallido = 3,
 
     /// <summary>Otra sincronización del mismo servicio estaba en curso: no se ejecutó nada ni se creó log.</summary>
-    OmitidoPorConcurrencia = 4
+    OmitidoPorConcurrencia = 4,
+
+    /// <summary>
+    /// Yamaha aceptó el lote (2xx) pero no se pudo guardar el log de auditoría tras varios intentos.
+    /// No es un fallo de envío: no debe reenviarse en el mismo proceso.
+    /// </summary>
+    EnviadoSinRegistrar = 5
 }
 
 /// <summary>

@@ -1,7 +1,5 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Security.Cryptography;
-using System.Text;
 using CRMTeamBenavides.Api.Features.Yamaha;
 using CRMTeamBenavides.Api.Services.Yamaha.Exportadores;
 using CRMTeamBenavides.Data;
@@ -243,9 +241,8 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                         Resultado: YamahaResultadoSincronizacion.SinCambios);
                 }
 
-                // 4. Calcular hash SHA-256 del payload serializado
-                var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(jsonPayload));
-                var payloadHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+                // 4. Calcular hash SHA-256 del payload serializado (en un envío real se registra el del cuerpo enviado)
+                var payloadHash = YamahaJsonSerializer.CalcularHash(jsonPayload);
 
                 // 5. Verificar si hubo errores de validación de contrato
                 if (erroresValidacion.Count > 0)
@@ -341,17 +338,23 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                         throw new ArgumentOutOfRangeException(nameof(servicio), servicio, null);
                 }
 
-                if (httpResp.EsExitoso)
+                // 8. Se audita el hash de los bytes que realmente viajaron. Si difiere del lote validado,
+                // hubo deriva entre las dos serializaciones: se registra el enviado y se deja constancia.
+                var hashEnviado = httpResp.PayloadHashEnviado ?? payloadHash;
+                var advertencias = observaciones;
+                if (httpResp.PayloadHashEnviado is not null && httpResp.PayloadHashEnviado != payloadHash)
                 {
-                    syncLog.RegistrarExito(
-                        procesados: totalLeidos,
-                        validos: totalValidos,
-                        rechazados: totalOmitidos,
-                        payloadHash: payloadHash,
-                        codigoHttp: httpResp.CodigoHttp,
-                        respuestaCuerpo: httpResp.CuerpoRespuesta);
+                    _logger.LogError(
+                        "Deriva de serialización en [{Servicio}]: el hash del lote validado {HashValidado} no coincide con el del cuerpo enviado {HashEnviado}. Se registra el enviado.",
+                        servicio,
+                        payloadHash,
+                        hashEnviado);
+                    advertencias = observaciones
+                        .Append($"El hash del cuerpo enviado ({hashEnviado}) no coincide con el del lote validado ({payloadHash}).")
+                        .ToList();
                 }
-                else
+
+                if (!httpResp.EsExitoso)
                 {
                     syncLog.RegistrarFallo(
                         mensajeError: httpResp.MensajeError ?? $"Yamaha API respondió código HTTP {httpResp.CodigoHttp}",
@@ -360,24 +363,55 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                         procesados: totalLeidos,
                         validos: 0,
                         rechazados: totalOmitidos);
+
+                    await _context.SaveChangesAsync(cancellationToken);
+
+                    return new YamahaSyncEjecucionResultado(
+                        SyncLogId: syncLog.Id,
+                        Servicio: servicio,
+                        Exitoso: false,
+                        EsSimulacion: false,
+                        TotalLeidos: totalLeidos,
+                        TotalValidos: totalValidos,
+                        TotalRechazados: totalOmitidos,
+                        PayloadHash: hashEnviado,
+                        CodigoHttp: httpResp.CodigoHttp,
+                        Mensaje: httpResp.MensajeError,
+                        ErroresOAdvertencias: advertencias,
+                        Duracion: stopwatch.Elapsed,
+                        Resultado: YamahaResultadoSincronizacion.Fallido);
                 }
 
-                await _context.SaveChangesAsync(cancellationToken);
+                syncLog.RegistrarExito(
+                    procesados: totalLeidos,
+                    validos: totalValidos,
+                    rechazados: totalOmitidos,
+                    payloadHash: hashEnviado,
+                    codigoHttp: httpResp.CodigoHttp,
+                    respuestaCuerpo: httpResp.CuerpoRespuesta);
+
+                // Yamaha ya aceptó el lote: un fallo al guardar no puede convertirlo en "Fallido",
+                // porque el siguiente ciclo lo reenviaría.
+                var guardado = await GuardarTrasEnvioAceptadoAsync(syncLog, servicio, hashEnviado, httpResp.CodigoHttp);
 
                 return new YamahaSyncEjecucionResultado(
                     SyncLogId: syncLog.Id,
                     Servicio: servicio,
-                    Exitoso: httpResp.EsExitoso,
+                    Exitoso: true,
                     EsSimulacion: false,
                     TotalLeidos: totalLeidos,
                     TotalValidos: totalValidos,
                     TotalRechazados: totalOmitidos,
-                    PayloadHash: payloadHash,
+                    PayloadHash: hashEnviado,
                     CodigoHttp: httpResp.CodigoHttp,
-                    Mensaje: httpResp.EsExitoso ? "Sincronización enviada con éxito a Yamaha." : httpResp.MensajeError,
-                    ErroresOAdvertencias: observaciones,
+                    Mensaje: guardado
+                        ? "Sincronización enviada con éxito a Yamaha."
+                        : "Yamaha aceptó el lote, pero no se pudo guardar el registro de auditoría.",
+                    ErroresOAdvertencias: advertencias,
                     Duracion: stopwatch.Elapsed,
-                    Resultado: httpResp.EsExitoso ? YamahaResultadoSincronizacion.Exitoso : YamahaResultadoSincronizacion.Fallido);
+                    Resultado: guardado
+                        ? YamahaResultadoSincronizacion.Exitoso
+                        : YamahaResultadoSincronizacion.EnviadoSinRegistrar);
             }
             catch (Exception ex)
             {
@@ -418,6 +452,55 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
         }
     }
 
+
+    /// <summary>Esperas entre los intentos de guardar el log después de un envío aceptado (3 intentos en total).</summary>
+    private static readonly TimeSpan[] EsperasGuardadoTrasEnvio =
+    {
+        TimeSpan.FromMilliseconds(500),
+        TimeSpan.FromSeconds(1)
+    };
+
+    /// <summary>
+    /// Guarda el log después de que Yamaha aceptó el lote. Nunca lanza: si no logra guardar tras los
+    /// reintentos, deja un log crítico con el hash y devuelve false para que el resultado sea
+    /// <see cref="YamahaResultadoSincronizacion.EnviadoSinRegistrar"/> y no <c>Fallido</c>.
+    /// </summary>
+    private async Task<bool> GuardarTrasEnvioAceptadoAsync(
+        YamahaSyncLog syncLog,
+        YamahaServicioSincronizacion servicio,
+        string? payloadHash,
+        int codigoHttp)
+    {
+        for (var intento = 1; ; intento++)
+        {
+            try
+            {
+                await _context.SaveChangesAsync(CancellationToken.None);
+                return true;
+            }
+            catch (Exception ex) when (intento <= EsperasGuardadoTrasEnvio.Length)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "No se pudo guardar el log {SyncLogId} tras el envío aceptado por Yamaha [{Servicio}] (intento {Intento}). Se reintenta.",
+                    syncLog.Id,
+                    servicio,
+                    intento);
+                await Task.Delay(EsperasGuardadoTrasEnvio[intento - 1], CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogCritical(
+                    ex,
+                    "Yamaha aceptó el lote [{Servicio}] (HTTP {CodigoHttp}, hash {PayloadHash}) pero no se pudo guardar el log {SyncLogId}. Revisar antes de reenviar.",
+                    servicio,
+                    codigoHttp,
+                    payloadHash,
+                    syncLog.Id);
+                return false;
+            }
+        }
+    }
 
     /// <inheritdoc />
     public async Task<int> RecuperarEjecucionesAbandonadasAsync(CancellationToken cancellationToken = default)

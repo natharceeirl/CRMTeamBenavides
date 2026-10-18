@@ -425,11 +425,14 @@ public class YamahaBackgroundServiceTests
         Assert.Equal(2, orquestador.ServiciosEjecutados.Count(s => s == YamahaServicioSincronizacion.Stock));
     }
 
-    [Fact]
-    public async Task EvaluarYSincronizarSegunAgendaAsync_CuandoStockNoTieneCambios_CuentaComoCierreDelDia()
+    [Theory]
+    [InlineData(YamahaResultadoSincronizacion.SinCambios)]
+    [InlineData(YamahaResultadoSincronizacion.EnviadoSinRegistrar)]
+    public async Task EvaluarYSincronizarSegunAgendaAsync_CuandoStockNoTieneCambiosOSeEnvioSinRegistrar_CuentaComoCierreDelDia(
+        YamahaResultadoSincronizacion resultadoStock)
     {
         var orquestador = new FakeSyncOrchestrator();
-        orquestador.ResultadosForzados[YamahaServicioSincronizacion.Stock] = YamahaResultadoSincronizacion.SinCambios;
+        orquestador.ResultadosForzados[YamahaServicioSincronizacion.Stock] = resultadoStock;
 
         var servicio = CrearServicioConAgenda(orquestador, new YamahaSettings
         {

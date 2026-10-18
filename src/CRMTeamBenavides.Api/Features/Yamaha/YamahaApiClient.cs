@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using System.Text;
+using System.Net.Http.Headers;
 using Microsoft.Extensions.Options;
 
 namespace CRMTeamBenavides.Api.Features.Yamaha;
@@ -119,6 +119,11 @@ public sealed class YamahaApiClient : IYamahaApiClient
         var uriSanitizada = YamahaSecurityHelper.SanitizarUri(targetUri, _secretosConfigurados);
         var stopwatch = Stopwatch.StartNew();
 
+        // Los bytes del cuerpo se fijan una sola vez: el hash auditado es el de lo que realmente viaja
+        // y los reintentos reenvían exactamente el mismo contenido.
+        var cuerpo = YamahaJsonSerializer.ABytes(jsonPayload);
+        var hashEnviado = YamahaJsonSerializer.CalcularHash(cuerpo);
+
         const int maxIntentos = 3;
         int intento = 0;
 
@@ -127,7 +132,7 @@ public sealed class YamahaApiClient : IYamahaApiClient
             intento++;
             using var request = new HttpRequestMessage(HttpMethod.Post, targetUri)
             {
-                Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json")
+                Content = CrearContenidoJson(cuerpo)
             };
 
             try
@@ -162,7 +167,8 @@ public sealed class YamahaApiClient : IYamahaApiClient
                         EsExitoso: false,
                         bodySanitizado,
                         MensajeError: $"Yamaha API respondió código HTTP {statusCode}.",
-                        stopwatch.Elapsed);
+                        stopwatch.Elapsed,
+                        hashEnviado);
                 }
 
                 _logger.LogInformation(
@@ -176,7 +182,8 @@ public sealed class YamahaApiClient : IYamahaApiClient
                     EsExitoso: true,
                     bodySanitizado,
                     MensajeError: null,
-                    stopwatch.Elapsed);
+                    stopwatch.Elapsed,
+                    hashEnviado);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -192,7 +199,8 @@ public sealed class YamahaApiClient : IYamahaApiClient
                     EsExitoso: false,
                     CuerpoRespuesta: null,
                     MensajeError: $"Timeout al conectar con Yamaha API ({uriSanitizada}).",
-                    stopwatch.Elapsed);
+                    stopwatch.Elapsed,
+                    hashEnviado);
             }
             catch (HttpRequestException ex)
             {
@@ -216,9 +224,18 @@ public sealed class YamahaApiClient : IYamahaApiClient
                     EsExitoso: false,
                     CuerpoRespuesta: null,
                     MensajeError: $"Error de red al conectar con Yamaha API: {errorSanitizado}",
-                    stopwatch.Elapsed);
+                    stopwatch.Elapsed,
+                    hashEnviado);
             }
         }
+    }
+
+    /// <summary>Mismo encabezado que producía <c>StringContent(json, UTF8, "application/json")</c>.</summary>
+    private static ByteArrayContent CrearContenidoJson(byte[] cuerpo)
+    {
+        var contenido = new ByteArrayContent(cuerpo);
+        contenido.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
+        return contenido;
     }
 
     /// <summary>

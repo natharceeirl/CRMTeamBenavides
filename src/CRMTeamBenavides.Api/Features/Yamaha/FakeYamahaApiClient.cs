@@ -58,7 +58,7 @@ public sealed class FakeYamahaApiClient : IYamahaApiClient
 
         UltimoLoteVentas = registros;
         TotalLlamadasEnvio++;
-        return Task.FromResult(RespuestaSimulada);
+        return Task.FromResult(ConHashEnviado(YamahaJsonSerializer.Serializar(registros)));
     }
 
     /// <inheritdoc />
@@ -72,7 +72,7 @@ public sealed class FakeYamahaApiClient : IYamahaApiClient
 
         UltimoLoteStock = registros;
         TotalLlamadasEnvio++;
-        return Task.FromResult(RespuestaSimulada);
+        return Task.FromResult(ConHashEnviado(YamahaJsonSerializer.Serializar(registros)));
     }
 
     /// <inheritdoc />
@@ -86,8 +86,18 @@ public sealed class FakeYamahaApiClient : IYamahaApiClient
 
         UltimoLoteServicioTecnico = registros;
         TotalLlamadasEnvio++;
-        return Task.FromResult(RespuestaSimulada);
+        return Task.FromResult(ConHashEnviado(YamahaJsonSerializer.Serializar(registros)));
     }
+
+    /// <summary>
+    /// Igual que el cliente real, informa el hash del cuerpo que habría enviado,
+    /// salvo que <see cref="RespuestaSimulada"/> ya traiga uno (para simular una deriva).
+    /// </summary>
+    private YamahaHttpRespuestaDto ConHashEnviado(string json) =>
+        RespuestaSimulada with
+        {
+            PayloadHashEnviado = RespuestaSimulada.PayloadHashEnviado ?? YamahaJsonSerializer.CalcularHash(json)
+        };
 
     public void LimpiarHistorial()
     {

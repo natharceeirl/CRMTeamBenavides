@@ -180,6 +180,7 @@ public sealed class YamahaSyncBackgroundService : BackgroundService
             {
                 case YamahaResultadoSincronizacion.Exitoso:
                 case YamahaResultadoSincronizacion.SinCambios:
+                case YamahaResultadoSincronizacion.EnviadoSinRegistrar: // Yamaha ya lo recibió: no reenviar
                     _ultimoDiaStockExitosoPeru = hoyPeru;
                     _ultimoIntentoStockFallidoUtc = null;
                     _logger.LogInformation("Cierre diario de Stock completado ({Resultado}) para la fecha {HoyPeru}.", resultado, hoyPeru);

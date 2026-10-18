@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -8,6 +9,8 @@ using CRMTeamBenavides.Api.Services.Yamaha.Exportadores;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -654,5 +657,192 @@ public class YamahaSyncOrchestratorTests
         Assert.Equal(YamahaEstadoSincronizacion.SinCambios, log.Estado);
         Assert.Equal(1, log.RegistrosProcesados);
         Assert.Equal(1, log.RegistrosRechazados);
+    }
+
+    /// <summary>Handler que nunca sale a la red: responde 200 y guarda los bytes de cada cuerpo recibido.</summary>
+    private sealed class CapturaCuerposHandler : HttpMessageHandler
+    {
+        public List<byte[]> Cuerpos { get; } = new();
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Cuerpos.Add(await request.Content!.ReadAsByteArrayAsync(cancellationToken));
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"status\":\"ok\"}", Encoding.UTF8, "application/json")
+            };
+        }
+    }
+
+    private static void AgregarProductoYamaha(ApplicationDbContext context)
+    {
+        context.Productos.Add(new Producto
+        {
+            Id = Guid.NewGuid(),
+            CategoriaId = Guid.NewGuid(),
+            Codigo = "90793-AJ412",
+            Nombre = "Aceite Yamalube 4T – ñandú",
+            Marca = "YAMAHA",
+            StockActual = 20,
+            Costo = 25.00m,
+            PrecioVenta = 38.00m,
+            Activo = true
+        });
+    }
+
+    [Fact]
+    public async Task SincronizarServicioAsync_ConClienteHttpReal_ElPayloadHashDelLogEsElDelCuerpoEnviado()
+    {
+        using var context = CrearDbContextMemoria();
+        AgregarProductoYamaha(context);
+        await context.SaveChangesAsync();
+
+        // Enabled solo en este objeto en memoria; el handler intercepta la petición y nunca sale a la red.
+        var settings = Options.Create(new YamahaSettings
+        {
+            Enabled = true,
+            CodigoPuntoVenta = "TB-AQP-01",
+            TipoPuntoVenta = "3S",
+            StockEndpointUrl = "https://yamaha.invalid/api/ReceiveRetailStock"
+        });
+
+        var handler = new CapturaCuerposHandler();
+        using var httpClient = new HttpClient(handler);
+        var apiClient = new YamahaApiClient(httpClient, NullLogger<YamahaApiClient>.Instance, settings);
+        var mappingService = new YamahaMappingService();
+
+        var orchestrator = new YamahaSyncOrchestrator(
+            context,
+            new YamahaVentasExporter(context, mappingService, settings),
+            new YamahaStockExporter(context, mappingService, settings),
+            new YamahaServicioTecnicoExporter(context, mappingService, settings),
+            new YamahaWatermarkService(context),
+            apiClient,
+            settings,
+            NullLogger<YamahaSyncOrchestrator>.Instance);
+
+        var resultado = await orchestrator.SincronizarServicioAsync(YamahaServicioSincronizacion.Stock, esSimulacion: false);
+
+        Assert.Equal(YamahaResultadoSincronizacion.Exitoso, resultado.Resultado);
+        var cuerpo = Assert.Single(handler.Cuerpos);
+        var hashCuerpo = Convert.ToHexString(SHA256.HashData(cuerpo)).ToLowerInvariant();
+
+        var log = await context.YamahaSyncLogs.FindAsync(resultado.SyncLogId);
+        Assert.NotNull(log);
+        Assert.Equal(hashCuerpo, log.PayloadHash);
+        Assert.Equal(hashCuerpo, resultado.PayloadHash);
+    }
+
+    [Fact]
+    public async Task SincronizarServicioAsync_SiElHashEnviadoDifiereDelValidado_RegistraElEnviadoYAdvierte()
+    {
+        using var context = CrearDbContextMemoria();
+        AgregarProductoYamaha(context);
+        await context.SaveChangesAsync();
+
+        var settings = Options.Create(new YamahaSettings { Enabled = true, CodigoPuntoVenta = "TB-AQP-01", TipoPuntoVenta = "3S" });
+        const string hashDistinto = "0000000000000000000000000000000000000000000000000000000000000000";
+        var fakeClient = new FakeYamahaApiClient
+        {
+            RespuestaSimulada = new YamahaHttpRespuestaDto(200, true, "{\"status\":\"ok\"}", null, TimeSpan.Zero, hashDistinto)
+        };
+        var mappingService = new YamahaMappingService();
+
+        var orchestrator = new YamahaSyncOrchestrator(
+            context,
+            new YamahaVentasExporter(context, mappingService, settings),
+            new YamahaStockExporter(context, mappingService, settings),
+            new YamahaServicioTecnicoExporter(context, mappingService, settings),
+            new YamahaWatermarkService(context),
+            fakeClient,
+            settings,
+            NullLogger<YamahaSyncOrchestrator>.Instance);
+
+        var resultado = await orchestrator.SincronizarServicioAsync(YamahaServicioSincronizacion.Stock, esSimulacion: false);
+
+        var log = await context.YamahaSyncLogs.FindAsync(resultado.SyncLogId);
+        Assert.NotNull(log);
+        Assert.Equal(hashDistinto, log.PayloadHash);
+        Assert.Contains(resultado.ErroresOAdvertencias, a => a.Contains("no coincide", StringComparison.Ordinal));
+    }
+
+    /// <summary>Hace fallar SaveChangesAsync a partir de la llamada indicada (1 = la primera).</summary>
+    private sealed class FallarGuardadoDesde : SaveChangesInterceptor
+    {
+        private readonly int _desde;
+        private int _llamadas;
+
+        public FallarGuardadoDesde(int desde) => _desde = desde;
+
+        public int Llamadas => _llamadas;
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref _llamadas) >= _desde)
+            {
+                throw new DbUpdateException("Conexión con la base perdida (simulada).");
+            }
+
+            return ValueTask.FromResult(result);
+        }
+    }
+
+    [Fact]
+    public async Task SincronizarServicioAsync_EnvioAceptadoConFalloAlGuardar_DevuelveEnviadoSinRegistrarYNoLoMarcaFallido()
+    {
+        var raiz = new InMemoryDatabaseRoot();
+        var nombreBd = Guid.NewGuid().ToString();
+
+        await using (var semilla = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(nombreBd, raiz).Options))
+        {
+            semilla.ConfiguracionesEmpresa.Add(new ConfiguracionEmpresa
+            {
+                RazonSocial = "Team Benavides S.R.L.",
+                Ruc = "20601234567",
+                NombreEmpresa = "Team Benavides Arequipa",
+                MonedaBase = "PEN"
+            });
+            AgregarProductoYamaha(semilla);
+            await semilla.SaveChangesAsync();
+        }
+
+        // 1.º guardado (log EnProceso) funciona; los siguientes (tras el 2xx y sus reintentos) fallan.
+        var interceptor = new FallarGuardadoDesde(2);
+        await using var context = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(nombreBd, raiz)
+            .AddInterceptors(interceptor)
+            .Options);
+
+        var settings = Options.Create(new YamahaSettings { Enabled = true, CodigoPuntoVenta = "TB-AQP-01", TipoPuntoVenta = "3S" });
+        var fakeClient = new FakeYamahaApiClient();
+        var mappingService = new YamahaMappingService();
+
+        var orchestrator = new YamahaSyncOrchestrator(
+            context,
+            new YamahaVentasExporter(context, mappingService, settings),
+            new YamahaStockExporter(context, mappingService, settings),
+            new YamahaServicioTecnicoExporter(context, mappingService, settings),
+            new YamahaWatermarkService(context),
+            fakeClient,
+            settings,
+            NullLogger<YamahaSyncOrchestrator>.Instance);
+
+        var resultado = await orchestrator.SincronizarServicioAsync(YamahaServicioSincronizacion.Stock, esSimulacion: false);
+
+        Assert.Equal(YamahaResultadoSincronizacion.EnviadoSinRegistrar, resultado.Resultado);
+        Assert.True(resultado.Exitoso);
+        Assert.Equal(1, fakeClient.TotalLlamadasEnvio);
+        Assert.Equal(4, interceptor.Llamadas); // 1 correcto + 3 intentos tras el envío
+
+        await using var lectura = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(nombreBd, raiz).Options);
+        var log = await lectura.YamahaSyncLogs.AsNoTracking().SingleAsync();
+
+        // Queda EnProceso (el último estado que sí se guardó), nunca reescrito como Fallido.
+        Assert.Equal(YamahaEstadoSincronizacion.EnProceso, log.Estado);
     }
 }

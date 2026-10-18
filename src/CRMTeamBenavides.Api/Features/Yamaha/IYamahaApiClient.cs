@@ -2,13 +2,16 @@ namespace CRMTeamBenavides.Api.Features.Yamaha;
 
 /// <summary>
 /// Resultado del despacho HTTP hacia los endpoints Azure Functions de Yamaha v3.
+/// <see cref="PayloadHashEnviado"/> es el SHA-256 de los bytes exactos del cuerpo enviado,
+/// y es el que se registra en la auditoría.
 /// </summary>
 public sealed record YamahaHttpRespuestaDto(
     int CodigoHttp,
     bool EsExitoso,
     string? CuerpoRespuesta,
     string? MensajeError,
-    TimeSpan Duracion
+    TimeSpan Duracion,
+    string? PayloadHashEnviado = null
 );
 
 /// <summary>
