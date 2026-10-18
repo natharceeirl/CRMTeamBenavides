@@ -1598,7 +1598,7 @@ export type NotificacionResponse = {
 export type ConteoNotificacionesResponse = { noLeidas: number }
 
 // ---------------------------------------------------------------------------
-// Importación de Excel: clientes y catálogo (Features/Importaciones)
+// Importación de Excel: clientes, unidades y repuestos (Features/Importaciones)
 // ---------------------------------------------------------------------------
 /** Un problema del archivo. `fila` 0 es del archivo o de la hoja entera, no de una fila. */
 export type ErrorFilaImportacion = {
@@ -1611,15 +1611,24 @@ export type ErrorFilaImportacion = {
 
 export type ResumenHojaImportacion = {
   totalFilasLeidas: number
+  /** Las que se crearían o se crearon; no incluye las omitidas por ya estar registradas. */
   filasValidas: number
   filasConError: number
   /** Solo distinto de 0 después de importar. */
   registrosCreados: number
+  /** Filas que ya estaban registradas y se saltan, solo con `OmitirExistentes`. */
+  registrosOmitidos: number
 }
+
+/** Qué hacer con un documento, una unidad o un código que ya está registrado. */
+export const MODO_DUPLICADOS = { error: 'ErrorSiExiste', omitir: 'OmitirExistentes' } as const
+export type ModoDuplicados = (typeof MODO_DUPLICADOS)[keyof typeof MODO_DUPLICADOS]
 
 /**
  * POST /api/importaciones/validar y /ejecutar. Con un solo error no se importa
  * nada: `exitoso` es false y los resúmenes quedan con 0 creados.
+ * `catalogo` y `repuestos` traen el mismo resumen: la hoja Repuestos más la hoja
+ * Catalogo de la plantilla anterior. Un error del archivo puede llegar sin `unidades` ni `repuestos`.
  */
 export type ResultadoImportacionExcel = {
   exitoso: boolean
@@ -1630,6 +1639,9 @@ export type ResultadoImportacionExcel = {
   clientes: ResumenHojaImportacion
   catalogo: ResumenHojaImportacion
   errores: ErrorFilaImportacion[]
+  unidades?: ResumenHojaImportacion | null
+  repuestos?: ResumenHojaImportacion | null
+  modoDuplicados: ModoDuplicados
 }
 
 /** GET /api/importaciones/historial. Solo guarda los intentos de importar, no las validaciones. */
@@ -1644,6 +1656,11 @@ export type HistorialImportacionItem = {
   soloValidacion: boolean
   categoriaId: string | null
   clientesProcesados: number
+  /** Igual a `repuestosProcesados`; en los registros anteriores al 15/10 es el único que trae los repuestos. */
   catalogoProcesados: number
   totalErrores: number
+  unidadesProcesadas: number
+  repuestosProcesados: number
+  /** Null en los registros anteriores al 15/10, que siempre marcaban error. */
+  modoDuplicados: ModoDuplicados | null
 }

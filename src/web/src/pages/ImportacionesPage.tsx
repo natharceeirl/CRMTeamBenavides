@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Alert, Button, Popconfirm, Select, Space, Table, Upload, type TableProps } from 'antd'
+import { Alert, Button, Popconfirm, Radio, Select, Space, Table, Upload, type TableProps } from 'antd'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { EtiquetaEstado } from '../components/EtiquetaEstado'
@@ -7,18 +7,25 @@ import { useCategoriasProducto } from '../api/inventario'
 import {
   NOMBRE_PLANTILLA_IMPORTACION,
   RUTA_PLANTILLA_IMPORTACION,
+  cantidadesPorImportar,
   describirCantidades,
+  hojasDelResultado,
   problemaDelArchivo,
+  repuestosDelHistorial,
   textoImportados,
+  textoPorImportar,
+  totalOmitidos,
   useEjecutarImportacion,
   useHistorialImportaciones,
   useValidarImportacion,
 } from '../api/importaciones'
-import type {
-  ErrorFilaImportacion,
-  HistorialImportacionItem,
-  ResultadoImportacionExcel,
-  ResumenHojaImportacion,
+import {
+  MODO_DUPLICADOS,
+  type ErrorFilaImportacion,
+  type HistorialImportacionItem,
+  type ModoDuplicados,
+  type ResultadoImportacionExcel,
+  type ResumenHojaImportacion,
 } from '../api/tipos'
 import { descargarArchivo } from '../utils/descarga'
 import { fechaHora } from '../utils/formato'
@@ -28,10 +35,13 @@ const TIPOS_EXCEL = '.xlsx,application/vnd.openxmlformats-officedocument.spreads
 type FilaResumen = ResumenHojaImportacion & { hoja: string }
 type FilaError = ErrorFilaImportacion & { clave: number }
 
-const columnasResumen = (importado: boolean): TableProps<FilaResumen>['columns'] => [
+const columnasResumen = (importado: boolean, conOmitidos: boolean): TableProps<FilaResumen>['columns'] => [
   { title: 'Hoja', dataIndex: 'hoja' },
   { title: 'Filas leídas', dataIndex: 'totalFilasLeidas', align: 'right', className: 'num' },
-  { title: 'Válidas', dataIndex: 'filasValidas', align: 'right', className: 'num' },
+  { title: importado ? 'Nuevas' : 'Por crear', dataIndex: 'filasValidas', align: 'right', className: 'num' },
+  ...(conOmitidos
+    ? [{ title: 'Ya registradas', dataIndex: 'registrosOmitidos', align: 'right' as const, className: 'num' }]
+    : []),
   { title: 'Con error', dataIndex: 'filasConError', align: 'right', className: 'num' },
   ...(importado ? [{ title: 'Creados', dataIndex: 'registrosCreados', align: 'right' as const, className: 'num' }] : []),
 ]
@@ -55,8 +65,14 @@ const columnasHistorial: TableProps<HistorialImportacionItem>['columns'] = [
     render: (exitoso: boolean) =>
       exitoso ? <EtiquetaEstado tono="hecho">Importado</EtiquetaEstado> : <EtiquetaEstado tono="suave">Rechazado</EtiquetaEstado>,
   },
+  {
+    title: 'Ya registrados',
+    dataIndex: 'modoDuplicados',
+    render: (modo: ModoDuplicados | null) => (modo === MODO_DUPLICADOS.omitir ? 'Se omitieron' : 'Error'),
+  },
   { title: 'Clientes', dataIndex: 'clientesProcesados', align: 'right', className: 'num' },
-  { title: 'Productos', dataIndex: 'catalogoProcesados', align: 'right', className: 'num' },
+  { title: 'Unidades', dataIndex: 'unidadesProcesadas', align: 'right', className: 'num', render: (valor?: number) => valor ?? 0 },
+  { title: 'Repuestos', key: 'repuestos', align: 'right', className: 'num', render: (_, item) => repuestosDelHistorial(item) },
   { title: 'Errores', dataIndex: 'totalErrores', align: 'right', className: 'num' },
 ]
 
@@ -70,22 +86,19 @@ function AvisoResultado({ resultado }: Readonly<{ resultado: ResultadoImportacio
     return <Alert type="error" showIcon message={mensaje} style={{ marginBottom: 16 }} />
   }
 
-  if (resultado.soloValidacion) {
-    const cantidades = describirCantidades(resultado.clientes.filasValidas, resultado.catalogo.filasValidas)
-    return <Alert type="success" showIcon message={`El archivo está listo: se crearán ${cantidades}.`} style={{ marginBottom: 16 }} />
-  }
-
-  return <Alert type="success" showIcon message={textoImportados(resultado)} style={{ marginBottom: 16 }} />
+  const mensaje = resultado.soloValidacion ? textoPorImportar(resultado) : textoImportados(resultado)
+  return <Alert type="success" showIcon message={mensaje} style={{ marginBottom: 16 }} />
 }
 
 /**
- * Carga inicial de clientes y repuestos desde la plantilla de Excel. Primero se
- * valida sin guardar nada y, si no hay errores, se importa todo junto. Solo con
- * `configuracion.editar`, igual que la API.
+ * Carga inicial de clientes, unidades y repuestos desde la plantilla de Excel.
+ * Primero se valida sin guardar nada y, si no hay errores, se importa todo junto.
+ * Solo con `configuracion.editar`, igual que la API.
  */
 export function ImportacionesPage() {
   const [archivo, setArchivo] = useState<File | null>(null)
   const [errorArchivo, setErrorArchivo] = useState<string | null>(null)
+  const [modoDuplicados, setModoDuplicados] = useState<ModoDuplicados>(MODO_DUPLICADOS.error)
   const [categoriaId, setCategoriaId] = useState<string>()
   const [resultado, setResultado] = useState<ResultadoImportacionExcel | null>(null)
   const [hoja, setHoja] = useState<string>()
@@ -96,7 +109,7 @@ export function ImportacionesPage() {
   const validar = useValidarImportacion()
   const ejecutar = useEjecutarImportacion()
 
-  // Otro archivo u otra categoría obligan a validar de nuevo.
+  // Otro archivo, otra categoría u otra regla para lo ya registrado obligan a validar de nuevo.
   const olvidarResultado = () => {
     setResultado(null)
     setHoja(undefined)
@@ -108,6 +121,7 @@ export function ImportacionesPage() {
     const problema = problemaDelArchivo(elegido)
     setErrorArchivo(problema)
     setArchivo(problema ? null : elegido)
+    setCategoriaId(undefined)
     olvidarResultado()
     // No se sube sola: espera a «Validar».
     return false
@@ -116,6 +130,12 @@ export function ImportacionesPage() {
   const quitarArchivo = () => {
     setArchivo(null)
     setErrorArchivo(null)
+    setCategoriaId(undefined)
+    olvidarResultado()
+  }
+
+  const elegirModo = (modo: ModoDuplicados) => {
+    setModoDuplicados(modo)
     olvidarResultado()
   }
 
@@ -132,13 +152,13 @@ export function ImportacionesPage() {
   const validarArchivo = () => {
     if (!archivo) return
     olvidarResultado()
-    validar.mutate({ archivo, categoriaId }, { onSuccess: setResultado })
+    validar.mutate({ archivo, categoriaId, modoDuplicados }, { onSuccess: setResultado })
   }
 
   const importar = () => {
     if (!archivo) return
     ejecutar.mutate(
-      { archivo, categoriaId },
+      { archivo, categoriaId, modoDuplicados },
       {
         onSuccess: (respuesta) => {
           setResultado(respuesta)
@@ -150,17 +170,16 @@ export function ImportacionesPage() {
     )
   }
 
-  const listoParaImportar = Boolean(resultado?.soloValidacion && resultado.exitoso)
+  const aImportar = resultado ? describirCantidades(cantidadesPorImportar(resultado)) : ''
+  // Con todo ya registrado y omitido, importar no crearía nada.
+  const listoParaImportar = Boolean(resultado?.soloValidacion && resultado.exitoso && aImportar)
   const importado = Boolean(resultado && !resultado.soloValidacion && resultado.exitoso)
+  // La categoría solo se pide para la hoja Catalogo de la plantilla anterior; la hoja Repuestos trae la suya.
   const faltaCategoria = resultado?.errores.some((error) => error.columna === 'CategoriaId') ?? false
-  const aImportar = resultado ? describirCantidades(resultado.clientes.filasValidas, resultado.catalogo.filasValidas) : ''
+  const pideCategoria = faltaCategoria || Boolean(categoriaId)
 
-  const filasResumen: FilaResumen[] = resultado
-    ? [
-        { hoja: 'Clientes', ...resultado.clientes },
-        { hoja: 'Catalogo', ...resultado.catalogo },
-      ]
-    : []
+  const filasResumen: FilaResumen[] = resultado ? hojasDelResultado(resultado) : []
+  const conOmitidos = Boolean(resultado && (modoDuplicados === MODO_DUPLICADOS.omitir || totalOmitidos(resultado) > 0))
   const errores: FilaError[] = (resultado?.errores ?? []).map((error, indice) => ({ ...error, clave: indice }))
   const hojasConError = [...new Set(errores.map((error) => error.hoja))]
   const erroresVisibles = hoja ? errores.filter((error) => error.hoja === hoja) : errores
@@ -176,14 +195,25 @@ export function ImportacionesPage() {
         <div className="formulario">
           <section className="bloque">
             <h2>Plantilla</h2>
-            <p>
-              La plantilla trae dos hojas. En Clientes van el tipo de documento (DNI, RUC o CE), el número, el nombre, el
-              teléfono, el correo y la dirección; en Catalogo, el código y el nombre de cada repuesto. Los repuestos entran
-              con precio, costo y stock en cero y se completan después en Repuestos.
-            </p>
+            <p>La plantilla trae tres hojas. Clientes es obligatoria y debe ir con Unidades, con Repuestos o con las dos.</p>
+            <ul>
+              <li>
+                <strong>Clientes:</strong> tipo de documento (DNI, RUC o CE), número, nombre, teléfono, correo y dirección.
+              </li>
+              <li>
+                <strong>Unidades:</strong> documento del propietario, que debe estar en la hoja Clientes o ya registrado;
+                tipo (Motocicleta, Cuatrimoto, MotoAcuatica, Generador u Otro); placa, obligatoria en las motocicletas;
+                serie o VIN, obligatoria si no hay placa; motor, marca, modelo, año y medidor en kilómetros u horas con su
+                lectura.
+              </li>
+              <li>
+                <strong>Repuestos:</strong> código, nombre, categoría, unidad de medida, costo, precio de venta, stock actual,
+                stock mínimo (opcional) y marca (opcional). Si la categoría no existe, se crea.
+              </li>
+            </ul>
             <p className="texto-secundario">
-              Con una sola fila con error no se importa nada. Un documento o un código que ya está registrado también cuenta
-              como error.
+              Con una sola fila con error no se importa nada. Un documento, una placa, una serie o un código repetido dentro
+              del mismo archivo siempre es un error.
             </p>
             <AvisoError error={errorDescarga} />
             <Button onClick={descargarPlantilla}>Descargar plantilla</Button>
@@ -205,26 +235,46 @@ export function ImportacionesPage() {
               )}
             </Space>
             {errorArchivo && <Alert type="error" showIcon message={errorArchivo} style={{ marginBottom: 16 }} />}
-            <div style={{ maxWidth: 420, marginBottom: 20 }}>
+
+            <div style={{ marginBottom: 20 }}>
               <div className="etiqueta" style={{ marginBottom: 6 }}>
-                Categoría de los repuestos nuevos
+                Si un cliente, una unidad o un repuesto ya está registrado
               </div>
-              <Select
-                allowClear
-                showSearch
-                optionFilterProp="label"
-                placeholder="Elegir categoría"
-                value={categoriaId}
-                onChange={elegirCategoria}
-                options={opcionesCategoria}
-                loading={categorias.isPending}
-                status={faltaCategoria ? 'error' : undefined}
-                style={{ width: '100%' }}
-              />
+              <Radio.Group value={modoDuplicados} onChange={(evento) => elegirModo(evento.target.value as ModoDuplicados)}>
+                <Space direction="vertical" size={4}>
+                  <Radio value={MODO_DUPLICADOS.error}>Marcarlo como error y no importar nada</Radio>
+                  <Radio value={MODO_DUPLICADOS.omitir}>Saltarlo e importar solo lo nuevo</Radio>
+                </Space>
+              </Radio.Group>
               <div className="texto-secundario" style={{ marginTop: 6 }}>
-                Todos los repuestos de la hoja Catalogo entran en esta categoría. Si la hoja está vacía, no hace falta.
+                Lo que se salta no se modifica. Sus unidades nuevas igual quedan a nombre del cliente ya registrado.
               </div>
             </div>
+
+            {pideCategoria && (
+              <div style={{ maxWidth: 420, marginBottom: 20 }}>
+                <div className="etiqueta" style={{ marginBottom: 6 }}>
+                  Categoría de los repuestos de la hoja Catalogo
+                </div>
+                <Select
+                  allowClear
+                  showSearch
+                  optionFilterProp="label"
+                  placeholder="Elegir categoría"
+                  value={categoriaId}
+                  onChange={elegirCategoria}
+                  options={opcionesCategoria}
+                  loading={categorias.isPending}
+                  status={faltaCategoria && !categoriaId ? 'error' : undefined}
+                  style={{ width: '100%' }}
+                />
+                <div className="texto-secundario" style={{ marginTop: 6 }}>
+                  El archivo usa la hoja Catalogo de la plantilla anterior: todos sus repuestos entran en esta categoría.
+                  Elegirla y volver a validar.
+                </div>
+              </div>
+            )}
+
             <AvisoError error={categorias.error ?? validar.error ?? ejecutar.error} />
             <Space wrap size={12}>
               <Button onClick={validarArchivo} disabled={!archivo} loading={validar.isPending}>
@@ -252,7 +302,7 @@ export function ImportacionesPage() {
               <Table
                 rowKey="hoja"
                 size="small"
-                columns={columnasResumen(importado)}
+                columns={columnasResumen(importado, conOmitidos)}
                 dataSource={filasResumen}
                 pagination={false}
                 style={{ marginBottom: errores.length > 0 ? 24 : 0 }}
@@ -291,6 +341,7 @@ export function ImportacionesPage() {
               dataSource={historial.data ?? []}
               pagination={false}
               loading={historial.isPending}
+              scroll={{ x: 'max-content' }}
               locale={{ emptyText: 'Todavía no se importó ningún archivo' }}
             />
           </section>
