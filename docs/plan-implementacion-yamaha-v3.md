@@ -571,3 +571,55 @@ En la última revisión técnica previa a la aprobación funcional se subsanaron
    - **Alcance y limitación técnica:** Esta sincronización opera en proceso (*in-process*) y protege concurrentemente todas las instancias con ámbito (*Scoped*) dentro de un único proceso de API. Si en el futuro el CRM se despliega en arquitectura horizontal multirréplica (ej. múltiples contenedores o pods de Kubernetes), este mecanismo deberá ser complementado con un cerrojo distribuido (ej. cerrojos consultivos de PostgreSQL `pg_advisory_lock` o Redis distribuido).
 4. **Verificación Automatizada:**
    - La suite de pruebas unitarias y de integración se amplió a **172 pruebas automatizadas pasando al 100 %** (0 fallos, 0 omitidas), incluyendo pruebas de reintento de stock, idempotencia ante reinicios y simulaciones, reutilización de lote sin reconsulta y rechazo por concurrencia.
+
+---
+
+## 12. Cierre de Hallazgos de la Auditoría del 18/10/2026 (H-05 a H-10)
+
+La auditoría de solo lectura sobre `320c994` confirmó H-01 y H-04 y encontró seis puntos más. Se corrigieron sin cambiar la arquitectura y siguen con `YamahaSettings.Enabled = false`.
+
+1. **H-05 — Un rechazo por concurrencia se trataba como fallo (`YamahaSyncBackgroundService`):**
+   - **Problema previo:** cuando una sincronización no obtenía el semáforo, el scheduler la contaba como fallo: activaba el enfriamiento de Stock (15 min), registraba «falló» y, en Ventas/Servicio Técnico, consumía el turno de 4 horas.
+   - **Corrección aplicada:** `YamahaSyncEjecucionResultado` trae un `Resultado` explícito (`Exitoso`, `SinCambios`, `Fallido`, `OmitidoPorConcurrencia`, `EnviadoSinRegistrar`). Un `OmitidoPorConcurrencia` no crea log, no activa el enfriamiento ni consume el turno, y se reintenta en la evaluación siguiente. `POST /api/yamaha/sincronizar/{servicio}` responde **409** en ese caso. Un fallo real de Ventas/STE sigue esperando el siguiente turno (sección 5.2).
+2. **H-06 — El hash auditado se calculaba sobre una serialización distinta de la enviada (`YamahaApiClient`):**
+   - **Problema previo:** el orquestador y el cliente serializaban el lote por separado. Hoy coincidían, pero un cambio en cualquiera de los dos desincronizaba en silencio el `PayloadHash` respecto del cuerpo enviado.
+   - **Corrección aplicada:** el cliente fija los bytes del cuerpo una sola vez (`ByteArrayContent`, mismo `Content-Type: application/json; charset=utf-8`), reenvía esos mismos bytes en los reintentos y devuelve su SHA-256 en `PayloadHashEnviado`. El log registra ese hash. Si difiere del hash del lote validado, se registra un `LogError` y una advertencia en el resultado.
+3. **H-07 — Un lote vacío quedaba como `Fallido` (`YamahaSyncOrchestrator`):**
+   - **Problema previo:** el validador rechaza un lote vacío (`YAM-GEN-LOTE-001`). Cada ventana de 4 horas sin movimientos quedaba como fallida y Stock reintentaba hasta medianoche.
+   - **Corrección aplicada:** el lote vacío queda en el estado nuevo `SinCambios` (`Exitoso = true`), sin validar ni llamar a Yamaha, como prevé la sección 5.2. Cuenta para el watermark y para el cierre diario. Si en Stock se leyeron productos y ninguno es proyectable, se registra un `LogWarning` para no ocultar casos como D-07B.
+   - **Pendiente con YMDP:** confirmar si prefieren recibir `[]` en lugar de omitir la llamada.
+4. **H-08 — Un 2xx de Yamaha con fallo al guardar el log se reescribía como `Fallido`:**
+   - **Problema previo:** si `SaveChangesAsync` fallaba después de que Yamaha aceptara el lote, el `catch` general marcaba la ejecución como fallida y el ciclo siguiente la reenviaba.
+   - **Corrección aplicada:** tras un 2xx, el guardado se reintenta (3 intentos, esperas de 0,5 s y 1 s) fuera del `catch` general. Si no se logra, se registra un `LogCritical` con el hash y el resultado es `EnviadoSinRegistrar`. El scheduler lo toma como jornada cerrada y no reenvía en el mismo proceso.
+   - **Riesgo residual:** si además se reinicia el proceso, el log queda `EnProceso`, se recupera como abandonado y Ventas podría reenviarse. Hay que confirmar con YMDP si su recepción es idempotente.
+5. **H-09 — El cierre de Stock se perdía si fallaba hasta medianoche, y el enfriamiento no se podía probar (`YamahaSyncBackgroundService`):**
+   - **Corrección aplicada:**
+     - La hora sale de `TimeProvider` (registrado como `TimeProvider.System`).
+     - Desde `HoraCierreStockPeru` la jornada pendiente es la de hoy; antes de `HoraLimiteRecuperacionStockPeru` (por defecto 08:00) se recupera la de ayer, y el éxito cuenta para esa jornada.
+     - Pasada la hora límite, si la instancia intentó la jornada sin cerrarla, se registra una sola vez «cierre perdido».
+     - `YaSeEjecutoStockCierreHoyAsync` acota el rango de la jornada y devuelve `null` si no puede consultar; en ese caso no se envía en ese minuto, para no duplicar.
+     - Las horas configuradas se interpretan con cultura invariante.
+   - **Supuesto:** la foto de Stock enviada en la recuperación es la del momento; el DTO no lleva fecha y a esa hora el taller está cerrado.
+6. **H-10 — El watermark podía dejar ventas fuera de todo lote (`YamahaWatermarkService`):**
+   - **Problema previo:** el siguiente lote partía del `FechaInicio` del log, que es posterior al `hasta` del lote. Las transacciones con fecha en ese hueco, o confirmadas después del corte con una fecha anterior, no entraban en ningún lote.
+   - **Corrección aplicada:**
+     - `YamahaSyncLog` guarda `RangoDesdeUtc` y `RangoHastaUtc` (migración `AgregarRangoYamahaSyncLog`: dos columnas `timestamptz` que aceptan nulos; nulas en Stock), y el watermark parte del `RangoHastaUtc` del último lote real exitoso.
+     - El corte se cierra `MargenAsentamientoSegundos` (por defecto 120) antes de «ahora».
+     - Si el corte quedara antes del punto de partida, el rango queda vacío en vez de retroceder.
+     - Los exportadores usan `desde` exclusivo y `hasta` inclusivo.
+   - **Riesgo residual:** una transacción que tarde en confirmarse más que el margen puede seguir quedando fuera.
+7. **Verificación Automatizada:**
+   - La suite completa pasa con **212 pruebas automatizadas al 100 %** (0 fallos, 0 omitidas). Incluye:
+     - el hash de los bytes capturados por un handler falso;
+     - el semáforo entre dos scopes de DI;
+     - el lote vacío en los tres servicios;
+     - el 2xx con fallo al guardar, mediante un interceptor de EF;
+     - el enfriamiento, la recuperación tras medianoche y el cierre perdido con reloj falso;
+     - el encadenamiento del watermark y los bordes de los exportadores.
+8. **Pendiente: pruebas con PostgreSQL real en una base aislada de QA** (la migración se aplica solo ahí, con el script idempotente revisado):
+   - límites de la jornada en `timestamptz` (22:00 de Perú = 03:00 UTC del día siguiente, y 08:00 de recuperación);
+   - reinicio con un éxito guardado;
+   - recuperación de abandonadas con una ejecución en curso;
+   - fallo de conexión después de un 2xx;
+   - una venta confirmada dentro del margen;
+   - dos procesos de la API contra la misma base, solo para documentar el límite del semáforo en memoria.
