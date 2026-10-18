@@ -197,7 +197,10 @@ public static class YamahaEndpoints
                 usuarioId: isolation.UsuarioId,
                 cancellationToken: ct);
 
-            return Results.Ok(resultado);
+            // 409 si otra sincronización del mismo servicio está en curso: no se ejecutó nada ni se creó log.
+            return resultado.Resultado == YamahaResultadoSincronizacion.OmitidoPorConcurrencia
+                ? Results.Conflict(resultado)
+                : Results.Ok(resultado);
         })
         .WithName("DispararSincronizacionYamaha");
 

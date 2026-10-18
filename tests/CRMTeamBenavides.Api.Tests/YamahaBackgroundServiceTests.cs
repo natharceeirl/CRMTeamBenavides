@@ -36,6 +36,9 @@ public class YamahaBackgroundServiceTests
         public int TotalRecuperacionesLlamadas { get; private set; }
         public bool DebeFallarStock { get; set; } = false;
 
+        /// <summary>Resultado que devuelve cada servicio; sin entrada, Exitoso (o Fallido para Stock con DebeFallarStock).</summary>
+        public Dictionary<YamahaServicioSincronizacion, YamahaResultadoSincronizacion> ResultadosForzados { get; } = new();
+
         public Task<YamahaSyncEjecucionResultado> SincronizarServicioAsync(
             YamahaServicioSincronizacion servicio,
             bool esSimulacion = false,
@@ -46,9 +49,16 @@ public class YamahaBackgroundServiceTests
             CancellationToken cancellationToken = default)
         {
             ServiciosEjecutados.Add(servicio);
-            bool exitoso = !(servicio == YamahaServicioSincronizacion.Stock && DebeFallarStock);
+            if (!ResultadosForzados.TryGetValue(servicio, out var resultado))
+            {
+                resultado = servicio == YamahaServicioSincronizacion.Stock && DebeFallarStock
+                    ? YamahaResultadoSincronizacion.Fallido
+                    : YamahaResultadoSincronizacion.Exitoso;
+            }
+
+            bool exitoso = resultado is YamahaResultadoSincronizacion.Exitoso or YamahaResultadoSincronizacion.SinCambios;
             return Task.FromResult(new YamahaSyncEjecucionResultado(
-                SyncLogId: Guid.NewGuid(),
+                SyncLogId: resultado == YamahaResultadoSincronizacion.OmitidoPorConcurrencia ? Guid.Empty : Guid.NewGuid(),
                 Servicio: servicio,
                 Exitoso: exitoso,
                 EsSimulacion: esSimulacion,
@@ -59,7 +69,8 @@ public class YamahaBackgroundServiceTests
                 CodigoHttp: exitoso ? 200 : 500,
                 Mensaje: exitoso ? "OK" : "Fallo simulado",
                 ErroresOAdvertencias: exitoso ? Array.Empty<string>() : new[] { "Error de red" },
-                Duracion: TimeSpan.FromMilliseconds(10)));
+                Duracion: TimeSpan.FromMilliseconds(10),
+                Resultado: resultado));
         }
 
         public Task<int> RecuperarEjecucionesAbandonadasAsync(CancellationToken cancellationToken = default)
@@ -367,5 +378,104 @@ public class YamahaBackgroundServiceTests
 
         // H-02: Se demuestra que una simulación NO cuenta como cierre real y no bloquea el cierre
         Assert.False(yaEjecutado);
+    }
+
+    private static YamahaSyncBackgroundService CrearServicioConAgenda(
+        FakeSyncOrchestrator orquestador,
+        YamahaSettings settings)
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        var services = new ServiceCollection();
+        services.AddScoped(_ => new ApplicationDbContext(options));
+        services.AddSingleton<IYamahaSyncOrchestrator>(orquestador);
+        var provider = services.BuildServiceProvider();
+
+        return new YamahaSyncBackgroundService(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            new FakeOptionsMonitor<YamahaSettings>(settings),
+            NullLogger<YamahaSyncBackgroundService>.Instance);
+    }
+
+    [Fact]
+    public async Task EvaluarYSincronizarSegunAgendaAsync_CuandoStockSeOmitePorConcurrencia_NoActivaEnfriamientoYReintenta()
+    {
+        var orquestador = new FakeSyncOrchestrator();
+        orquestador.ResultadosForzados[YamahaServicioSincronizacion.Stock] = YamahaResultadoSincronizacion.OmitidoPorConcurrencia;
+
+        var servicio = CrearServicioConAgenda(orquestador, new YamahaSettings
+        {
+            Enabled = true,
+            HoraCierreStockPeru = "00:00",
+            IntervaloReintentoStockMinutos = 15
+        });
+
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+        Assert.Equal(1, orquestador.ServiciosEjecutados.Count(s => s == YamahaServicioSincronizacion.Stock));
+
+        // La otra ejecución terminó: el siguiente minuto reintenta sin esperar los 15 minutos de enfriamiento.
+        orquestador.ResultadosForzados.Remove(YamahaServicioSincronizacion.Stock);
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+        Assert.Equal(2, orquestador.ServiciosEjecutados.Count(s => s == YamahaServicioSincronizacion.Stock));
+
+        // Ya cerrado: no se repite.
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+        Assert.Equal(2, orquestador.ServiciosEjecutados.Count(s => s == YamahaServicioSincronizacion.Stock));
+    }
+
+    [Fact]
+    public async Task EvaluarYSincronizarSegunAgendaAsync_CuandoStockNoTieneCambios_CuentaComoCierreDelDia()
+    {
+        var orquestador = new FakeSyncOrchestrator();
+        orquestador.ResultadosForzados[YamahaServicioSincronizacion.Stock] = YamahaResultadoSincronizacion.SinCambios;
+
+        var servicio = CrearServicioConAgenda(orquestador, new YamahaSettings
+        {
+            Enabled = true,
+            HoraCierreStockPeru = "00:00",
+            IntervaloReintentoStockMinutos = 0
+        });
+
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+
+        Assert.Equal(1, orquestador.ServiciosEjecutados.Count(s => s == YamahaServicioSincronizacion.Stock));
+    }
+
+    [Fact]
+    public async Task EvaluarYSincronizarSegunAgendaAsync_CuandoCicloVentasSeOmitePorConcurrencia_NoConsumeElTurno()
+    {
+        var orquestador = new FakeSyncOrchestrator();
+        orquestador.ResultadosForzados[YamahaServicioSincronizacion.Ventas] = YamahaResultadoSincronizacion.OmitidoPorConcurrencia;
+
+        var servicio = CrearServicioConAgenda(orquestador, new YamahaSettings { Enabled = true });
+
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+        Assert.Equal(1, orquestador.ServiciosEjecutados.Count(s => s == YamahaServicioSincronizacion.Ventas));
+
+        orquestador.ResultadosForzados.Remove(YamahaServicioSincronizacion.Ventas);
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+        Assert.Equal(2, orquestador.ServiciosEjecutados.Count(s => s == YamahaServicioSincronizacion.Ventas));
+
+        // El ciclo completo sí consume el turno de 4 horas.
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+        Assert.Equal(2, orquestador.ServiciosEjecutados.Count(s => s == YamahaServicioSincronizacion.Ventas));
+    }
+
+    [Fact]
+    public async Task EvaluarYSincronizarSegunAgendaAsync_CuandoCicloVentasFalla_EsperaElSiguienteTurno()
+    {
+        var orquestador = new FakeSyncOrchestrator();
+        orquestador.ResultadosForzados[YamahaServicioSincronizacion.Ventas] = YamahaResultadoSincronizacion.Fallido;
+
+        var servicio = CrearServicioConAgenda(orquestador, new YamahaSettings { Enabled = true });
+
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+
+        // Plan v3, sección 5.2: un fallo real queda pendiente para el siguiente turno, sin pérdida de datos.
+        Assert.Equal(1, orquestador.ServiciosEjecutados.Count(s => s == YamahaServicioSincronizacion.Ventas));
     }
 }

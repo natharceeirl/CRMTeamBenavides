@@ -1,6 +1,28 @@
+using System.Text.Json.Serialization;
 using CRMTeamBenavides.Domain.Entities;
 
 namespace CRMTeamBenavides.Api.Services.Yamaha;
+
+/// <summary>
+/// Desenlace de una ejecución de sincronización. Separa los fallos reales de los casos que no son error
+/// (otra ejecución en curso, lote sin registros), para que el scheduler no aplique enfriamientos
+/// ni consuma turnos por algo que no falló.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum YamahaResultadoSincronizacion
+{
+    /// <summary>El lote se validó y se envió (o se simuló) con éxito.</summary>
+    Exitoso = 1,
+
+    /// <summary>No había registros que enviar: no se llamó a Yamaha (plan v3, sección 5.2).</summary>
+    SinCambios = 2,
+
+    /// <summary>Falló la validación de contrato, el envío HTTP o la orquestación.</summary>
+    Fallido = 3,
+
+    /// <summary>Otra sincronización del mismo servicio estaba en curso: no se ejecutó nada ni se creó log.</summary>
+    OmitidoPorConcurrencia = 4
+}
 
 /// <summary>
 /// Resultado integral de una ejecución de sincronización orquestada con Yamaha v3.
@@ -17,7 +39,8 @@ public sealed record YamahaSyncEjecucionResultado(
     int? CodigoHttp,
     string? Mensaje,
     IReadOnlyList<string> ErroresOAdvertencias,
-    TimeSpan Duracion
+    TimeSpan Duracion,
+    YamahaResultadoSincronizacion Resultado
 );
 
 /// <summary>

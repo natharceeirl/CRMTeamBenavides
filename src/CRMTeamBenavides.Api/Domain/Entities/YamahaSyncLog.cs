@@ -23,7 +23,13 @@ public enum YamahaEstadoSincronizacion
 {
     EnProceso = 1,
     Completado = 2,
-    Fallido = 3
+    Fallido = 3,
+
+    /// <summary>
+    /// No había registros que enviar y no se llamó a Yamaha. Cuenta como ejecución correcta
+    /// para el watermark y el cierre diario de Stock (plan v3, sección 5.2).
+    /// </summary>
+    SinCambios = 4
 }
 
 /// <summary>
@@ -37,6 +43,7 @@ public class YamahaSyncLog
     public const int MaxMensajeErrorLongitud = 2000;
     public const int MaxPayloadHashLongitud = 128;
     public const int MaxModoEnvioLongitud = 50;
+    public const string MensajeSinCambios = "Sin registros para enviar; no se llamó a Yamaha.";
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -162,6 +169,26 @@ public class YamahaSyncLog
     }
 
     /// <summary>
+    /// Registra una ejecución sin registros que enviar: no hubo llamada HTTP a Yamaha.
+    /// </summary>
+    /// <param name="procesados">Entidades leídas del CRM (pueden existir aunque ninguna sea proyectable).</param>
+    /// <param name="rechazados">Entidades leídas que no se pudieron proyectar al contrato v3.</param>
+    /// <param name="resumen">Detalle opcional para el historial; por defecto <see cref="MensajeSinCambios"/>.</param>
+    public void RegistrarSinCambios(int procesados = 0, int rechazados = 0, string? resumen = null)
+    {
+        Estado = YamahaEstadoSincronizacion.SinCambios;
+        FechaFin = DateTime.UtcNow;
+        Exitoso = true;
+        RegistrosProcesados = procesados >= 0 ? procesados : 0;
+        RegistrosValidos = 0;
+        RegistrosRechazados = rechazados >= 0 ? rechazados : 0;
+        PayloadHash = null;
+        CodigoHttp = null;
+        RespuestaCuerpo = TruncarCadena(YamahaSecurityHelper.SanitizarTexto(resumen ?? MensajeSinCambios), MaxRespuestaCuerpoLongitud);
+        MensajeError = null;
+    }
+
+    /// <summary>
     /// Valida la consistencia lógica interna de la entidad.
     /// </summary>
     public void ValidarConsistencia()
@@ -191,6 +218,10 @@ public class YamahaSyncLog
             if (string.IsNullOrWhiteSpace(MensajeError))
                 throw new InvalidOperationException("Un log en estado 'Fallido' debe contener un MensajeError descriptivo.");
         }
+        else if (Estado == YamahaEstadoSincronizacion.SinCambios)
+        {
+            ValidarConsistenciaSinCambios();
+        }
 
         if (RegistrosProcesados < 0 || RegistrosValidos < 0 || RegistrosRechazados < 0)
         {
@@ -201,6 +232,16 @@ public class YamahaSyncLog
         {
             throw new InvalidOperationException("El total de registros procesados no puede ser menor a la suma de válidos y rechazados.");
         }
+    }
+
+    private void ValidarConsistenciaSinCambios()
+    {
+        if (!FechaFin.HasValue)
+            throw new InvalidOperationException("Un log en estado 'SinCambios' debe tener FechaFin asignada.");
+        if (!Exitoso)
+            throw new InvalidOperationException("Un log en estado 'SinCambios' debe tener Exitoso = true.");
+        if (RegistrosValidos != 0)
+            throw new InvalidOperationException("Un log en estado 'SinCambios' no puede tener registros válidos enviados.");
     }
 
     private static string? TruncarCadena(string? texto, int longitudMaxima)

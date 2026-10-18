@@ -231,6 +231,40 @@ public class YamahaSyncLogTests
     }
 
     [Fact]
+    public void RegistrarSinCambios_DebeCerrarComoEjecucionCorrectaSinEnvio()
+    {
+        var log = YamahaSyncLog.Iniciar(YamahaServicioSincronizacion.Stock);
+
+        log.RegistrarSinCambios(procesados: 3, rechazados: 3);
+
+        Assert.Equal(YamahaEstadoSincronizacion.SinCambios, log.Estado);
+        Assert.True(log.Exitoso);
+        Assert.NotNull(log.FechaFin);
+        Assert.Equal(3, log.RegistrosProcesados);
+        Assert.Equal(0, log.RegistrosValidos);
+        Assert.Equal(3, log.RegistrosRechazados);
+        Assert.Null(log.PayloadHash);
+        Assert.Null(log.CodigoHttp);
+        Assert.Null(log.MensajeError);
+        Assert.Equal(YamahaSyncLog.MensajeSinCambios, log.RespuestaCuerpo);
+
+        log.ValidarConsistencia();
+    }
+
+    [Fact]
+    public void ValidarConsistencia_SinCambiosConExitosoFalse_DebeLanzarExcepcion()
+    {
+        var log = new YamahaSyncLog
+        {
+            Estado = YamahaEstadoSincronizacion.SinCambios,
+            Exitoso = false,
+            FechaFin = DateTime.UtcNow
+        };
+
+        Assert.Throws<InvalidOperationException>(() => log.ValidarConsistencia());
+    }
+
+    [Fact]
     public void ValidarConsistencia_ContadoresInconsistentes_DebeLanzarExcepcion()
     {
         var log = YamahaSyncLog.Iniciar(YamahaServicioSincronizacion.Ventas);

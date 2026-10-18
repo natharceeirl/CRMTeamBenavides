@@ -124,8 +124,14 @@ public sealed class YamahaSyncBackgroundService : BackgroundService
         if (!_ultimaEjecucionVentasSteUtc.HasValue ||
             DateTime.UtcNow - _ultimaEjecucionVentasSteUtc.Value >= TimeSpan.FromHours(intervaloHoras))
         {
-            await EjecutarCicloProgramadoAsync(cancellationToken);
-            _ultimaEjecucionVentasSteUtc = DateTime.UtcNow;
+            var resultadoCiclo = await EjecutarCicloProgramadoAsync(cancellationToken);
+
+            // Un ciclo omitido por concurrencia no consume el turno: se reintenta en la siguiente evaluacion.
+            // Un fallo real si espera el siguiente turno, sin perdida de datos (plan v3, seccion 5.2).
+            if (resultadoCiclo != YamahaResultadoSincronizacion.OmitidoPorConcurrencia)
+            {
+                _ultimaEjecucionVentasSteUtc = DateTime.UtcNow;
+            }
         }
 
         // 3. Evaluacion diaria de Stock (cierre de operaciones hora Peru)
@@ -168,34 +174,46 @@ public sealed class YamahaSyncBackgroundService : BackgroundService
                 hoyPeru,
                 horaCierre);
 
-            bool exitoso = await EjecutarStockProgramadoAsync(cancellationToken);
+            var resultado = await EjecutarStockProgramadoAsync(cancellationToken);
 
-            if (exitoso)
+            switch (resultado)
             {
-                _ultimoDiaStockExitosoPeru = hoyPeru;
-                _ultimoIntentoStockFallidoUtc = null;
-                _logger.LogInformation("Cierre diario de Stock completado con éxito para la fecha {HoyPeru}.", hoyPeru);
-            }
-            else
-            {
-                _ultimoIntentoStockFallidoUtc = DateTime.UtcNow;
-                _logger.LogWarning(
-                    "El intento de cierre diario de Stock para la fecha {HoyPeru} falló. Se reintentará en {Minutos} minutos.",
-                    hoyPeru,
-                    minutosReintento);
+                case YamahaResultadoSincronizacion.Exitoso:
+                case YamahaResultadoSincronizacion.SinCambios:
+                    _ultimoDiaStockExitosoPeru = hoyPeru;
+                    _ultimoIntentoStockFallidoUtc = null;
+                    _logger.LogInformation("Cierre diario de Stock completado ({Resultado}) para la fecha {HoyPeru}.", resultado, hoyPeru);
+                    break;
+
+                case YamahaResultadoSincronizacion.OmitidoPorConcurrencia:
+                    // No es un fallo: no se activa el enfriamiento y se reintenta en la siguiente evaluacion.
+                    _logger.LogInformation(
+                        "Cierre diario de Stock para la fecha {HoyPeru} omitido porque hay otra sincronizacion en curso. Se reintentara en la siguiente evaluacion.",
+                        hoyPeru);
+                    break;
+
+                default:
+                    _ultimoIntentoStockFallidoUtc = DateTime.UtcNow;
+                    _logger.LogWarning(
+                        "El intento de cierre diario de Stock para la fecha {HoyPeru} falló. Se reintentará en {Minutos} minutos.",
+                        hoyPeru,
+                        minutosReintento);
+                    break;
             }
         }
     }
 
     /// <summary>
     /// Ejecuta el ciclo programado de Ventas y Servicio Tecnico garantizando exclusion mutua.
+    /// Devuelve <see cref="YamahaResultadoSincronizacion.OmitidoPorConcurrencia"/> si el ciclo o alguno de sus
+    /// servicios se omitio por otra ejecucion en curso; <see cref="YamahaResultadoSincronizacion.Fallido"/> si alguno fallo.
     /// </summary>
-    public async Task EjecutarCicloProgramadoAsync(CancellationToken cancellationToken = default)
+    public async Task<YamahaResultadoSincronizacion> EjecutarCicloProgramadoAsync(CancellationToken cancellationToken = default)
     {
         if (!await _semaphore.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken))
         {
-            _logger.LogWarning("YamahaSyncBackgroundService: Se omitio el ciclo programado de Ventas/STE porque ya existe una sincronizacion en curso.");
-            return;
+            _logger.LogInformation("YamahaSyncBackgroundService: Se omitio el ciclo programado de Ventas/STE porque ya existe una sincronizacion en curso. Se reintentara en la siguiente evaluacion.");
+            return YamahaResultadoSincronizacion.OmitidoPorConcurrencia;
         }
 
         try
@@ -230,14 +248,26 @@ public sealed class YamahaSyncBackgroundService : BackgroundService
                 resSte.Exitoso,
                 resSte.TotalValidos,
                 resSte.TotalRechazados);
+
+            if (resVentas.Resultado == YamahaResultadoSincronizacion.OmitidoPorConcurrencia ||
+                resSte.Resultado == YamahaResultadoSincronizacion.OmitidoPorConcurrencia)
+            {
+                return YamahaResultadoSincronizacion.OmitidoPorConcurrencia;
+            }
+
+            return resVentas.Exitoso && resSte.Exitoso
+                ? YamahaResultadoSincronizacion.Exitoso
+                : YamahaResultadoSincronizacion.Fallido;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             _logger.LogInformation("Ciclo de sincronizacion cancelado.");
+            return YamahaResultadoSincronizacion.Fallido;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error durante el ciclo de sincronizacion de Ventas/STE en segundo plano.");
+            return YamahaResultadoSincronizacion.Fallido;
         }
         finally
         {
@@ -247,14 +277,15 @@ public sealed class YamahaSyncBackgroundService : BackgroundService
 
     /// <summary>
     /// Ejecuta el envio diario de Stock garantizando exclusion mutua.
-    /// Devuelve true si la sincronizacion fue exitosa, o false si fallo, fue cancelada u omitida por bloqueo.
+    /// Devuelve el resultado del orquestador; <see cref="YamahaResultadoSincronizacion.OmitidoPorConcurrencia"/>
+    /// si hay otra ejecucion en curso y <see cref="YamahaResultadoSincronizacion.Fallido"/> si fallo o se cancelo.
     /// </summary>
-    public async Task<bool> EjecutarStockProgramadoAsync(CancellationToken cancellationToken = default)
+    public async Task<YamahaResultadoSincronizacion> EjecutarStockProgramadoAsync(CancellationToken cancellationToken = default)
     {
         if (!await _semaphore.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken))
         {
-            _logger.LogWarning("YamahaSyncBackgroundService: Se omitio el envio de Stock porque ya existe una sincronizacion en curso.");
-            return false;
+            _logger.LogInformation("YamahaSyncBackgroundService: Se omitio el envio de Stock porque ya existe una sincronizacion en curso.");
+            return YamahaResultadoSincronizacion.OmitidoPorConcurrencia;
         }
 
         try
@@ -276,17 +307,17 @@ public sealed class YamahaSyncBackgroundService : BackgroundService
                 resStock.TotalValidos,
                 resStock.TotalRechazados);
 
-            return resStock.Exitoso;
+            return resStock.Resultado;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             _logger.LogInformation("Envio de Stock cancelado.");
-            return false;
+            return YamahaResultadoSincronizacion.Fallido;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error durante el envio diario de Stock en segundo plano.");
-            return false;
+            return YamahaResultadoSincronizacion.Fallido;
         }
         finally
         {

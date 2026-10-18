@@ -8,6 +8,7 @@ using CRMTeamBenavides.Api.Services.Yamaha.Exportadores;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -484,12 +485,174 @@ public class YamahaSyncOrchestratorTests
                 modoEnvio: "Manual");
 
             Assert.False(resConcurrente.Exitoso);
+            Assert.Equal(YamahaResultadoSincronizacion.OmitidoPorConcurrencia, resConcurrente.Resultado);
+            Assert.Equal(Guid.Empty, resConcurrente.SyncLogId);
             Assert.Contains("Concurrencia detectada", resConcurrente.ErroresOAdvertencias[0]);
             Assert.Contains("en curso", resConcurrente.Mensaje);
+
+            // El rechazo no se registra como sincronización fallida.
+            Assert.Empty(context.YamahaSyncLogs);
         }
         finally
         {
             sem.Release();
         }
+    }
+
+    private sealed class StockBloqueante : IYamahaStockExporter
+    {
+        public TaskCompletionSource Entro { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Liberar { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int Llamadas;
+
+        public async Task<YamahaExportacionResultado<YamahaStockV3Dto>> ExportarStockAsync(
+            bool soloMarcaYamaha = false,
+            CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref Llamadas);
+            Entro.TrySetResult();
+            await Liberar.Task;
+            return new YamahaExportacionResultado<YamahaStockV3Dto>(
+                Array.Empty<YamahaStockV3Dto>(), 0, 0, 0, Array.Empty<string>(), null, null);
+        }
+    }
+
+    [Fact]
+    public async Task SincronizarServicioAsync_ProgramadoYManualEnScopesDistintos_ElSegundoSeOmiteSinCrearLog()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var bloqueante = new StockBloqueante();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddDbContext<ApplicationDbContext>(o => o.UseInMemoryDatabase(dbName));
+        services.AddSingleton(Options.Create(new YamahaSettings { Enabled = false, ConcurrenciaEsperaSegundos = 0 }));
+        services.AddSingleton<IYamahaMappingService, YamahaMappingService>();
+        services.AddSingleton<IYamahaStockExporter>(bloqueante);
+        services.AddScoped<IYamahaVentasExporter, YamahaVentasExporter>();
+        services.AddScoped<IYamahaServicioTecnicoExporter, YamahaServicioTecnicoExporter>();
+        services.AddScoped<IYamahaWatermarkService, YamahaWatermarkService>();
+        services.AddSingleton<IYamahaApiClient, FakeYamahaApiClient>();
+        services.AddScoped<IYamahaSyncOrchestrator, YamahaSyncOrchestrator>();
+        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+
+        using var scopeProgramado = provider.CreateScope();
+        using var scopeManual = provider.CreateScope();
+        var orquestadorProgramado = scopeProgramado.ServiceProvider.GetRequiredService<IYamahaSyncOrchestrator>();
+        var orquestadorManual = scopeManual.ServiceProvider.GetRequiredService<IYamahaSyncOrchestrator>();
+        Assert.NotSame(orquestadorProgramado, orquestadorManual);
+
+        var tareaProgramada = orquestadorProgramado.SincronizarServicioAsync(
+            YamahaServicioSincronizacion.Stock, esSimulacion: false, modoEnvio: "Programado");
+        await bloqueante.Entro.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // Mientras el programado está dentro de la exportación, el manual de otro scope se rechaza.
+        var rechazado = await orquestadorManual.SincronizarServicioAsync(
+            YamahaServicioSincronizacion.Stock, esSimulacion: true, modoEnvio: "Manual");
+
+        bloqueante.Liberar.SetResult();
+        await tareaProgramada;
+
+        Assert.Equal(YamahaResultadoSincronizacion.OmitidoPorConcurrencia, rechazado.Resultado);
+        Assert.Equal(Guid.Empty, rechazado.SyncLogId);
+        Assert.Equal(1, bloqueante.Llamadas);
+
+        using var scopeLectura = provider.CreateScope();
+        var logs = await scopeLectura.ServiceProvider.GetRequiredService<ApplicationDbContext>()
+            .YamahaSyncLogs.AsNoTracking().ToListAsync();
+        var log = Assert.Single(logs);
+        Assert.Equal("Programado", log.ModoEnvio);
+
+        // Liberado el semáforo en el finally, la siguiente ejecución sí entra.
+        var siguiente = await orquestadorManual.SincronizarServicioAsync(
+            YamahaServicioSincronizacion.Stock, esSimulacion: true, modoEnvio: "Manual");
+        Assert.NotEqual(YamahaResultadoSincronizacion.OmitidoPorConcurrencia, siguiente.Resultado);
+    }
+
+    [Theory]
+    [InlineData(YamahaServicioSincronizacion.Ventas)]
+    [InlineData(YamahaServicioSincronizacion.Stock)]
+    [InlineData(YamahaServicioSincronizacion.ServicioTecnico)]
+    public async Task SincronizarServicioAsync_ConLoteVacio_RegistraSinCambiosSinLlamarAYamaha(YamahaServicioSincronizacion servicio)
+    {
+        using var context = CrearDbContextMemoria();
+        var mappingService = new YamahaMappingService();
+        var settings = Options.Create(new YamahaSettings
+        {
+            Enabled = true, // Modo real con cliente fake: aun así no debe haber envío
+            CodigoPuntoVenta = "TB-AQP-01",
+            TipoPuntoVenta = "3S"
+        });
+        var fakeClient = new FakeYamahaApiClient();
+
+        var orchestrator = new YamahaSyncOrchestrator(
+            context,
+            new YamahaVentasExporter(context, mappingService, settings),
+            new YamahaStockExporter(context, mappingService, settings),
+            new YamahaServicioTecnicoExporter(context, mappingService, settings),
+            new YamahaWatermarkService(context),
+            fakeClient,
+            settings,
+            NullLogger<YamahaSyncOrchestrator>.Instance);
+
+        var resultado = await orchestrator.SincronizarServicioAsync(servicio, esSimulacion: false, modoEnvio: "Programado");
+
+        Assert.Equal(YamahaResultadoSincronizacion.SinCambios, resultado.Resultado);
+        Assert.True(resultado.Exitoso);
+        Assert.Null(resultado.PayloadHash);
+        Assert.Equal(0, fakeClient.TotalLlamadasEnvio);
+
+        var log = await context.YamahaSyncLogs.FindAsync(resultado.SyncLogId);
+        Assert.NotNull(log);
+        Assert.Equal(YamahaEstadoSincronizacion.SinCambios, log.Estado);
+        Assert.True(log.Exitoso);
+        Assert.False(log.EsSimulacion);
+        Assert.Null(log.CodigoHttp);
+        log.ValidarConsistencia();
+    }
+
+    [Fact]
+    public async Task SincronizarServicioAsync_StockSinProductosProyectables_RegistraSinCambiosConRechazados()
+    {
+        using var context = CrearDbContextMemoria();
+        context.Productos.Add(new Producto
+        {
+            Id = Guid.NewGuid(),
+            CategoriaId = Guid.NewGuid(),
+            Codigo = "90793-AJ412",
+            Nombre = "Aceite Yamalube 4T",
+            Marca = "YAMAHA",
+            StockActual = -1, // Stock negativo: no proyectable al contrato v3
+            Costo = 25.00m,
+            PrecioVenta = 38.00m,
+            Activo = true
+        });
+        await context.SaveChangesAsync();
+
+        var mappingService = new YamahaMappingService();
+        var settings = Options.Create(new YamahaSettings { Enabled = false, CodigoPuntoVenta = "TB-AQP-01", TipoPuntoVenta = "3S" });
+        var fakeClient = new FakeYamahaApiClient();
+
+        var orchestrator = new YamahaSyncOrchestrator(
+            context,
+            new YamahaVentasExporter(context, mappingService, settings),
+            new YamahaStockExporter(context, mappingService, settings),
+            new YamahaServicioTecnicoExporter(context, mappingService, settings),
+            new YamahaWatermarkService(context),
+            fakeClient,
+            settings,
+            NullLogger<YamahaSyncOrchestrator>.Instance);
+
+        var resultado = await orchestrator.SincronizarServicioAsync(YamahaServicioSincronizacion.Stock, esSimulacion: true);
+
+        Assert.Equal(YamahaResultadoSincronizacion.SinCambios, resultado.Resultado);
+        Assert.Equal(1, resultado.TotalLeidos);
+        Assert.Equal(1, resultado.TotalRechazados);
+
+        var log = await context.YamahaSyncLogs.FindAsync(resultado.SyncLogId);
+        Assert.NotNull(log);
+        Assert.Equal(YamahaEstadoSincronizacion.SinCambios, log.Estado);
+        Assert.Equal(1, log.RegistrosProcesados);
+        Assert.Equal(1, log.RegistrosRechazados);
     }
 }

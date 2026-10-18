@@ -20,6 +20,7 @@ namespace CRMTeamBenavides.Api.Services.Yamaha;
 /// 4. Generación y cálculo SHA-256 del payload para control de idempotencia y trazabilidad.
 /// 5. Protección estricta contra envíos accidentales (si Enabled == false o esSimulacion, jamás hace llamadas HTTP).
 /// 6. Exclusión mutua por servicio en memoria para prevenir solapamiento de ejecuciones manuales y programadas.
+/// 7. Un lote sin registros queda en estado SinCambios, sin validar ni llamar a Yamaha (plan v3, sección 5.2).
 /// </summary>
 public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
 {
@@ -95,7 +96,8 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                 CodigoHttp: null,
                 Mensaje: $"Ya existe una sincronización en curso para el servicio {servicio}. Se omitió la ejecución para evitar solapamiento.",
                 ErroresOAdvertencias: new[] { $"Concurrencia detectada en servicio {servicio}." },
-                Duracion: TimeSpan.Zero);
+                Duracion: TimeSpan.Zero,
+                Resultado: YamahaResultadoSincronizacion.OmitidoPorConcurrencia);
         }
 
         try
@@ -130,6 +132,7 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                 int totalLeidos;
                 int totalValidos;
                 int totalOmitidos;
+                int cantidadLote;
                 string jsonPayload;
                 IReadOnlyList<string> erroresValidacion;
 
@@ -148,6 +151,7 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                             cancellationToken: cancellationToken);
 
                         loteVentasValidos = exp.RegistrosValidos;
+                        cantidadLote = loteVentasValidos.Count;
                         totalLeidos = exp.TotalEntidadesLeidas;
                         totalValidos = exp.TotalRegistrosValidos;
                         totalOmitidos = exp.TotalRegistrosOmitidos;
@@ -168,6 +172,7 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                             cancellationToken: cancellationToken);
 
                         loteStockValidos = exp.RegistrosValidos;
+                        cantidadLote = loteStockValidos.Count;
                         totalLeidos = exp.TotalEntidadesLeidas;
                         totalValidos = exp.TotalRegistrosValidos;
                         totalOmitidos = exp.TotalRegistrosOmitidos;
@@ -189,6 +194,7 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                             cancellationToken: cancellationToken);
 
                         loteServicioTecnicoValidos = exp.RegistrosValidos;
+                        cantidadLote = loteServicioTecnicoValidos.Count;
                         totalLeidos = exp.TotalEntidadesLeidas;
                         totalValidos = exp.TotalRegistrosValidos;
                         totalOmitidos = exp.TotalRegistrosOmitidos;
@@ -206,11 +212,42 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                         throw new ArgumentOutOfRangeException(nameof(servicio), servicio, "Servicio Yamaha no reconocido.");
                 }
 
-                // 3. Calcular hash SHA-256 del payload serializado
+                // 3. Lote sin registros: no se valida ni se envía (plan v3, sección 5.2).
+                // Cuenta como ejecución correcta para el watermark y el cierre diario de Stock.
+                if (cantidadLote == 0)
+                {
+                    if (servicio == YamahaServicioSincronizacion.Stock && totalLeidos > 0)
+                    {
+                        _logger.LogWarning(
+                            "Stock sin productos proyectables: se leyeron {Leidos} productos y ninguno cumple el contrato Yamaha v3. {Observaciones}",
+                            totalLeidos,
+                            string.Join(" | ", observaciones.Take(5)));
+                    }
+
+                    syncLog.RegistrarSinCambios(procesados: totalLeidos, rechazados: totalOmitidos);
+                    await _context.SaveChangesAsync(cancellationToken);
+
+                    return new YamahaSyncEjecucionResultado(
+                        SyncLogId: syncLog.Id,
+                        Servicio: servicio,
+                        Exitoso: true,
+                        EsSimulacion: syncLog.EsSimulacion,
+                        TotalLeidos: totalLeidos,
+                        TotalValidos: 0,
+                        TotalRechazados: totalOmitidos,
+                        PayloadHash: null,
+                        CodigoHttp: null,
+                        Mensaje: YamahaSyncLog.MensajeSinCambios,
+                        ErroresOAdvertencias: observaciones,
+                        Duracion: stopwatch.Elapsed,
+                        Resultado: YamahaResultadoSincronizacion.SinCambios);
+                }
+
+                // 4. Calcular hash SHA-256 del payload serializado
                 var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(jsonPayload));
                 var payloadHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
 
-                // 4. Verificar si hubo errores de validación de contrato
+                // 5. Verificar si hubo errores de validación de contrato
                 if (erroresValidacion.Count > 0)
                 {
                     var resumenErrores = string.Join(" | ", erroresValidacion.Take(5));
@@ -236,10 +273,11 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                         CodigoHttp: null,
                         Mensaje: "Lote rechazado por validador de contrato Yamaha v3.",
                         ErroresOAdvertencias: erroresValidacion,
-                        Duracion: stopwatch.Elapsed);
+                        Duracion: stopwatch.Elapsed,
+                        Resultado: YamahaResultadoSincronizacion.Fallido);
                 }
 
-                // 5. Despacho real vs modo simulación (Dry-Run)
+                // 6. Despacho real vs modo simulación (Dry-Run)
                 bool debeSimular = esSimulacion || !_settings.Enabled;
 
                 if (debeSimular)
@@ -275,10 +313,11 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                         CodigoHttp: 200,
                         Mensaje: "Sincronización simulada exitosa.",
                         ErroresOAdvertencias: observaciones,
-                        Duracion: stopwatch.Elapsed);
+                        Duracion: stopwatch.Elapsed,
+                        Resultado: YamahaResultadoSincronizacion.Exitoso);
                 }
 
-                // 6. Envío real a través de IYamahaApiClient (solo si Enabled == true y !esSimulacion)
+                // 7. Envío real a través de IYamahaApiClient (solo si Enabled == true y !esSimulacion)
                 // Se reutilizan exactamente los DTOs validados en el paso 2 (H-01: cero segunda extracción)
                 YamahaHttpRespuestaDto httpResp;
                 switch (servicio)
@@ -337,7 +376,8 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                     CodigoHttp: httpResp.CodigoHttp,
                     Mensaje: httpResp.EsExitoso ? "Sincronización enviada con éxito a Yamaha." : httpResp.MensajeError,
                     ErroresOAdvertencias: observaciones,
-                    Duracion: stopwatch.Elapsed);
+                    Duracion: stopwatch.Elapsed,
+                    Resultado: httpResp.EsExitoso ? YamahaResultadoSincronizacion.Exitoso : YamahaResultadoSincronizacion.Fallido);
             }
             catch (Exception ex)
             {
@@ -368,7 +408,8 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                     CodigoHttp: null,
                     Mensaje: $"Error en orquestación: {errorSanitizado}",
                     ErroresOAdvertencias: new[] { errorSanitizado },
-                    Duracion: stopwatch.Elapsed);
+                    Duracion: stopwatch.Elapsed,
+                    Resultado: YamahaResultadoSincronizacion.Fallido);
             }
         }
         finally

@@ -74,7 +74,8 @@ public sealed class YamahaWatermarkService : IYamahaWatermarkService
             .Where(l => l.Servicio == servicio &&
                         l.Exitoso &&
                         !l.EsSimulacion &&
-                        l.Estado == YamahaEstadoSincronizacion.Completado)
+                        (l.Estado == YamahaEstadoSincronizacion.Completado ||
+                         l.Estado == YamahaEstadoSincronizacion.SinCambios))
             .OrderByDescending(l => l.FechaInicio)
             .FirstOrDefaultAsync(cancellationToken);
     }

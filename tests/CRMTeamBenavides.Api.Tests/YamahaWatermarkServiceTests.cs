@@ -88,6 +88,26 @@ public class YamahaWatermarkServiceTests
     }
 
     [Fact]
+    public async Task ObtenerPuntoCorteDesdeUtcAsync_ConLogSinCambiosReal_DebeAvanzarWatermark()
+    {
+        using var context = CrearDbContextMemoria();
+        var fechaLog = DateTime.UtcNow.AddHours(-4);
+
+        var log = YamahaSyncLog.Iniciar(YamahaServicioSincronizacion.Ventas, esSimulacion: false, modoEnvio: "Programado");
+        log.FechaInicio = fechaLog;
+        log.RegistrarSinCambios();
+
+        context.YamahaSyncLogs.Add(log);
+        await context.SaveChangesAsync();
+
+        var service = new YamahaWatermarkService(context);
+        var puntoCorte = await service.ObtenerPuntoCorteDesdeUtcAsync(YamahaServicioSincronizacion.Ventas);
+
+        // Un ciclo sin registros cubrió su rango: el siguiente parte desde ahí.
+        Assert.Equal(fechaLog, puntoCorte);
+    }
+
+    [Fact]
     public async Task ObtenerDiagnosticoWatermarksAsync_DebeDiagnosticarLosTresServicios()
     {
         using var context = CrearDbContextMemoria();
