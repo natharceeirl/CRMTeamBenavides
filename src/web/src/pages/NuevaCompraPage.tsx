@@ -257,8 +257,7 @@ export function NuevaCompraPage() {
                 }
               >
                 <Select
-                  showSearch
-                  optionFilterProp="label"
+                  showSearch={{ optionFilterProp: 'label' }}
                   loading={proveedores.isPending}
                   placeholder="Busca por razón social o RUC"
                   notFoundContent="No hay un proveedor con ese nombre o documento"
@@ -394,8 +393,7 @@ export function NuevaCompraPage() {
                         >
                           <Select
                             allowClear
-                            showSearch
-                            optionFilterProp="label"
+                            showSearch={{ optionFilterProp: 'label' }}
                             loading={pedidos.isPending}
                             placeholder="Ninguno"
                             options={(pedidos.data ?? [])
@@ -466,8 +464,7 @@ export function NuevaCompraPage() {
                             rules={[{ required: true, message: 'Elige el repuesto' }]}
                           >
                             <Select
-                              showSearch
-                              optionFilterProp="label"
+                              showSearch={{ optionFilterProp: 'label' }}
                               loading={productos.isPending}
                               placeholder="Código o nombre del repuesto"
                               options={opcionesRepuesto}

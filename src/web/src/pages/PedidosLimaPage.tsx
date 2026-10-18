@@ -151,8 +151,7 @@ export function PedidosLimaPage() {
               <Select<string>
                 id="filtro-cliente-pedido"
                 allowClear
-                showSearch
-                optionFilterProp="label"
+                showSearch={{ optionFilterProp: 'label' }}
                 placeholder="Cliente"
                 value={clienteId}
                 onChange={setClienteId}

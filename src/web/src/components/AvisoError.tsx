@@ -8,5 +8,5 @@ export function AvisoError({ error }: Readonly<{ error: unknown }>) {
 
   const mensaje = error instanceof Error ? error.message : 'Ocurrió un error inesperado.'
 
-  return <Alert type="error" message={mensaje} showIcon style={{ marginBottom: 16 }} />
+  return <Alert type="error" title={mensaje} showIcon style={{ marginBottom: 16 }} />
 }

@@ -160,8 +160,7 @@ export function ModalItemOrden({
               }
             >
               <Select
-                showSearch
-                optionFilterProp="label"
+                showSearch={{ optionFilterProp: 'label' }}
                 loading={productos.isPending}
                 placeholder="Buscar por código o nombre"
                 onChange={(pId) => {
@@ -200,8 +199,7 @@ export function ModalItemOrden({
               }
             >
               <Select
-                showSearch
-                optionFilterProp="label"
+                showSearch={{ optionFilterProp: 'label' }}
                 loading={servicios.isPending}
                 placeholder="Buscar servicio"
                 onChange={(sId) => {

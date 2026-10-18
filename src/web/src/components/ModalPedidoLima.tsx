@@ -90,8 +90,7 @@ export function ModalPedidoLima({ abierto, onCerrar, onCreado }: Readonly<Props>
       >
         <Form.Item label="Cliente" name="clienteId" rules={[{ required: true, message: 'Elige el cliente' }]}>
           <Select
-            showSearch
-            optionFilterProp="label"
+            showSearch={{ optionFilterProp: 'label' }}
             loading={clientes.isPending}
             placeholder="Buscar cliente"
             options={(clientes.data ?? []).map((cliente) => ({
@@ -112,8 +111,7 @@ export function ModalPedidoLima({ abierto, onCerrar, onCreado }: Readonly<Props>
                     style={{ width: 420, marginBottom: 0 }}
                   >
                     <Select
-                      showSearch
-                      optionFilterProp="label"
+                      showSearch={{ optionFilterProp: 'label' }}
                       loading={productos.isPending}
                       placeholder="Repuesto"
                       options={(productos.data ?? []).map((producto) => ({

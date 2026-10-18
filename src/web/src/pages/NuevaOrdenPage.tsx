@@ -437,8 +437,7 @@ export function NuevaOrdenPage() {
                   }
                 >
                   <Select
-                    showSearch
-                    optionFilterProp="label"
+                    showSearch={{ optionFilterProp: 'label' }}
                     loading={vehiculos.isPending}
                     placeholder={cliente ? 'Elige una unidad del cliente' : 'Busca por placa, serie, modelo o cliente'}
                     notFoundContent={cliente ? 'El cliente no tiene unidades registradas' : undefined}
@@ -473,8 +472,7 @@ export function NuevaOrdenPage() {
                 <Form.Item label="Técnico" name="tecnicoAsignadoId">
                   <Select
                     allowClear
-                    showSearch
-                    optionFilterProp="label"
+                    showSearch={{ optionFilterProp: 'label' }}
                     loading={tecnicos.isPending}
                     placeholder="Asignar técnico (opcional)"
                     options={(tecnicos.data ?? []).map((tecnico) => ({

@@ -7,6 +7,13 @@ export const temaAntd: ThemeConfig = {
     colorLink: colores.acento700,
     colorText: colores.texto,
     colorTextSecondary: colores.textoSecundario,
+    // antd deriva estos grises al 45 % y al 25 %, que no llegan a 4,5:1 sobre el fondo:
+    // ayudas de formulario, placeholders y textos terciarios usan los tonos accesibles.
+    colorTextTertiary: colores.textoSecundario,
+    colorTextDescription: colores.textoSecundario,
+    colorTextPlaceholder: colores.textoPlaceholder,
+    // El rojo de peligro de antd (#ff4d4f) da 2,9:1 sobre el fondo; acento700 da 6,4:1.
+    colorError: colores.acento700,
     colorBorder: colores.divisor,
     colorBorderSecondary: colores.divisorSuave,
     colorBgLayout: colores.fondo,
@@ -34,6 +41,8 @@ export const temaAntd: ThemeConfig = {
       headerSplitColor: 'transparent',
       borderColor: colores.divisorSuave,
       rowHoverBg: colores.acento100,
+      // El texto de tabla vacía usa el gris de deshabilitado (1,8:1); aquí es contenido que se lee.
+      colorTextDisabled: colores.textoSecundario,
     },
     Segmented: {
       itemSelectedBg: colores.acento600,

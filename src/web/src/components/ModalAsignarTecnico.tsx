@@ -50,8 +50,7 @@ export function ModalAsignarTecnico({ abierto, ordenId, tecnicoActualId, onCerra
     >
       <AvisoError error={asignar.error ?? tecnicos.error} />
       <Select
-        showSearch
-        optionFilterProp="label"
+        showSearch={{ optionFilterProp: 'label' }}
         style={{ width: '100%' }}
         placeholder="Elige al técnico"
         value={elegido ?? undefined}

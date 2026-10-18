@@ -97,8 +97,7 @@ export function ModalVenta({ abierto, onCerrar, onCreada }: Readonly<Props>) {
       >
         <Form.Item label="Cliente" name="clienteId" rules={[{ required: true, message: 'Elige el cliente' }]}>
           <Select
-            showSearch
-            optionFilterProp="label"
+            showSearch={{ optionFilterProp: 'label' }}
             loading={clientes.isPending}
             placeholder="Buscar cliente"
             options={(clientes.data ?? []).map((cliente) => ({
@@ -133,8 +132,7 @@ export function ModalVenta({ abierto, onCerrar, onCreada }: Readonly<Props>) {
                     style={{ width: 360, marginBottom: 0 }}
                   >
                     <Select
-                      showSearch
-                      optionFilterProp="label"
+                      showSearch={{ optionFilterProp: 'label' }}
                       loading={productos.isPending}
                       placeholder="Producto"
                       onChange={(productoId: string) =>

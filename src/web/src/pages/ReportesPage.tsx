@@ -211,8 +211,7 @@ function Rentabilidad({ datos, cargando, productoId, onProducto }: Readonly<Prop
           <Select<string>
             id="filtro-repuesto-rentabilidad"
             allowClear
-            showSearch
-            optionFilterProp="label"
+            showSearch={{ optionFilterProp: 'label' }}
             placeholder="Todos los repuestos y servicios"
             value={productoId}
             onChange={onProducto}

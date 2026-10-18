@@ -107,8 +107,7 @@ export function ModalVehiculo({ abierto, vehiculo, clienteFijo, onCerrar }: Read
             rules={[{ required: true, message: 'Elige el cliente propietario' }]}
           >
             <Select
-              showSearch
-              optionFilterProp="label"
+              showSearch={{ optionFilterProp: 'label' }}
               placeholder="Buscar cliente"
               options={(clientes ?? []).map((cliente) => ({ value: cliente.id, label: cliente.nombreCompleto }))}
             />

@@ -50,7 +50,7 @@ export function LoginPage() {
           <div className="etiqueta">Plataforma Team Benavides</div>
           <h2 className="login-titulo">Iniciar sesión</h2>
         </div>
-        {error && <Alert type="error" message={error} showIcon />}
+        {error && <Alert type="error" title={error} showIcon />}
         <Form<Credenciales> layout="vertical" requiredMark={false} onFinish={ingresar} disabled={enviando}>
           <Form.Item
             label="Correo o DNI"

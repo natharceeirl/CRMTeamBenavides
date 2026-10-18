@@ -362,6 +362,7 @@ export function RepuestosPage() {
                     />
                     <Select<string>
                       id="filtro-categoria"
+                      aria-label="Filtrar por categoría"
                       allowClear
                       placeholder="Categoría"
                       value={categoriaId}
@@ -375,6 +376,7 @@ export function RepuestosPage() {
                     />
                     <Select<string>
                       id="filtro-marca"
+                      aria-label="Filtrar por marca"
                       allowClear
                       showSearch
                       placeholder="Marca"

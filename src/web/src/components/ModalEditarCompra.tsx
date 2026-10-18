@@ -95,7 +95,7 @@ export function ModalEditarCompra({ compra, onCerrar }: Readonly<Props>) {
           }}
         >
           <Form.Item label="Proveedor" name="proveedorId" rules={[{ required: true, message: 'Elige el proveedor' }]}>
-            <Select showSearch optionFilterProp="label" loading={proveedores.isPending} options={opcionesProveedor} />
+            <Select showSearch={{ optionFilterProp: 'label' }} loading={proveedores.isPending} options={opcionesProveedor} />
           </Form.Item>
           <div className="formulario-grid">
             <Form.Item

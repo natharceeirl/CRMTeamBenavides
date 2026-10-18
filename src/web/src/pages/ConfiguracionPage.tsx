@@ -151,8 +151,8 @@ export function ConfiguracionPage() {
               <Form.Item label="Correo" name="email" rules={[{ type: 'email', message: 'Revisa el correo' }]}>
                 <Input maxLength={150} placeholder="contacto@teambenavides.pe" />
               </Form.Item>
-              <Form.Item label="Moneda base" extra="Todos los montos del sistema están en soles.">
-                <Input value="Soles (PEN)" disabled />
+              <Form.Item label="Moneda base" htmlFor="moneda-base" extra="Todos los montos del sistema están en soles.">
+                <Input id="moneda-base" value="Soles (PEN)" disabled />
               </Form.Item>
             </div>
           </section>

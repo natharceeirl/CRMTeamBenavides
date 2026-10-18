@@ -161,8 +161,7 @@ function ListaCompras({ onVer }: Readonly<{ onVer: (id: string) => void }>) {
           />
           <Select<string>
             allowClear
-            showSearch
-            optionFilterProp="label"
+            showSearch={{ optionFilterProp: 'label' }}
             placeholder="Proveedor"
             value={proveedorId}
             onChange={setProveedorId}

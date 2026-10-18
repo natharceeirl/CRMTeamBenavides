@@ -71,8 +71,7 @@ export function ModalRepuestoOrden({ abierto, ordenId, onCerrar }: Readonly<Prop
           rules={[{ required: true, message: 'Elige el repuesto' }]}
         >
           <Select
-            showSearch
-            optionFilterProp="label"
+            showSearch={{ optionFilterProp: 'label' }}
             loading={productos.isPending}
             placeholder="Buscar por código o nombre"
             options={(productos.data ?? []).map((producto) => ({

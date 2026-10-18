@@ -83,11 +83,11 @@ function AvisoResultado({ resultado }: Readonly<{ resultado: ResultadoImportacio
     const mensaje = resultado.soloValidacion
       ? `El archivo tiene ${cantidad}. No se importa nada hasta corregirlos en el Excel y volver a validarlo.`
       : `No se importó ningún registro: hay ${cantidad}.`
-    return <Alert type="error" showIcon message={mensaje} style={{ marginBottom: 16 }} />
+    return <Alert type="error" showIcon title={mensaje} style={{ marginBottom: 16 }} />
   }
 
   const mensaje = resultado.soloValidacion ? textoPorImportar(resultado) : textoImportados(resultado)
-  return <Alert type="success" showIcon message={mensaje} style={{ marginBottom: 16 }} />
+  return <Alert type="success" showIcon title={mensaje} style={{ marginBottom: 16 }} />
 }
 
 /**
@@ -234,14 +234,14 @@ export function ImportacionesPage() {
                 </>
               )}
             </Space>
-            {errorArchivo && <Alert type="error" showIcon message={errorArchivo} style={{ marginBottom: 16 }} />}
+            {errorArchivo && <Alert type="error" showIcon title={errorArchivo} style={{ marginBottom: 16 }} />}
 
             <div style={{ marginBottom: 20 }}>
               <div className="etiqueta" style={{ marginBottom: 6 }}>
                 Si un cliente, una unidad o un repuesto ya está registrado
               </div>
               <Radio.Group value={modoDuplicados} onChange={(evento) => elegirModo(evento.target.value as ModoDuplicados)}>
-                <Space direction="vertical" size={4}>
+                <Space orientation="vertical" size={4}>
                   <Radio value={MODO_DUPLICADOS.error}>Marcarlo como error y no importar nada</Radio>
                   <Radio value={MODO_DUPLICADOS.omitir}>Saltarlo e importar solo lo nuevo</Radio>
                 </Space>
@@ -258,8 +258,7 @@ export function ImportacionesPage() {
                 </div>
                 <Select
                   allowClear
-                  showSearch
-                  optionFilterProp="label"
+                  showSearch={{ optionFilterProp: 'label' }}
                   placeholder="Elegir categoría"
                   value={categoriaId}
                   onChange={elegirCategoria}

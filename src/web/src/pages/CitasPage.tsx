@@ -108,8 +108,7 @@ export function CitasPage() {
               <Select<string>
                 id="filtro-cliente-cita"
                 allowClear
-                showSearch
-                optionFilterProp="label"
+                showSearch={{ optionFilterProp: 'label' }}
                 placeholder="Cliente"
                 value={clienteId}
                 onChange={setClienteId}

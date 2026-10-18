@@ -111,8 +111,7 @@ export function AuditoriaPage() {
             {usuarios.data && (
               <Select
                 allowClear
-                showSearch
-                optionFilterProp="label"
+                showSearch={{ optionFilterProp: 'label' }}
                 placeholder="Usuario"
                 value={usuarioId}
                 onChange={setUsuarioId}

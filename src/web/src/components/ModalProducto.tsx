@@ -139,8 +139,7 @@ export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) 
           }
         >
           <Select
-            showSearch
-            optionFilterProp="label"
+            showSearch={{ optionFilterProp: 'label' }}
             loading={categorias.isPending}
             placeholder="Lubricantes, frenos, filtros…"
             options={(categorias.data ?? []).map((categoria) => ({

@@ -148,6 +148,7 @@ export function OrdenesPage() {
             />
             <Select<number>
               id="filtro-estado"
+              aria-label="Filtrar por estado"
               allowClear
               placeholder="Estado"
               value={estado}
@@ -158,9 +159,9 @@ export function OrdenesPage() {
             {veTodas && (
               <Select<string>
                 id="filtro-tecnico"
+                aria-label="Filtrar por técnico"
                 allowClear
-                showSearch
-                optionFilterProp="label"
+                showSearch={{ optionFilterProp: 'label' }}
                 placeholder="Técnico"
                 value={tecnicoId}
                 onChange={setTecnicoId}

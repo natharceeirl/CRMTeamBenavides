@@ -205,6 +205,7 @@ export function VentasPage() {
                     <div className="filtros">
                       <Select<number>
                         id="filtro-estado-venta"
+                        aria-label="Filtrar por estado"
                         allowClear
                         placeholder="Estado"
                         value={estado}

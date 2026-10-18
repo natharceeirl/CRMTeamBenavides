@@ -93,8 +93,7 @@ export function ModalCita({ abierto, paraCliente = false, fechaInicial, onCerrar
           {!paraCliente && (
             <Form.Item label="Cliente" name="clienteId" rules={[{ required: true, message: 'Elige el cliente' }]}>
               <Select
-                showSearch
-                optionFilterProp="label"
+                showSearch={{ optionFilterProp: 'label' }}
                 loading={clientes.isPending}
                 placeholder="Buscar cliente"
                 options={(clientes.data ?? []).map((cliente) => ({

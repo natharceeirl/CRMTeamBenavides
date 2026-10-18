@@ -42,7 +42,7 @@ export function ModalRolesUsuario({ abierto, usuario, onCerrar }: Readonly<Props
       destroyOnHidden
     >
       <AvisoError error={roles.error ?? rolesDelUsuario.error ?? asignar.error ?? quitar.error} />
-      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
         <Space.Compact style={{ width: '100%' }}>
           <Select
             style={{ width: '100%' }}

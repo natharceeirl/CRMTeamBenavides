@@ -7,6 +7,8 @@ export const colores = {
   blanco: '#ffffff',
   texto: '#201e1d',
   textoSecundario: 'rgba(32, 30, 29, 0.68)',
+  // Placeholder de los campos: 4,7:1 sobre el blanco del campo (WCAG AA), más claro que lo escrito.
+  textoPlaceholder: 'rgba(32, 30, 29, 0.62)',
   divisor: 'rgba(32, 30, 29, 0.4)',
   divisorSuave: 'rgba(32, 30, 29, 0.16)',
   acento: '#ec3013',

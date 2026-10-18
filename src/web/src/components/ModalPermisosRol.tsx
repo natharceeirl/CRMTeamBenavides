@@ -47,7 +47,7 @@ export function ModalPermisosRol({ abierto, rol, onCerrar }: Readonly<Props>) {
       {!cargando && (catalogo.data ?? []).length === 0 && (
         <p className="texto-secundario">Todavía no hay permisos configurados.</p>
       )}
-      <Space direction="vertical" size="small">
+      <Space orientation="vertical" size="small">
         {(catalogo.data ?? []).map((permiso) => (
           <Checkbox
             key={permiso.id}
