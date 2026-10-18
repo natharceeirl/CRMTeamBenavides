@@ -103,19 +103,18 @@ export function topeDeEje(cortes: readonly number[]): number {
   return cortes.length === 0 ? 1 : cortes[cortes.length - 1]
 }
 
-/**
- * Qué posiciones del eje horizontal llevan etiqueta.
- *
- * Un mes son treinta días y treinta fechas debajo del eje se pisan entre sí:
- * se reparten unas pocas, siempre con la primera y la última.
- */
-export function indicesVisibles(cantidad: number, maximo = 6): number[] {
-  if (cantidad <= 0) {
-    return []
-  }
-  if (maximo <= 1 || cantidad === 1) {
-    return [0]
-  }
+/** Lo que ocupa cada etiqueta del eje, para no encimarlas. */
+export type EspacioEtiquetas = {
+  /** Distancia en píxeles entre dos posiciones seguidas del eje. */
+  pixelesPorPaso: number
+  /** Ancho en píxeles de la etiqueta más larga. */
+  anchoEtiqueta: number
+}
+
+/** Respiro mínimo entre dos etiquetas del eje. */
+const SEPARACION_ETIQUETAS = 10
+
+function repartir(cantidad: number, maximo: number): number[] {
   if (cantidad <= maximo) {
     return Array.from({ length: cantidad }, (_, indice) => indice)
   }
@@ -123,4 +122,44 @@ export function indicesVisibles(cantidad: number, maximo = 6): number[] {
   const paso = (cantidad - 1) / (maximo - 1)
   const indices = Array.from({ length: maximo }, (_, indice) => Math.round(indice * paso))
   return [...new Set(indices)]
+}
+
+/**
+ * Si las etiquetas de esas posiciones entran sin pisarse. La primera y la última
+ * van alineadas hacia adentro, así que junto a ellas hace falta una etiqueta y media.
+ */
+function entranSinPisarse(indices: readonly number[], espacio: EspacioEtiquetas): boolean {
+  return indices.every((indice, posicion) => {
+    if (posicion === 0) {
+      return true
+    }
+    const juntoAUnBorde = posicion === 1 || posicion === indices.length - 1
+    const necesaria = espacio.anchoEtiqueta * (juntoAUnBorde ? 1.5 : 1) + SEPARACION_ETIQUETAS
+    return (indice - indices[posicion - 1]) * espacio.pixelesPorPaso >= necesaria
+  })
+}
+
+/**
+ * Qué posiciones del eje horizontal llevan etiqueta.
+ *
+ * Un mes son treinta días y treinta fechas debajo del eje se pisan entre sí:
+ * se reparten unas pocas, siempre con la primera y la última. Con `espacio`,
+ * además se quitan las que no entran en el ancho, como en un teléfono.
+ */
+export function indicesVisibles(cantidad: number, maximo = 6, espacio?: EspacioEtiquetas): number[] {
+  if (cantidad <= 0) {
+    return []
+  }
+  if (maximo <= 1 || cantidad === 1) {
+    return [0]
+  }
+
+  for (let tope = maximo; tope >= 2; tope--) {
+    const indices = repartir(cantidad, tope)
+    if (!espacio || entranSinPisarse(indices, espacio)) {
+      return indices
+    }
+  }
+
+  return [0, cantidad - 1]
 }

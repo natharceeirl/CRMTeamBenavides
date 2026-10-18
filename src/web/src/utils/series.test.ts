@@ -171,4 +171,21 @@ describe('indicesVisibles', () => {
   it('sin datos no etiqueta nada', () => {
     expect(indicesVisibles(0)).toEqual([])
   })
+
+  it('en una pantalla ancha deja las mismas que sin medir', () => {
+    const ancho = { pixelesPorPaso: 160, anchoEtiqueta: 35 }
+    expect(indicesVisibles(7, 6, ancho)).toEqual(indicesVisibles(7, 6))
+    expect(indicesVisibles(30, 6, { pixelesPorPaso: 38, anchoEtiqueta: 35 })).toEqual(indicesVisibles(30, 6))
+  })
+
+  it('en un teléfono quita las que se pisarían, sin perder la primera ni la última', () => {
+    // Una semana en ~280 px de trazado: 47 px entre días y fechas «12/10» de 35 px.
+    const indices = indicesVisibles(7, 6, { pixelesPorPaso: 280 / 6, anchoEtiqueta: 35 })
+
+    expect(indices).toEqual([0, 2, 4, 6])
+  })
+
+  it('si solo entran los extremos, muestra los extremos', () => {
+    expect(indicesVisibles(30, 6, { pixelesPorPaso: 2, anchoEtiqueta: 35 })).toEqual([0, 29])
+  })
 })

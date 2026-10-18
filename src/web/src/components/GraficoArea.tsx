@@ -118,7 +118,14 @@ export function GraficoArea({
       ? `${lineaD}L${x(puntos.length - 1)},${base}L${x(0)},${base}Z`
       : ''
 
-  const visibles = new Set(indicesVisibles(puntos.length, 6))
+  // En un teléfono no entran seis fechas: se muestran solo las que caben sin pisarse.
+  const largoEtiqueta = Math.max(...puntos.map((item) => item.etiqueta.length), 1)
+  const visibles = new Set(
+    indicesVisibles(puntos.length, 6, {
+      pixelesPorPaso: puntos.length <= 1 ? anchoTrazado : anchoTrazado / (puntos.length - 1),
+      anchoEtiqueta: largoEtiqueta * ANCHO_CARACTER,
+    }),
+  )
   const ultimo = puntos.length - 1
   const punto = activo === null ? null : puntos[activo]
 
