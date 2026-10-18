@@ -5,6 +5,7 @@ using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -380,23 +381,222 @@ public class YamahaBackgroundServiceTests
         Assert.False(yaEjecutado);
     }
 
+    /// <summary>Reloj controlado por la prueba: la agenda avanza sin esperar en tiempo real.</summary>
+    private sealed class RelojFalso : TimeProvider
+    {
+        public RelojFalso(DateTimeOffset inicio) => Ahora = inicio;
+
+        public DateTimeOffset Ahora { get; set; }
+
+        public override DateTimeOffset GetUtcNow() => Ahora;
+    }
+
+    /// <summary>Hora local de Perú (UTC-5) expresada como instante UTC.</summary>
+    private static DateTimeOffset HoraPeruEnUtc(int anio, int mes, int dia, int hora, int minuto) =>
+        new DateTimeOffset(anio, mes, dia, hora, minuto, 0, TimeSpan.FromHours(-5)).ToUniversalTime();
+
+    private sealed class LoggerCapturador<T> : ILogger<T>
+    {
+        public List<(LogLevel Nivel, string Mensaje, IReadOnlyDictionary<string, object?> Valores)> Entradas { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            var valores = (state as IEnumerable<KeyValuePair<string, object?>>)?
+                .ToDictionary(kv => kv.Key, kv => kv.Value) ?? new Dictionary<string, object?>();
+            Entradas.Add((logLevel, formatter(state, exception), valores));
+        }
+    }
+
     private static YamahaSyncBackgroundService CrearServicioConAgenda(
         FakeSyncOrchestrator orquestador,
-        YamahaSettings settings)
+        YamahaSettings settings,
+        TimeProvider? reloj = null,
+        ILogger<YamahaSyncBackgroundService>? logger = null,
+        bool registrarBaseDeDatos = true)
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
 
         var services = new ServiceCollection();
-        services.AddScoped(_ => new ApplicationDbContext(options));
+        if (registrarBaseDeDatos)
+        {
+            services.AddScoped(_ => new ApplicationDbContext(options));
+        }
         services.AddSingleton<IYamahaSyncOrchestrator>(orquestador);
         var provider = services.BuildServiceProvider();
 
         return new YamahaSyncBackgroundService(
             provider.GetRequiredService<IServiceScopeFactory>(),
             new FakeOptionsMonitor<YamahaSettings>(settings),
+            logger ?? NullLogger<YamahaSyncBackgroundService>.Instance,
+            reloj);
+    }
+
+    private static int LlamadasStock(FakeSyncOrchestrator orquestador) =>
+        orquestador.ServiciosEjecutados.Count(s => s == YamahaServicioSincronizacion.Stock);
+
+    [Fact]
+    public async Task EvaluarYSincronizarSegunAgendaAsync_CuandoStockFalla_RespetaElEnfriamientoConfigurado()
+    {
+        var reloj = new RelojFalso(HoraPeruEnUtc(2026, 10, 20, 22, 5));
+        var orquestador = new FakeSyncOrchestrator { DebeFallarStock = true };
+        var servicio = CrearServicioConAgenda(orquestador, new YamahaSettings
+        {
+            Enabled = true,
+            HoraCierreStockPeru = "22:00",
+            IntervaloReintentoStockMinutos = 15
+        }, reloj);
+
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+        Assert.Equal(1, LlamadasStock(orquestador));
+
+        reloj.Ahora += TimeSpan.FromMinutes(14);
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+        Assert.Equal(1, LlamadasStock(orquestador)); // Aún en enfriamiento
+
+        reloj.Ahora += TimeSpan.FromMinutes(1);
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+        Assert.Equal(2, LlamadasStock(orquestador)); // A los 15 minutos reintenta
+    }
+
+    [Fact]
+    public async Task EvaluarYSincronizarSegunAgendaAsync_CierreFallidoAntesDeMedianoche_SeRecuperaYCuentaParaLaJornadaAnterior()
+    {
+        var reloj = new RelojFalso(HoraPeruEnUtc(2026, 10, 20, 23, 50));
+        var orquestador = new FakeSyncOrchestrator { DebeFallarStock = true };
+        var servicio = CrearServicioConAgenda(orquestador, new YamahaSettings
+        {
+            Enabled = true,
+            HoraCierreStockPeru = "22:00",
+            HoraLimiteRecuperacionStockPeru = "08:00",
+            IntervaloReintentoStockMinutos = 15
+        }, reloj);
+
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+        Assert.Equal(1, LlamadasStock(orquestador)); // Jornada del 20, falla
+
+        // 00:10 del 21: se recupera la jornada del 20 y esta vez funciona
+        orquestador.DebeFallarStock = false;
+        reloj.Ahora = HoraPeruEnUtc(2026, 10, 21, 0, 10);
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+        Assert.Equal(2, LlamadasStock(orquestador));
+
+        // Jornada del 20 cerrada: no hay más intentos en la madrugada ni durante el día
+        reloj.Ahora = HoraPeruEnUtc(2026, 10, 21, 0, 11);
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+        reloj.Ahora = HoraPeruEnUtc(2026, 10, 21, 21, 59);
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+        Assert.Equal(2, LlamadasStock(orquestador));
+
+        // 22:00 del 21: empieza la jornada del 21, que no se había cerrado
+        reloj.Ahora = HoraPeruEnUtc(2026, 10, 21, 22, 0);
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+        Assert.Equal(3, LlamadasStock(orquestador));
+    }
+
+    [Fact]
+    public async Task EvaluarYSincronizarSegunAgendaAsync_PasadaLaHoraLimite_NoRecuperaYReportaElCierrePerdido()
+    {
+        var reloj = new RelojFalso(HoraPeruEnUtc(2026, 10, 20, 23, 50));
+        var orquestador = new FakeSyncOrchestrator { DebeFallarStock = true };
+        var logger = new LoggerCapturador<YamahaSyncBackgroundService>();
+        var servicio = CrearServicioConAgenda(orquestador, new YamahaSettings
+        {
+            Enabled = true,
+            HoraCierreStockPeru = "22:00",
+            HoraLimiteRecuperacionStockPeru = "08:00",
+            IntervaloReintentoStockMinutos = 15
+        }, reloj, logger);
+
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+        Assert.Equal(1, LlamadasStock(orquestador));
+
+        reloj.Ahora = HoraPeruEnUtc(2026, 10, 21, 8, 1);
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+        reloj.Ahora = HoraPeruEnUtc(2026, 10, 21, 8, 2);
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+
+        Assert.Equal(1, LlamadasStock(orquestador)); // Fuera de la ventana: no se intenta
+        var perdidos = logger.Entradas.Where(e => e.Nivel == LogLevel.Error && e.Mensaje.Contains("perdido", StringComparison.Ordinal)).ToList();
+        var reporte = Assert.Single(perdidos); // Se reporta una sola vez
+        Assert.Equal(new DateOnly(2026, 10, 20), reporte.Valores["Jornada"]);
+    }
+
+    [Fact]
+    public async Task EvaluarYSincronizarSegunAgendaAsync_SiNoSePuedeConsultarElCierre_NoEnviaEnEseMinuto()
+    {
+        var orquestador = new FakeSyncOrchestrator();
+        var servicio = CrearServicioConAgenda(orquestador, new YamahaSettings
+        {
+            Enabled = true,
+            HoraCierreStockPeru = "00:00"
+        }, registrarBaseDeDatos: false); // Sin ApplicationDbContext: la consulta del cierre falla
+
+        await servicio.EvaluarYSincronizarSegunAgendaAsync(CancellationToken.None);
+
+        Assert.Equal(0, LlamadasStock(orquestador));
+    }
+
+    [Fact]
+    public void CalcularJornadaStockPendiente_SegunLaHoraDePeru_DevuelveHoyAyerONinguna()
+    {
+        var cierre = new TimeOnly(22, 0);
+        var limite = new TimeOnly(8, 0);
+
+        Assert.Equal(new DateOnly(2026, 10, 20),
+            YamahaSyncBackgroundService.CalcularJornadaStockPendiente(HoraPeruEnUtc(2026, 10, 20, 22, 0).UtcDateTime, cierre, limite));
+        Assert.Equal(new DateOnly(2026, 10, 20),
+            YamahaSyncBackgroundService.CalcularJornadaStockPendiente(HoraPeruEnUtc(2026, 10, 21, 7, 59).UtcDateTime, cierre, limite));
+        Assert.Null(
+            YamahaSyncBackgroundService.CalcularJornadaStockPendiente(HoraPeruEnUtc(2026, 10, 21, 8, 0).UtcDateTime, cierre, limite));
+        Assert.Null(
+            YamahaSyncBackgroundService.CalcularJornadaStockPendiente(HoraPeruEnUtc(2026, 10, 21, 7, 59).UtcDateTime, cierre, null));
+    }
+
+    [Fact]
+    public async Task YaSeEjecutoStockCierreHoyAsync_ExitoEnLaRecuperacion_CuentaParaLaJornadaAnteriorSoloAntesDelLimite()
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        await using (var context = new ApplicationDbContext(options))
+        {
+            context.YamahaSyncLogs.Add(new YamahaSyncLog
+            {
+                Id = Guid.NewGuid(),
+                Servicio = YamahaServicioSincronizacion.Stock,
+                Estado = YamahaEstadoSincronizacion.Completado,
+                Exitoso = true,
+                EsSimulacion = false,
+                FechaInicio = HoraPeruEnUtc(2026, 10, 21, 1, 0).UtcDateTime, // madrugada del 21
+                FechaFin = HoraPeruEnUtc(2026, 10, 21, 1, 1).UtcDateTime,
+                ModoEnvio = "Programado"
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped(_ => new ApplicationDbContext(options));
+        services.AddSingleton<IYamahaSyncOrchestrator>(new FakeSyncOrchestrator());
+        var provider = services.BuildServiceProvider();
+
+        var backgroundService = new YamahaSyncBackgroundService(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            new FakeOptionsMonitor<YamahaSettings>(new YamahaSettings { Enabled = true }),
             NullLogger<YamahaSyncBackgroundService>.Instance);
+
+        var jornada20 = new DateOnly(2026, 10, 20);
+        var cierre = new TimeOnly(22, 0);
+
+        Assert.True(await backgroundService.YaSeEjecutoStockCierreHoyAsync(jornada20, cierre, new TimeOnly(8, 0)));
+        Assert.False(await backgroundService.YaSeEjecutoStockCierreHoyAsync(jornada20, cierre, horaLimiteRecuperacion: null));
+        Assert.False(await backgroundService.YaSeEjecutoStockCierreHoyAsync(new DateOnly(2026, 10, 21), cierre, new TimeOnly(8, 0)));
     }
 
     [Fact]

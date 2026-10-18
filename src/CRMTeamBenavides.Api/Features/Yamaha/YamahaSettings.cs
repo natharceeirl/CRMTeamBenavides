@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace CRMTeamBenavides.Api.Features.Yamaha;
 
 /// <summary>
@@ -67,6 +69,13 @@ public class YamahaSettings
     public string HoraCierreStockPeru { get; set; } = "22:00";
 
     /// <summary>
+    /// Hora local de Peru (formato "HH:mm") hasta la que, pasada la medianoche, se sigue intentando el cierre de Stock
+    /// de la jornada anterior si no se pudo enviar antes. Valor por defecto: "08:00".
+    /// Debe ser anterior a <see cref="HoraCierreStockPeru"/>; si no lo es, la recuperacion queda desactivada.
+    /// </summary>
+    public string HoraLimiteRecuperacionStockPeru { get; set; } = "08:00";
+
+    /// <summary>
     /// Intervalo en horas para la sincronizacion periodica de Ventas y Servicio Tecnico.
     /// Valor fijado por la Seccion 3.1 de la especificacion tecnica de Yamaha: 4 horas.
     /// </summary>
@@ -101,11 +110,24 @@ public class YamahaSettings
     /// </summary>
     public TimeOnly ObtenerHoraCierreStock()
     {
-        if (TimeOnly.TryParse(HoraCierreStockPeru, out var hora))
+        if (TimeOnly.TryParse(HoraCierreStockPeru, CultureInfo.InvariantCulture, out var hora))
         {
             return hora;
         }
         return new TimeOnly(22, 0);
+    }
+
+    /// <summary>
+    /// Obtiene la hora limite de recuperacion del cierre de Stock como TimeOnly (hora local de Peru).
+    /// Si el valor configurado no es valido, retorna 08:00 por defecto.
+    /// </summary>
+    public TimeOnly ObtenerHoraLimiteRecuperacionStock()
+    {
+        if (TimeOnly.TryParse(HoraLimiteRecuperacionStockPeru, CultureInfo.InvariantCulture, out var hora))
+        {
+            return hora;
+        }
+        return new TimeOnly(8, 0);
     }
 
     // -------------------------------------------------------------------------

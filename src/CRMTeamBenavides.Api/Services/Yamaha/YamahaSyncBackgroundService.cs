@@ -12,34 +12,46 @@ namespace CRMTeamBenavides.Api.Services.Yamaha;
 /// 1. Permanece ESTRICTAMENTE DESACTIVADO mientras YamahaSettings.Enabled == false.
 /// 2. Ventas y Servicio Tecnico se ejecutan periodicamente cada 4 horas (Seccion 3.1).
 /// 3. Stock se ejecuta diariamente al cierre de operaciones (hora local de Peru America/Lima, configurable).
+///    Si la jornada no se pudo cerrar antes de medianoche, se reintenta hasta la hora limite de recuperacion
+///    de la manana siguiente y cuenta para la jornada anterior.
 /// 4. Control de concurrencia mediante SemaphoreSlim para prevenir ejecuciones superpuestas.
 /// 5. Recuperacion segura de ejecuciones 'EnProceso' abandonadas (mayores a 30 min) al inicio y periodicamente.
-/// 6. Prevencion de duplicados: verifica en base de datos si el cierre de Stock de hoy ya se ejecuto.
+/// 6. Prevencion de duplicados: verifica en base de datos si el cierre de Stock de la jornada ya se ejecuto;
+///    si no se puede verificar, no envia en ese minuto.
+/// La hora se obtiene de <see cref="TimeProvider"/> para poder probar la agenda sin esperar en tiempo real.
 /// </summary>
 public sealed class YamahaSyncBackgroundService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IOptionsMonitor<YamahaSettings> _settingsMonitor;
     private readonly ILogger<YamahaSyncBackgroundService> _logger;
+    private readonly TimeProvider _tiempo;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
 
     private readonly TimeSpan _intervaloInactivo = TimeSpan.FromMinutes(30);
     private readonly TimeSpan _intervaloEvaluacionActivo = TimeSpan.FromMinutes(1);
 
     private DateTime? _ultimaEjecucionVentasSteUtc;
-    private DateOnly? _ultimoDiaStockExitosoPeru;
+    private DateOnly? _ultimaJornadaStockCerrada;
+    private DateOnly? _ultimaJornadaStockIntentada;
+    private DateOnly? _ultimaJornadaPerdidaReportada;
     private DateTime? _ultimoIntentoStockFallidoUtc;
     private DateTime? _ultimaRecuperacionAbandonadasUtc;
+    private bool _advertenciaRecuperacionInvalidaEmitida;
 
     public YamahaSyncBackgroundService(
         IServiceScopeFactory scopeFactory,
         IOptionsMonitor<YamahaSettings> settingsMonitor,
-        ILogger<YamahaSyncBackgroundService> logger)
+        ILogger<YamahaSyncBackgroundService> logger,
+        TimeProvider? tiempo = null)
     {
         _scopeFactory = scopeFactory;
         _settingsMonitor = settingsMonitor;
         _logger = logger;
+        _tiempo = tiempo ?? TimeProvider.System;
     }
+
+    private DateTime AhoraUtc => _tiempo.GetUtcNow().UtcDateTime;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -110,10 +122,10 @@ public sealed class YamahaSyncBackgroundService : BackgroundService
 
         // 1. Recuperacion periodica de abandonadas (cada 1 hora)
         if (!_ultimaRecuperacionAbandonadasUtc.HasValue ||
-            DateTime.UtcNow - _ultimaRecuperacionAbandonadasUtc.Value >= TimeSpan.FromHours(1))
+            AhoraUtc - _ultimaRecuperacionAbandonadasUtc.Value >= TimeSpan.FromHours(1))
         {
             await IntentarRecuperarAbandonadasAsync(cancellationToken);
-            _ultimaRecuperacionAbandonadasUtc = DateTime.UtcNow;
+            _ultimaRecuperacionAbandonadasUtc = AhoraUtc;
         }
 
         // 2. Evaluacion de Ventas y Servicio Tecnico (cada 4 horas)
@@ -122,7 +134,7 @@ public sealed class YamahaSyncBackgroundService : BackgroundService
             : 4;
 
         if (!_ultimaEjecucionVentasSteUtc.HasValue ||
-            DateTime.UtcNow - _ultimaEjecucionVentasSteUtc.Value >= TimeSpan.FromHours(intervaloHoras))
+            AhoraUtc - _ultimaEjecucionVentasSteUtc.Value >= TimeSpan.FromHours(intervaloHoras))
         {
             var resultadoCiclo = await EjecutarCicloProgramadoAsync(cancellationToken);
 
@@ -130,78 +142,188 @@ public sealed class YamahaSyncBackgroundService : BackgroundService
             // Un fallo real si espera el siguiente turno, sin perdida de datos (plan v3, seccion 5.2).
             if (resultadoCiclo != YamahaResultadoSincronizacion.OmitidoPorConcurrencia)
             {
-                _ultimaEjecucionVentasSteUtc = DateTime.UtcNow;
+                _ultimaEjecucionVentasSteUtc = AhoraUtc;
             }
         }
 
         // 3. Evaluacion diaria de Stock (cierre de operaciones hora Peru)
-        var ahoraPeru = HoraPeru.DesdeUtc(DateTime.UtcNow);
+        await EvaluarCierreStockAsync(settings, cancellationToken);
+    }
+
+    /// <summary>
+    /// Jornada de Stock pendiente segun la hora de Peru: la de hoy a partir de la hora de cierre; la de ayer,
+    /// como recuperacion, antes de la hora limite de la manana; ninguna en el resto del dia.
+    /// </summary>
+    public static DateOnly? CalcularJornadaStockPendiente(DateTime ahoraUtc, TimeOnly horaCierre, TimeOnly? horaLimiteRecuperacion)
+    {
+        var ahoraPeru = HoraPeru.DesdeUtc(ahoraUtc);
         var hoyPeru = DateOnly.FromDateTime(ahoraPeru);
         var horaActualPeru = TimeOnly.FromDateTime(ahoraPeru);
-        var horaCierre = settings.ObtenerHoraCierreStock();
 
         if (horaActualPeru >= horaCierre)
         {
-            // A. Si ya fue exitoso hoy en esta instancia, no repetir
-            if (_ultimoDiaStockExitosoPeru == hoyPeru)
-            {
-                return;
-            }
-
-            // B. Verificar en auditoria persistida si ya existe un cierre exitoso no simulado hoy
-            var yaEjecutadoEnBd = await YaSeEjecutoStockCierreHoyAsync(hoyPeru, horaCierre, cancellationToken);
-            if (yaEjecutadoEnBd)
-            {
-                _ultimoDiaStockExitosoPeru = hoyPeru;
-                _ultimoIntentoStockFallidoUtc = null;
-                return;
-            }
-
-            // C. Si hubo un intento fallido previo hoy, esperar el intervalo de reintento configurado
-            var minutosReintento = settings.IntervaloReintentoStockMinutos >= 0 ? settings.IntervaloReintentoStockMinutos : 15;
-            var intervaloReintento = TimeSpan.FromMinutes(minutosReintento);
-
-            if (minutosReintento > 0 && _ultimoIntentoStockFallidoUtc.HasValue && DateTime.UtcNow - _ultimoIntentoStockFallidoUtc.Value < intervaloReintento)
-            {
-                _logger.LogDebug(
-                    "YamahaSyncBackgroundService: Enfriamiento de reintento Stock activo. Siguiente intento en {MinutosRestantes:F1} min.",
-                    (intervaloReintento - (DateTime.UtcNow - _ultimoIntentoStockFallidoUtc.Value)).TotalMinutes);
-                return;
-            }
-
-            _logger.LogInformation(
-                "Iniciando intento de cierre diario de Stock para la fecha {HoyPeru} (Hora configurada: {HoraCierre}).",
-                hoyPeru,
-                horaCierre);
-
-            var resultado = await EjecutarStockProgramadoAsync(cancellationToken);
-
-            switch (resultado)
-            {
-                case YamahaResultadoSincronizacion.Exitoso:
-                case YamahaResultadoSincronizacion.SinCambios:
-                case YamahaResultadoSincronizacion.EnviadoSinRegistrar: // Yamaha ya lo recibió: no reenviar
-                    _ultimoDiaStockExitosoPeru = hoyPeru;
-                    _ultimoIntentoStockFallidoUtc = null;
-                    _logger.LogInformation("Cierre diario de Stock completado ({Resultado}) para la fecha {HoyPeru}.", resultado, hoyPeru);
-                    break;
-
-                case YamahaResultadoSincronizacion.OmitidoPorConcurrencia:
-                    // No es un fallo: no se activa el enfriamiento y se reintenta en la siguiente evaluacion.
-                    _logger.LogInformation(
-                        "Cierre diario de Stock para la fecha {HoyPeru} omitido porque hay otra sincronizacion en curso. Se reintentara en la siguiente evaluacion.",
-                        hoyPeru);
-                    break;
-
-                default:
-                    _ultimoIntentoStockFallidoUtc = DateTime.UtcNow;
-                    _logger.LogWarning(
-                        "El intento de cierre diario de Stock para la fecha {HoyPeru} falló. Se reintentará en {Minutos} minutos.",
-                        hoyPeru,
-                        minutosReintento);
-                    break;
-            }
+            return hoyPeru;
         }
+
+        if (horaLimiteRecuperacion.HasValue && horaActualPeru < horaLimiteRecuperacion.Value)
+        {
+            return hoyPeru.AddDays(-1);
+        }
+
+        return null;
+    }
+
+    /// <summary>La hora limite de recuperacion, o null si no es anterior a la hora de cierre.</summary>
+    private TimeOnly? ObtenerLimiteRecuperacionValido(YamahaSettings settings, TimeOnly horaCierre)
+    {
+        var horaLimite = settings.ObtenerHoraLimiteRecuperacionStock();
+        if (horaLimite < horaCierre)
+        {
+            return horaLimite;
+        }
+
+        if (!_advertenciaRecuperacionInvalidaEmitida)
+        {
+            _advertenciaRecuperacionInvalidaEmitida = true;
+            _logger.LogWarning(
+                "HoraLimiteRecuperacionStockPeru ({HoraLimite}) no es anterior a HoraCierreStockPeru ({HoraCierre}); la recuperacion del cierre de Stock tras medianoche queda desactivada.",
+                horaLimite,
+                horaCierre);
+        }
+
+        return null;
+    }
+
+    private async Task EvaluarCierreStockAsync(YamahaSettings settings, CancellationToken cancellationToken)
+    {
+        var horaCierre = settings.ObtenerHoraCierreStock();
+        var horaLimite = ObtenerLimiteRecuperacionValido(settings, horaCierre);
+        var jornada = CalcularJornadaStockPendiente(AhoraUtc, horaCierre, horaLimite);
+
+        if (jornada is null)
+        {
+            await ReportarCierrePerdidoSiCorrespondeAsync(horaCierre, horaLimite, cancellationToken);
+            return;
+        }
+
+        // A. Si la jornada ya se cerro en esta instancia, no repetir
+        if (_ultimaJornadaStockCerrada == jornada)
+        {
+            return;
+        }
+
+        // B. Verificar en auditoria persistida si ya existe un cierre exitoso no simulado de la jornada.
+        // Si no se puede verificar, no se envia en este minuto para no duplicar el cierre.
+        var yaCerrada = await YaSeEjecutoStockCierreHoyAsync(jornada.Value, horaCierre, horaLimite, cancellationToken);
+        if (yaCerrada is null)
+        {
+            _logger.LogWarning(
+                "No se pudo verificar si el cierre de Stock de la jornada {Jornada} ya se envio; se omite este minuto para no duplicarlo.",
+                jornada);
+            return;
+        }
+
+        if (yaCerrada.Value)
+        {
+            _ultimaJornadaStockCerrada = jornada;
+            _ultimoIntentoStockFallidoUtc = null;
+            return;
+        }
+
+        // C. Si hubo un intento fallido previo, esperar el intervalo de reintento configurado
+        var minutosReintento = settings.IntervaloReintentoStockMinutos >= 0 ? settings.IntervaloReintentoStockMinutos : 15;
+        var intervaloReintento = TimeSpan.FromMinutes(minutosReintento);
+
+        if (minutosReintento > 0 && _ultimoIntentoStockFallidoUtc.HasValue && AhoraUtc - _ultimoIntentoStockFallidoUtc.Value < intervaloReintento)
+        {
+            _logger.LogDebug(
+                "YamahaSyncBackgroundService: Enfriamiento de reintento Stock activo. Siguiente intento en {MinutosRestantes:F1} min.",
+                (intervaloReintento - (AhoraUtc - _ultimoIntentoStockFallidoUtc.Value)).TotalMinutes);
+            return;
+        }
+
+        await IntentarCierreStockAsync(jornada.Value, horaCierre, minutosReintento, cancellationToken);
+    }
+
+    private async Task IntentarCierreStockAsync(
+        DateOnly jornada,
+        TimeOnly horaCierre,
+        int minutosReintento,
+        CancellationToken cancellationToken)
+    {
+        var esRecuperacion = jornada < DateOnly.FromDateTime(HoraPeru.DesdeUtc(AhoraUtc));
+        _logger.LogInformation(
+            "Iniciando intento de cierre diario de Stock para la jornada {Jornada} (Hora configurada: {HoraCierre}, recuperacion: {EsRecuperacion}).",
+            jornada,
+            horaCierre,
+            esRecuperacion);
+
+        _ultimaJornadaStockIntentada = jornada;
+        var resultado = await EjecutarStockProgramadoAsync(cancellationToken);
+
+        switch (resultado)
+        {
+            case YamahaResultadoSincronizacion.Exitoso:
+            case YamahaResultadoSincronizacion.SinCambios:
+            case YamahaResultadoSincronizacion.EnviadoSinRegistrar: // Yamaha ya lo recibió: no reenviar
+                _ultimaJornadaStockCerrada = jornada;
+                _ultimoIntentoStockFallidoUtc = null;
+                _logger.LogInformation("Cierre diario de Stock completado ({Resultado}) para la jornada {Jornada}.", resultado, jornada);
+                break;
+
+            case YamahaResultadoSincronizacion.OmitidoPorConcurrencia:
+                // No es un fallo: no se activa el enfriamiento y se reintenta en la siguiente evaluacion.
+                _logger.LogInformation(
+                    "Cierre diario de Stock para la jornada {Jornada} omitido porque hay otra sincronizacion en curso. Se reintentara en la siguiente evaluacion.",
+                    jornada);
+                break;
+
+            default:
+                _ultimoIntentoStockFallidoUtc = AhoraUtc;
+                _logger.LogWarning(
+                    "El intento de cierre diario de Stock para la jornada {Jornada} falló. Se reintentará en {Minutos} minutos.",
+                    jornada,
+                    minutosReintento);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Fuera de la ventana de cierre y de recuperacion: si esta instancia intento la jornada anterior y no la
+    /// cerro, lo deja registrado una sola vez como cierre perdido (tras confirmarlo en la auditoria).
+    /// </summary>
+    private async Task ReportarCierrePerdidoSiCorrespondeAsync(
+        TimeOnly horaCierre,
+        TimeOnly? horaLimite,
+        CancellationToken cancellationToken)
+    {
+        var jornadaAnterior = DateOnly.FromDateTime(HoraPeru.DesdeUtc(AhoraUtc)).AddDays(-1);
+
+        if (_ultimaJornadaStockIntentada != jornadaAnterior ||
+            _ultimaJornadaStockCerrada == jornadaAnterior ||
+            _ultimaJornadaPerdidaReportada == jornadaAnterior)
+        {
+            return;
+        }
+
+        var cerrada = await YaSeEjecutoStockCierreHoyAsync(jornadaAnterior, horaCierre, horaLimite, cancellationToken);
+        if (cerrada is null)
+        {
+            return; // Se vuelve a comprobar en la siguiente evaluacion
+        }
+
+        if (cerrada.Value)
+        {
+            _ultimaJornadaStockCerrada = jornadaAnterior;
+            return;
+        }
+
+        _ultimaJornadaPerdidaReportada = jornadaAnterior;
+        _logger.LogError(
+            "Cierre de Stock de la jornada {Jornada} perdido: no se pudo enviar entre las {HoraCierre} y la hora limite de recuperacion {HoraLimite}.",
+            jornadaAnterior,
+            horaCierre,
+            horaLimite?.ToString() ?? "00:00");
     }
 
     /// <summary>
@@ -327,12 +449,15 @@ public sealed class YamahaSyncBackgroundService : BackgroundService
     }
 
     /// <summary>
-    /// Comprueba si ya existe un registro exitoso no simulado de Stock para el dia actual de Peru
-    /// ejecutado a partir de la hora de cierre.
+    /// Comprueba si ya existe un registro exitoso no simulado de Stock para la jornada de Peru indicada:
+    /// iniciado entre la hora de cierre de esa jornada y la hora limite de recuperacion del dia siguiente
+    /// (o la medianoche, si la recuperacion esta desactivada).
+    /// Devuelve null si no se pudo consultar, para que el llamador no envie a ciegas.
     /// </summary>
-    public async Task<bool> YaSeEjecutoStockCierreHoyAsync(
+    public async Task<bool?> YaSeEjecutoStockCierreHoyAsync(
         DateOnly hoyPeru,
         TimeOnly horaCierre,
+        TimeOnly? horaLimiteRecuperacion = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -341,19 +466,26 @@ public sealed class YamahaSyncBackgroundService : BackgroundService
             var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
             var inicioDiaUtc = HoraPeru.InicioDelDiaUtc(hoyPeru.ToDateTime(TimeOnly.MinValue));
-            var horaCierreUtcHoy = inicioDiaUtc.Add(horaCierre.ToTimeSpan());
+            var desdeUtc = inicioDiaUtc.Add(horaCierre.ToTimeSpan());
+            var hastaUtc = HoraPeru.InicioDelDiaUtc(hoyPeru.AddDays(1).ToDateTime(TimeOnly.MinValue))
+                .Add((horaLimiteRecuperacion ?? TimeOnly.MinValue).ToTimeSpan());
 
             return await dbContext.YamahaSyncLogs
                 .AsNoTracking()
                 .AnyAsync(l => l.Servicio == YamahaServicioSincronizacion.Stock &&
                                l.Exitoso &&
                                !l.EsSimulacion &&
-                               l.FechaInicio >= horaCierreUtcHoy, cancellationToken);
+                               l.FechaInicio >= desdeUtc &&
+                               l.FechaInicio < hastaUtc, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al consultar si Stock ya fue ejecutado hoy en YamahaSyncLogs.");
-            return false;
+            _logger.LogError(ex, "Error al consultar si el cierre de Stock de la jornada {Jornada} ya se ejecuto en YamahaSyncLogs.", hoyPeru);
+            return null;
         }
     }
 

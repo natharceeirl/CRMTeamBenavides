@@ -43,6 +43,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
@@ -205,6 +206,7 @@ builder.Services.AddScoped<IYamahaVentasExporter, YamahaVentasExporter>();
 builder.Services.AddScoped<IYamahaServicioTecnicoExporter, YamahaServicioTecnicoExporter>();
 builder.Services.AddScoped<IYamahaWatermarkService, YamahaWatermarkService>();
 builder.Services.AddScoped<IYamahaSyncOrchestrator, YamahaSyncOrchestrator>();
+builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddHostedService<YamahaSyncBackgroundService>();
 builder.Services.AddScoped<IExportacionExcelService, ExportacionExcelService>();
 builder.Services.AddScoped<IImportadorExcelService, ImportadorExcelService>();
