@@ -2676,6 +2676,12 @@ namespace CRMTeamBenavides.Api.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
+                    b.Property<DateTime?>("RangoDesdeUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("RangoHastaUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("RegistrosProcesados")
                         .HasColumnType("integer");
 

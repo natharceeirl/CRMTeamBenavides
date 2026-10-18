@@ -100,6 +100,13 @@ public class YamahaSettings
     public int IntervaloReintentoStockMinutos { get; set; } = 15;
 
     /// <summary>
+    /// Margen en segundos que se resta a "ahora" para cerrar el rango de Ventas y Servicio Tecnico (por defecto 120).
+    /// Da tiempo a que se confirmen las transacciones cuya fecha quedo registrada justo antes del corte,
+    /// para que entren en el lote siguiente en vez de perderse entre dos lotes.
+    /// </summary>
+    public int MargenAsentamientoSegundos { get; set; } = 120;
+
+    /// <summary>
     /// Tiempo maximo en segundos de espera para adquirir la exclusion mutua por servicio antes de rechazar una sincronizacion concurrente (por defecto 5 segundos).
     /// </summary>
     public int ConcurrenciaEsperaSegundos { get; set; } = 5;

@@ -845,4 +845,102 @@ public class YamahaSyncOrchestratorTests
         // Queda EnProceso (el último estado que sí se guardó), nunca reescrito como Fallido.
         Assert.Equal(YamahaEstadoSincronizacion.EnProceso, log.Estado);
     }
+
+    private static YamahaSyncOrchestrator CrearOrquestador(
+        ApplicationDbContext context,
+        YamahaSettings settings,
+        IYamahaApiClient? apiClient = null)
+    {
+        var opciones = Options.Create(settings);
+        var mappingService = new YamahaMappingService();
+
+        return new YamahaSyncOrchestrator(
+            context,
+            new YamahaVentasExporter(context, mappingService, opciones),
+            new YamahaStockExporter(context, mappingService, opciones),
+            new YamahaServicioTecnicoExporter(context, mappingService, opciones),
+            new YamahaWatermarkService(context),
+            apiClient ?? new FakeYamahaApiClient(),
+            opciones,
+            NullLogger<YamahaSyncOrchestrator>.Instance);
+    }
+
+    [Theory]
+    [InlineData(YamahaServicioSincronizacion.Ventas)]
+    [InlineData(YamahaServicioSincronizacion.ServicioTecnico)]
+    public async Task SincronizarServicioAsync_DosLotesReales_ElSegundoParteDelRangoHastaDelPrimeroConMargen(YamahaServicioSincronizacion servicio)
+    {
+        using var context = CrearDbContextMemoria();
+        var orquestador = CrearOrquestador(context, new YamahaSettings
+        {
+            Enabled = true,
+            CodigoPuntoVenta = "TB-AQP-01",
+            TipoPuntoVenta = "3S",
+            MargenAsentamientoSegundos = 120
+        });
+
+        var antes = DateTime.UtcNow;
+        var primero = await orquestador.SincronizarServicioAsync(servicio, esSimulacion: false, modoEnvio: "Programado");
+        var despues = DateTime.UtcNow;
+        var segundo = await orquestador.SincronizarServicioAsync(servicio, esSimulacion: false, modoEnvio: "Programado");
+
+        var log1 = await context.YamahaSyncLogs.FindAsync(primero.SyncLogId);
+        var log2 = await context.YamahaSyncLogs.FindAsync(segundo.SyncLogId);
+        Assert.NotNull(log1);
+        Assert.NotNull(log2);
+
+        // El corte queda 120 s antes de "ahora"
+        Assert.NotNull(log1.RangoHastaUtc);
+        Assert.InRange(log1.RangoHastaUtc.Value, antes.AddSeconds(-120), despues.AddSeconds(-120));
+
+        // Sin hueco entre lotes: el segundo empieza exactamente donde terminó el primero
+        Assert.Equal(log1.RangoHastaUtc, log2.RangoDesdeUtc);
+    }
+
+    [Fact]
+    public async Task SincronizarServicioAsync_SiElMargenCrece_ElWatermarkNoRetrocede()
+    {
+        using var context = CrearDbContextMemoria();
+        var settings = new YamahaSettings
+        {
+            Enabled = true,
+            CodigoPuntoVenta = "TB-AQP-01",
+            TipoPuntoVenta = "3S",
+            MargenAsentamientoSegundos = 0
+        };
+
+        var primero = await CrearOrquestador(context, settings)
+            .SincronizarServicioAsync(YamahaServicioSincronizacion.Ventas, esSimulacion: false);
+
+        settings.MargenAsentamientoSegundos = 600; // el corte calculado quedaría antes del lote anterior
+        var segundo = await CrearOrquestador(context, settings)
+            .SincronizarServicioAsync(YamahaServicioSincronizacion.Ventas, esSimulacion: false);
+
+        var log1 = await context.YamahaSyncLogs.FindAsync(primero.SyncLogId);
+        var log2 = await context.YamahaSyncLogs.FindAsync(segundo.SyncLogId);
+        Assert.NotNull(log1);
+        Assert.NotNull(log2);
+        Assert.Equal(log1.RangoHastaUtc, log2.RangoDesdeUtc);
+        Assert.Equal(log2.RangoDesdeUtc, log2.RangoHastaUtc); // rango vacío, sin retroceder
+    }
+
+    [Fact]
+    public async Task SincronizarServicioAsync_Stock_NoGuardaRangoPorqueEnviaLaFotoCompleta()
+    {
+        using var context = CrearDbContextMemoria();
+        AgregarProductoYamaha(context);
+        await context.SaveChangesAsync();
+
+        var resultado = await CrearOrquestador(context, new YamahaSettings
+        {
+            Enabled = true,
+            CodigoPuntoVenta = "TB-AQP-01",
+            TipoPuntoVenta = "3S"
+        }).SincronizarServicioAsync(YamahaServicioSincronizacion.Stock, esSimulacion: false);
+
+        var log = await context.YamahaSyncLogs.FindAsync(resultado.SyncLogId);
+        Assert.NotNull(log);
+        Assert.Null(log.RangoDesdeUtc);
+        Assert.Null(log.RangoHastaUtc);
+    }
 }

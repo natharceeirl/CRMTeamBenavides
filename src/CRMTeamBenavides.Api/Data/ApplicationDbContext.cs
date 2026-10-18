@@ -846,6 +846,10 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
 
             entity.Property(l => l.FechaFin);
 
+            // Rango exportado en Ventas y Servicio Técnico; base del watermark incremental (nulo en Stock).
+            entity.Property(l => l.RangoDesdeUtc);
+            entity.Property(l => l.RangoHastaUtc);
+
             entity.Property(l => l.RegistrosProcesados)
                 .IsRequired();
 

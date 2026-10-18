@@ -59,6 +59,18 @@ public class YamahaSyncLog
     /// <summary>Marca temporal UTC de culminación (nulo mientras esté EnProceso).</summary>
     public DateTime? FechaFin { get; set; }
 
+    /// <summary>
+    /// Inicio (exclusivo) del rango de fechas exportado en Ventas y Servicio Técnico.
+    /// Nulo en Stock, que siempre envía la foto completa.
+    /// </summary>
+    public DateTime? RangoDesdeUtc { get; set; }
+
+    /// <summary>
+    /// Fin (inclusivo) del rango exportado. El siguiente lote incremental parte exactamente de aquí,
+    /// de modo que ningún registro queda entre dos lotes.
+    /// </summary>
+    public DateTime? RangoHastaUtc { get; set; }
+
     /// <summary>Total de registros leídos y procesados del CRM.</summary>
     public int RegistrosProcesados { get; set; }
 
@@ -105,7 +117,9 @@ public class YamahaSyncLog
         YamahaServicioSincronizacion servicio,
         bool esSimulacion = false,
         Guid? usuarioId = null,
-        string? modoEnvio = null)
+        string? modoEnvio = null,
+        DateTime? rangoDesdeUtc = null,
+        DateTime? rangoHastaUtc = null)
     {
         return new YamahaSyncLog
         {
@@ -114,6 +128,8 @@ public class YamahaSyncLog
             Estado = YamahaEstadoSincronizacion.EnProceso,
             FechaInicio = DateTime.UtcNow,
             FechaFin = null,
+            RangoDesdeUtc = rangoDesdeUtc,
+            RangoHastaUtc = rangoHastaUtc,
             EsSimulacion = esSimulacion,
             Exitoso = false,
             UsuarioId = usuarioId,

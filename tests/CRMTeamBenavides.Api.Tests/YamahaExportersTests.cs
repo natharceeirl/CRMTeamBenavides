@@ -257,6 +257,91 @@ public class YamahaExportersTests
     }
 
     [Fact]
+    public async Task VentasExporter_ElBordeDesdeEsExclusivoYElBordeHastaInclusivo()
+    {
+        using var context = CrearDbContextMemoria();
+        var instante = new DateTime(2026, 10, 18, 15, 0, 0, DateTimeKind.Utc);
+
+        var cliente = new Cliente
+        {
+            Id = Guid.NewGuid(),
+            NombreCompleto = "Carlos Benavides",
+            TipoDocumento = TipoDocumentoCliente.DNI,
+            NumeroDocumento = "45678901",
+            Telefono = "954123456",
+            Direccion = "Av. Ejército 123",
+            Activo = true
+        };
+        var producto = new Producto
+        {
+            Id = Guid.NewGuid(),
+            CategoriaId = Guid.NewGuid(),
+            Codigo = "90793-AJ412",
+            Nombre = "Aceite Yamalube 4T 10W-40",
+            PrecioVenta = 38.00m,
+            Costo = 25.00m,
+            StockActual = 50,
+            Activo = true
+        };
+        var venta = new Venta
+        {
+            Id = Guid.NewGuid(),
+            ClienteId = cliente.Id,
+            Estado = EstadoVenta.Confirmada,
+            Fecha = instante,
+            SubtotalGravado = 32.20m,
+            MontoIgv = 5.80m,
+            Total = 38.00m,
+            Activo = true
+        };
+        venta.Comprobante = new Comprobante
+        {
+            Id = Guid.NewGuid(),
+            VentaId = venta.Id,
+            Tipo = "Boleta",
+            Serie = "B001",
+            Numero = "000303",
+            Estado = "Emitido",
+            SubtotalGravado = 32.20m,
+            MontoIgv = 5.80m,
+            Total = 38.00m,
+            FechaCreacion = instante
+        };
+        venta.Detalles.Add(new DetalleVenta
+        {
+            Id = Guid.NewGuid(),
+            VentaId = venta.Id,
+            ProductoId = producto.Id,
+            Producto = producto,
+            TipoItem = TipoItemServicio.Repuesto,
+            Cantidad = 1,
+            PrecioUnitario = 32.20m,
+            SubtotalGravado = 32.20m,
+            MontoIgv = 5.80m,
+            Total = 38.00m,
+            Activo = true
+        });
+
+        context.Clientes.Add(cliente);
+        context.Productos.Add(producto);
+        context.Ventas.Add(venta);
+        await context.SaveChangesAsync();
+
+        var exporter = new YamahaVentasExporter(
+            context,
+            new YamahaMappingService(),
+            Options.Create(new YamahaSettings { CodigoPuntoVenta = "TB-AQP-01", TipoPuntoVenta = "3S" }));
+
+        // Lote anterior: terminó exactamente en el instante de la venta (hasta inclusivo) → la incluye
+        var loteAnterior = await exporter.ExportarVentasAsync(desdeUtc: instante.AddHours(-4), hastaUtc: instante);
+        Assert.Single(loteAnterior.RegistrosValidos);
+
+        // Lote siguiente: parte de ese mismo instante (desde exclusivo) → no la repite
+        var loteSiguiente = await exporter.ExportarVentasAsync(desdeUtc: instante, hastaUtc: instante.AddHours(4));
+        Assert.Empty(loteSiguiente.RegistrosValidos);
+    }
+
+    [Fact]
     public async Task ServicioTecnicoExporter_DebeExportarOrdenesFacturadasMapeandoSpYSte()
     {
         using var context = CrearDbContextMemoria();

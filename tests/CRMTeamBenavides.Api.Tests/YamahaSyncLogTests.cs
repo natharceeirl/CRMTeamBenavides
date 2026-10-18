@@ -310,6 +310,10 @@ public class YamahaSyncLogTests
         Assert.False(propEstado.IsNullable);
         Assert.Equal(30, propEstado.GetMaxLength());
 
+        // Rango exportado (watermark incremental): opcional, nulo en Stock
+        Assert.True(entityType.FindProperty(nameof(YamahaSyncLog.RangoDesdeUtc))?.IsNullable);
+        Assert.True(entityType.FindProperty(nameof(YamahaSyncLog.RangoHastaUtc))?.IsNullable);
+
         // Longitudes máximas configuradas
         Assert.Equal(YamahaSyncLog.MaxPayloadHashLongitud, entityType.FindProperty(nameof(YamahaSyncLog.PayloadHash))?.GetMaxLength());
         Assert.Equal(YamahaSyncLog.MaxRespuestaCuerpoLongitud, entityType.FindProperty(nameof(YamahaSyncLog.RespuestaCuerpo))?.GetMaxLength());

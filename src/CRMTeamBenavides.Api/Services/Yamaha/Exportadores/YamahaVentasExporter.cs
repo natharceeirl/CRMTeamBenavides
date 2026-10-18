@@ -53,9 +53,10 @@ public sealed class YamahaVentasExporter : IYamahaVentasExporter
             .Where(v => v.Activo && v.Estado == EstadoVenta.Confirmada)
             .Where(v => v.Comprobante != null && v.Comprobante.Estado == "Emitido");
 
+        // desde exclusivo y hasta inclusivo: el lote siguiente parte del "hasta" de este sin repetir el borde.
         if (desdeUtc.HasValue)
         {
-            query = query.Where(v => v.Comprobante!.FechaCreacion >= desdeUtc.Value || v.Fecha >= desdeUtc.Value);
+            query = query.Where(v => v.Comprobante!.FechaCreacion > desdeUtc.Value || v.Fecha > desdeUtc.Value);
         }
 
         query = query.Where(v => v.Comprobante!.FechaCreacion <= hastaUtc.Value && v.Fecha <= hastaUtc.Value);

@@ -101,7 +101,11 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
         try
         {
             var stopwatch = Stopwatch.StartNew();
-            rangoHastaUtc ??= DateTime.UtcNow;
+
+            // El rango se cierra un margen antes de "ahora" para que las transacciones con fecha justo
+            // anterior al corte, aún sin confirmar, entren en el lote siguiente y no queden entre dos lotes.
+            var margenSegundos = _settings.MargenAsentamientoSegundos >= 0 ? _settings.MargenAsentamientoSegundos : 0;
+            rangoHastaUtc ??= DateTime.UtcNow.AddSeconds(-margenSegundos);
 
             DateTime desdeUtc;
             if (rangoDesdeUtc.HasValue)
@@ -113,12 +117,24 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                 desdeUtc = await _watermarkService.ObtenerPuntoCorteDesdeUtcAsync(servicio, cancellationToken);
             }
 
+            // Si el corte quedó antes del punto de partida (por ejemplo, al ampliar el margen), el rango queda
+            // vacío en vez de retroceder el watermark y reenviar registros ya enviados.
+            if (rangoHastaUtc.Value < desdeUtc)
+            {
+                rangoHastaUtc = desdeUtc;
+            }
+
+            // Stock envía la foto completa: no usa rango ni watermark.
+            var usaRango = servicio != YamahaServicioSincronizacion.Stock;
+
             // 1. Iniciar registro de auditoría append-only en estado EnProceso
             var syncLog = YamahaSyncLog.Iniciar(
                 servicio: servicio,
                 esSimulacion: esSimulacion || !_settings.Enabled,
                 usuarioId: usuarioId,
-                modoEnvio: modoEnvio);
+                modoEnvio: modoEnvio,
+                rangoDesdeUtc: usaRango ? desdeUtc : null,
+                rangoHastaUtc: usaRango ? rangoHastaUtc : null);
 
             _context.YamahaSyncLogs.Add(syncLog);
             await _context.SaveChangesAsync(cancellationToken);

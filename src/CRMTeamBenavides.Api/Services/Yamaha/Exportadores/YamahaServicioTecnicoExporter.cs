@@ -50,9 +50,10 @@ public sealed class YamahaServicioTecnicoExporter : IYamahaServicioTecnicoExport
             .Where(os => os.Activo && os.Vehiculo != null)
             .Where(os => os.Comprobantes.Any(c => c.Estado == "Emitido"));
 
+        // desde exclusivo y hasta inclusivo: el lote siguiente parte del "hasta" de este sin repetir el borde.
         if (desdeUtc.HasValue)
         {
-            query = query.Where(os => os.Comprobantes.Any(c => c.Estado == "Emitido" && c.FechaCreacion >= desdeUtc.Value));
+            query = query.Where(os => os.Comprobantes.Any(c => c.Estado == "Emitido" && c.FechaCreacion > desdeUtc.Value));
         }
 
         query = query.Where(os => os.Comprobantes.Any(c => c.Estado == "Emitido" && c.FechaCreacion <= hastaUtc.Value));

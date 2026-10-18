@@ -26,8 +26,9 @@ public sealed class YamahaWatermarkService : IYamahaWatermarkService
         var ultimoExitoso = await ObtenerUltimoLogExitosoAsync(servicio, cancellationToken);
         if (ultimoExitoso is not null)
         {
-            // Tomamos la fecha de inicio del último lote exitoso como punto de continuidad seguro
-            return ultimoExitoso.FechaInicio;
+            // El siguiente lote parte exactamente del fin del rango enviado; los logs anteriores
+            // a que existiera el rango usan la fecha de inicio.
+            return ultimoExitoso.RangoHastaUtc ?? ultimoExitoso.FechaInicio;
         }
 
         // Sección 3.1: Primer envío reglamentario abarca los últimos 3 meses
@@ -51,7 +52,7 @@ public sealed class YamahaWatermarkService : IYamahaWatermarkService
         {
             var ultimoExitoso = await ObtenerUltimoLogExitosoAsync(servicio, cancellationToken);
             var esInicial = ultimoExitoso is null;
-            var puntoCorte = ultimoExitoso?.FechaInicio ?? DateTime.UtcNow.AddMonths(-3);
+            var puntoCorte = ultimoExitoso?.RangoHastaUtc ?? ultimoExitoso?.FechaInicio ?? DateTime.UtcNow.AddMonths(-3);
 
             resultado[servicio] = new YamahaWatermarkEstadoDto(
                 Servicio: servicio,
