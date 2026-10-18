@@ -16,6 +16,7 @@ import { ProveedorSesion } from './auth/sesion'
 import { textoDeAviso } from './api/avisos'
 import { avisos } from './utils/avisos'
 import { PuenteAvisos } from './components/PuenteAvisos'
+import { BarreraErrores } from './components/BarreraErrores'
 import App from './App'
 
 aplicarVariablesCss()
@@ -45,7 +46,9 @@ createRoot(document.getElementById('root')!).render(
         <QueryClientProvider client={clienteConsultas}>
           <ProveedorSesion>
             <BrowserRouter>
-              <App />
+              <BarreraErrores alcance="aplicacion">
+                <App />
+              </BarreraErrores>
             </BrowserRouter>
           </ProveedorSesion>
         </QueryClientProvider>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { BarreraErrores } from '../components/BarreraErrores'
 import { Logo } from '../components/Logo'
 import { ChatbotWidget } from '../components/ChatbotWidget'
 import { ModalCambiarPassword } from '../components/ModalCambiarPassword'
@@ -73,7 +74,10 @@ export function AppLayout() {
         </div>
       </aside>
       <div className="contenido">
-        <Outlet />
+        {/* Si una pantalla falla, el menú sigue a mano; al cambiar de ruta se vuelve a intentar. */}
+        <BarreraErrores alcance="pantalla" claveReinicio={pathname}>
+          <Outlet />
+        </BarreraErrores>
       </div>
       <ChatbotWidget />
       <ModalCambiarPassword abierto={cambiarPassword} onCerrar={() => setCambiarPassword(false)} />
