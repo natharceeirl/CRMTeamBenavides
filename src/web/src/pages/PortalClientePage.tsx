@@ -13,6 +13,7 @@ import { ModalFotosOrden } from '../components/ModalFotosOrden'
 import { ModalFormatoAtencion } from '../components/ModalFormatoAtencion'
 import { ModalCita } from '../components/ModalCita'
 import { ModalDetalleCita } from '../components/ModalDetalleCita'
+import { ModalHistorialUnidad } from '../components/ModalHistorialUnidad'
 import { useVehiculos } from '../api/vehiculos'
 import {
   PRESUPUESTO,
@@ -26,13 +27,7 @@ import {
 } from '../api/ordenes'
 import { useCitas } from '../api/citas'
 import { nombresEstadoPedidoCliente, usePedidosLima } from '../api/pedidosLima'
-import {
-  useHistorialServicioUnidad,
-  usePortalComprobantes,
-  usePortalResumen,
-  type AtencionServicioUnidad,
-  type PortalComprobante,
-} from '../api/portal'
+import { usePortalComprobantes, usePortalResumen, type PortalComprobante } from '../api/portal'
 import {
   nombresTipoItem,
   type CitaListResponse,
@@ -85,65 +80,6 @@ const columnasPresupuesto: TableProps<DetalleServicioResponse>['columns'] = [
   },
 ]
 
-/** Lo que un cliente hizo en el taller en una unidad: cada atención con sus trabajos. */
-function HistorialDeUnidad({ atenciones }: Readonly<{ atenciones: AtencionServicioUnidad[] }>) {
-  if (atenciones.length === 0) {
-    return <p className="texto-secundario">Esta unidad todavía no tiene servicios en el taller.</p>
-  }
-
-  return (
-    <>
-      {atenciones.map((atencion) => (
-        <section key={atencion.ordenServicioId} className="bloque-modal">
-          <div className="seccion-titulo" style={{ marginBottom: 8 }}>
-            <h3 style={{ margin: 0 }}>
-              {atencion.numeroOrden ?? 'Atención'} · {fechaHora(atencion.fechaIngreso)}
-            </h3>
-            <div className="acciones">
-              <EstadoOrdenApiTag estadoId={atencion.estadoId} nombres={nombresEstadoCliente} />
-              <strong className="num">{soles(atencion.total)}</strong>
-            </div>
-          </div>
-          <table className="tabla-simple">
-            <tbody>
-              {fila('Falla reportada', atencion.motivoFalla)}
-              {fila('Solución', atencion.solucion)}
-              {fila(
-                'Medidor al ingresar',
-                atencion.lecturaMedidorIngreso == null
-                  ? null
-                  : `${entero(atencion.lecturaMedidorIngreso)} ${atencion.tipoMedidor === 'Horas' ? 'h' : 'km'}`,
-              )}
-              {fila('Salida', atencion.fechaSalida ? fechaHora(atencion.fechaSalida) : null)}
-            </tbody>
-          </table>
-          {atencion.items.length > 0 && (
-            <Table
-              rowKey="id"
-              size="small"
-              pagination={false}
-              dataSource={atencion.items}
-              scroll={deslizable}
-              style={{ marginTop: 12 }}
-              columns={[
-                { title: 'Trabajo o repuesto', dataIndex: 'descripcion' },
-                { title: 'Cant.', dataIndex: 'cantidad', align: 'right', className: 'num' },
-                {
-                  title: 'Total',
-                  dataIndex: 'total',
-                  align: 'right',
-                  className: 'num',
-                  render: (valor: number) => importe(valor),
-                },
-              ]}
-            />
-          )}
-        </section>
-      ))}
-    </>
-  )
-}
-
 /** Una orden en curso: dónde está, cuándo se entrega y si espera algo del cliente. */
 function TarjetaOrden({ orden, onVer }: Readonly<{ orden: OrdenServicioResponse; onVer: () => void }>) {
   const responder = esperaRespuestaDelCliente(orden)
@@ -191,7 +127,6 @@ export function PortalClientePage() {
   const citas = useCitas({})
   const pedidos = usePedidosLima({})
   const detalle = useOrden(ordenVista ?? undefined)
-  const historial = useHistorialServicioUnidad(unidadHistorial?.id ?? null)
 
   const datosResumen = resumen.data
   const orden = detalle.data
@@ -491,22 +426,7 @@ export function PortalClientePage() {
         <Tabs activeKey={pestana} onChange={setPestana} items={pestanas} />
       </div>
 
-      <Modal
-        title={
-          unidadHistorial
-            ? `Historial · ${unidadHistorial.marca} ${unidadHistorial.modelo} · ${identificadorUnidad(unidadHistorial)}`
-            : 'Historial'
-        }
-        open={unidadHistorial !== null}
-        onCancel={() => setUnidadHistorial(null)}
-        footer={<Button onClick={() => setUnidadHistorial(null)}>Cerrar</Button>}
-        width={820}
-        destroyOnHidden
-      >
-        <AvisoError error={historial.error} />
-        {historial.isPending && <p className="texto-secundario">Cargando el historial…</p>}
-        {historial.data && <HistorialDeUnidad atenciones={historial.data} />}
-      </Modal>
+      <ModalHistorialUnidad unidad={unidadHistorial} onCerrar={() => setUnidadHistorial(null)} />
 
       <Modal
         title={orden ? `${referenciaOrden(orden)} · ${orden.vehiculoMarca} ${orden.vehiculoModelo}` : 'Orden'}

@@ -4,6 +4,7 @@ import { SearchOutlined } from '@ant-design/icons'
 import { Link } from 'react-router'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
+import { ModalHistorialUnidad } from '../components/ModalHistorialUnidad'
 import { ModalVehiculo } from '../components/ModalVehiculo'
 import { ModalYamahaMock } from '../components/ModalYamahaMock'
 import { useEliminarVehiculo, useVehiculos } from '../api/vehiculos'
@@ -17,12 +18,15 @@ export function UnidadesPage() {
   const [editando, setEditando] = useState<VehiculoResponse | null>(null)
   const [modalAbierto, setModalAbierto] = useState(false)
   const [modalYamaha, setModalYamaha] = useState(false)
+  const [unidadHistorial, setUnidadHistorial] = useState<VehiculoResponse | null>(null)
 
   const { tienePermiso } = useSesion()
   const puedeCrear = tienePermiso(PERMISOS.unidadesCrear)
   const puedeEditar = tienePermiso(PERMISOS.unidadesEditar)
   const puedeDarDeBaja = tienePermiso(PERMISOS.unidadesEliminar)
   const veClientes = tienePermiso(PERMISOS.clientesVer)
+  // Solo quien ve todas las órdenes puede abrir cualquiera desde el historial.
+  const veOrdenes = tienePermiso(PERMISOS.ordenesVerTodas)
 
   const vehiculos = useVehiculos()
   const eliminar = useEliminarVehiculo()
@@ -41,10 +45,17 @@ export function UnidadesPage() {
     {
       title: 'Unidad',
       key: 'unidad',
+      // El nombre abre la ficha de la unidad: su historial de servicio en el taller.
       render: (_, vehiculo) => (
-        <strong>
+        <Button
+          type="link"
+          onClick={() => setUnidadHistorial(vehiculo)}
+          title="Ver el historial de servicio"
+          // Con la letra de la celda y no la de los botones, para no ensanchar la tabla.
+          style={{ padding: 0, border: 0, height: 'auto', whiteSpace: 'normal', textAlign: 'left', fontFamily: 'inherit' }}
+        >
           {vehiculo.marca} {vehiculo.modelo} {vehiculo.anio ?? ''}
-        </strong>
+        </Button>
       ),
     },
     {
@@ -171,6 +182,12 @@ export function UnidadesPage() {
       </div>
       <ModalVehiculo abierto={modalAbierto} vehiculo={editando} onCerrar={() => setModalAbierto(false)} />
       <ModalYamahaMock abierto={modalYamaha} onCerrar={() => setModalYamaha(false)} />
+      <ModalHistorialUnidad
+        unidad={unidadHistorial}
+        onCerrar={() => setUnidadHistorial(null)}
+        paraPersonal
+        puedeVerOrdenes={veOrdenes}
+      />
     </>
   )
 }
