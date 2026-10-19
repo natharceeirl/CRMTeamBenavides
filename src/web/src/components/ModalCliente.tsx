@@ -1,6 +1,6 @@
 import { Form, Input, Modal, Select } from 'antd'
 import { useGuardarCliente } from '../api/clientes'
-import type { ClienteRequest, ClienteResponse } from '../api/tipos'
+import type { ClienteRequest, ClienteResponse, TipoDocumentoCliente } from '../api/tipos'
 import { AvisoError } from './AvisoError'
 
 type Props = {
@@ -12,7 +12,7 @@ type Props = {
 type Campos = {
   nombreCompleto: string
   razonSocial?: string
-  tipoDocumento?: number | null
+  tipoDocumento?: TipoDocumentoCliente | null
   numeroDocumento?: string
   telefono?: string
   email?: string
@@ -31,7 +31,7 @@ export function ModalCliente({ abierto, cliente, onCerrar }: Readonly<Props>) {
     const datos: ClienteRequest = {
       nombreCompleto: campos.nombreCompleto.trim(),
       razonSocial: sinVacios(campos.razonSocial),
-      tipoDocumento: campos.tipoDocumento != null ? Number(campos.tipoDocumento) : null,
+      tipoDocumento: campos.tipoDocumento ?? null,
       numeroDocumento: doc,
       documentoIdentidad: doc,
       telefono: sinVacios(campos.telefono),

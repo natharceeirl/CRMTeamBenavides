@@ -9,7 +9,7 @@ import {
   useActualizarOrden,
   useOrdenes,
 } from '../api/ordenes'
-import type { OrdenServicioDetalleResponse } from '../api/tipos'
+import type { ModalidadAtencion, OrdenServicioDetalleResponse, TipoAtencion, TipoFalla } from '../api/tipos'
 import { ordenMidePorHoras, textoLectura, ultimaLecturaRegistrada } from '../utils/unidades'
 import { AvisoError } from './AvisoError'
 
@@ -20,9 +20,9 @@ type Props = {
 }
 
 type Campos = {
-  tipoAtencion?: number
-  modalidadAtencion?: number
-  tipoFalla?: number
+  tipoAtencion?: TipoAtencion
+  modalidadAtencion?: ModalidadAtencion
+  tipoFalla?: TipoFalla
   motivoFalla?: string
   observaciones?: string
   fechaEstimadaEntrega?: Dayjs | null

@@ -1,6 +1,6 @@
 import { Form, Input, Modal, Select } from 'antd'
 import { useGuardarProveedor } from '../api/compras'
-import { TIPO_DOCUMENTO_CLIENTE, type ProveedorResponse } from '../api/tipos'
+import { TIPO_DOCUMENTO_CLIENTE, type ProveedorResponse, type TipoDocumentoCliente } from '../api/tipos'
 import { AvisoError } from './AvisoError'
 
 type Props = {
@@ -12,7 +12,7 @@ type Props = {
 }
 
 type Campos = {
-  tipoDocumento: number
+  tipoDocumento: TipoDocumentoCliente
   numeroDocumento: string
   razonSocial: string
   telefono?: string

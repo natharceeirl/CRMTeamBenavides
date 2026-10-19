@@ -1,4 +1,4 @@
-import { TIPO_DOCUMENTO_CLIENTE } from '../api/tipos'
+import { TIPO_DOCUMENTO_CLIENTE, type TipoDocumentoCliente, type TipoMedidor } from '../api/tipos'
 import { esEstadoTerminal } from '../api/ordenes'
 import { MEDIDOR_HORAS } from './unidades'
 
@@ -7,12 +7,12 @@ const TIPO_UNIDAD_MOTO_ACUATICA = 2
 const TIPO_UNIDAD_GENERADOR = 3
 
 /** El medidor que se propone según el tipo de unidad; se puede cambiar. */
-export function medidorPorTipoUnidad(tipoUnidad: number): number {
+export function medidorPorTipoUnidad(tipoUnidad: number): TipoMedidor {
   return tipoUnidad === TIPO_UNIDAD_MOTO_ACUATICA || tipoUnidad === TIPO_UNIDAD_GENERADOR ? MEDIDOR_HORAS : 0
 }
 
 /** DNI si tiene 8 dígitos, RUC si tiene 11; lo demás (carné de extranjería, pasaporte) va como «Otro». */
-export function tipoDocumentoSugerido(numero: string): number {
+export function tipoDocumentoSugerido(numero: string): TipoDocumentoCliente {
   const limpio = numero.trim()
   if (/^\d{8}$/.test(limpio)) return TIPO_DOCUMENTO_CLIENTE.dni
   if (/^\d{11}$/.test(limpio)) return TIPO_DOCUMENTO_CLIENTE.ruc

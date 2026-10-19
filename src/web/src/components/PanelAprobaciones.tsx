@@ -12,7 +12,7 @@ import {
   respuestasPresupuesto,
   etiquetaPresupuesto,
 } from '../api/ordenes'
-import type { OrdenServicioDetalleResponse } from '../api/tipos'
+import type { EstadoAprobacionGerencia, OrdenServicioDetalleResponse } from '../api/tipos'
 import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
 import { fechaHora } from '../utils/formato'
@@ -28,7 +28,7 @@ type Props = {
 type Accion = {
   /** «solicitud»: quien no aprueba le pide la decisión a Gerencia. */
   destino: 'cliente' | 'gerencia' | 'solicitud'
-  estado: number
+  estado: EstadoAprobacionGerencia
   titulo: string
   /** El rechazo siempre lleva motivo: queda en el historial para quien retome la orden. */
   motivoObligatorio: boolean

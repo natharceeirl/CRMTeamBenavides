@@ -1,7 +1,7 @@
 import { Form, Input, InputNumber, Modal, Select } from 'antd'
 import { useClientes } from '../api/clientes'
 import { useGuardarVehiculo } from '../api/vehiculos'
-import type { VehiculoRequest, VehiculoResponse } from '../api/tipos'
+import type { TipoMedidor, TipoUnidad, VehiculoRequest, VehiculoResponse } from '../api/tipos'
 import { AvisoError } from './AvisoError'
 
 type Props = {
@@ -14,14 +14,14 @@ type Props = {
 
 type Campos = {
   clienteId: string
-  tipoUnidad?: number
+  tipoUnidad?: TipoUnidad
   placa?: string
   numeroSerieVIN?: string
   numeroMotor?: string
   marca: string
   modelo: string
   anio?: number
-  tipoMedidor?: number
+  tipoMedidor?: TipoMedidor
   lecturaMedidorActual?: number
   kilometraje?: number
   color?: string
@@ -45,14 +45,14 @@ export function ModalVehiculo({ abierto, vehiculo, clienteFijo, onCerrar }: Read
 
     const datos: VehiculoRequest = {
       clienteId: campos.clienteId,
-      tipoUnidad: campos.tipoUnidad != null ? Number(campos.tipoUnidad) : 0,
+      tipoUnidad: campos.tipoUnidad ?? 0,
       placa: sinVacios(campos.placa),
       numeroSerieVIN: sinVacios(campos.numeroSerieVIN),
       numeroMotor: sinVacios(campos.numeroMotor),
       marca: campos.marca.trim(),
       modelo: campos.modelo.trim(),
       anio: campos.anio ?? null,
-      tipoMedidor: campos.tipoMedidor != null ? Number(campos.tipoMedidor) : 0,
+      tipoMedidor: campos.tipoMedidor ?? 0,
       lecturaMedidorActual: medidor,
       kilometraje: campos.kilometraje ?? (medidor != null ? Math.round(medidor) : null),
       color: sinVacios(campos.color),

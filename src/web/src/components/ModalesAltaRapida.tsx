@@ -1,7 +1,7 @@
 import { AutoComplete, Form, Input, InputNumber, Modal, Select } from 'antd'
 import { useAltaRapidaProducto, useMarcasProductos } from '../api/inventario'
 import { useAltaRapidaServicio } from '../api/servicios'
-import { TIPO_AFECTACION_IGV, type ProductoResponse, type ServicioResponse } from '../api/tipos'
+import { TIPO_AFECTACION_IGV, type ProductoResponse, type ServicioResponse, type TipoAfectacionIgv } from '../api/tipos'
 import { AvisoError } from './AvisoError'
 import { ConversorDolares } from './ConversorDolares'
 
@@ -114,7 +114,7 @@ export function ModalAltaRapidaRepuesto({
 type CamposServicio = {
   nombre: string
   precioSugerido: number
-  tipoAfectacionIgv: number
+  tipoAfectacionIgv: TipoAfectacionIgv
 }
 
 /** Registro de un servicio del catálogo sin salir de la orden. */

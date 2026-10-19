@@ -22,6 +22,7 @@ import {
   type MonedaCompra,
   type ProductoResponse,
   type ProveedorResponse,
+  type TipoAfectacionIgv,
   type TipoComprobanteCompra,
 } from '../api/tipos'
 import { useSesion } from '../auth/sesion'
@@ -36,7 +37,7 @@ type LineaForm = {
   descripcion?: string
   cantidad?: number
   precioUnitario?: number
-  tipoAfectacionIgv: number
+  tipoAfectacionIgv: TipoAfectacionIgv
 }
 
 type PagoForm = {

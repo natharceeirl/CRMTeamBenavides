@@ -5,14 +5,27 @@ Web administrativa, conectada a la API (`src/CRMTeamBenavides.Api`). Las reglas 
 ## Requisitos
 
 - Node 24 y npm 11
+- .NET 10 SDK, para generar y verificar los tipos de la API
 
 ## Comandos
 
 ```bash
 npm install
-npm run dev      # abre http://localhost:5173
-npm run build    # compila TypeScript y genera dist/
+npm run dev              # abre http://localhost:5173
+npm run build            # compila TypeScript y genera dist/
+npm test                 # pruebas (vitest)
+npm run lint             # oxlint, sin avisos permitidos
+npm run tipos:generar    # vuelve a generar los tipos de la API
+npm run verificar        # tipos de la API al día + TypeScript + lint + pruebas
 ```
+
+## Tipos de la API
+
+Los contratos de la API (`Features/**/*Contracts.cs`, los records terminados en `Request`, `Response` o `Dto`) se traducen a TypeScript con `tools/GeneradorTipos` y quedan en `src/api/generado/contratos.ts`. Ese archivo no se edita a mano; `src/api/tipos.ts` lo reexporta y suma solo los tipos propios de la web.
+
+- **Si cambia un contrato en el back**, correr `npm run tipos:generar` y commitear el archivo generado junto con el cambio. Si queda desactualizado, `npm run verificar` falla y dice qué correr.
+- **Si la web deja de compilar** después de generar, es que el contrato cambió: hay que ajustar la pantalla, no el archivo generado.
+- El generador sigue cómo serializa la API: propiedades en camelCase; enums como número, salvo los marcados con `JsonStringEnumConverter`; `| null` donde C# admite null. En las peticiones, los campos que admiten null o tienen valor por defecto son opcionales, y las propiedades calculadas (solo `get`) no se mandan.
 
 ## Estructura
 
@@ -23,6 +36,8 @@ npm run build    # compila TypeScript y genera dist/
 | `src/styles/global.css` | Estilos generales; usa las variables CSS que publica `tokens.ts` |
 | `src/layout/AppLayout.tsx` | Barra lateral negra y contenedor de páginas |
 | `src/components` | Logo, barra superior, indicadores, gráficos, etiquetas de estado y widget del chatbot |
+| `src/api/generado/contratos.ts` | Tipos de los contratos de la API, generados (no editar a mano) |
+| `src/api/tipos.ts` | Reexporta los generados y suma los tipos propios de la web |
 | `src/utils/series.ts` | Agrupar por día y elegir los cortes del eje de los gráficos |
 | `src/pages` | Una pantalla por ruta |
 | `src/data/ejemplo.ts` | Resto del wireframe; solo quedan los nueve estados propuestos del mapa funcional |

@@ -6,7 +6,16 @@ import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { useClientePorDocumento } from '../api/clientes'
 import { useHistorialServicioUnidad } from '../api/portal'
-import { TIPO_DOCUMENTO_CLIENTE, type AperturaOrdenRequest } from '../api/tipos'
+import {
+  TIPO_DOCUMENTO_CLIENTE,
+  type AperturaOrdenRequest,
+  type ModalidadAtencion,
+  type TipoAtencion,
+  type TipoDocumentoCliente,
+  type TipoFalla,
+  type TipoMedidor,
+  type TipoUnidad,
+} from '../api/tipos'
 import { fechaCorta } from '../utils/formato'
 import {
   MODALIDADES_ATENCION,
@@ -39,15 +48,15 @@ import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
 
 type CamposClienteNuevo = {
-  tipoDocumento: number
+  tipoDocumento: TipoDocumentoCliente
   nombreCompleto: string
   telefono?: string
   email?: string
 }
 
 type CamposUnidadNueva = {
-  tipoUnidad: number
-  tipoMedidor: number
+  tipoUnidad: TipoUnidad
+  tipoMedidor: TipoMedidor
   marca: string
   modelo: string
   placa?: string
@@ -60,9 +69,9 @@ type Campos = {
   clienteNuevo: CamposClienteNuevo
   unidadNueva: CamposUnidadNueva
   tecnicoAsignadoId?: string
-  tipoAtencion: number
-  modalidadAtencion: number
-  tipoFalla?: number
+  tipoAtencion: TipoAtencion
+  modalidadAtencion: ModalidadAtencion
+  tipoFalla?: TipoFalla
   motivoFalla?: string
   observaciones?: string
   fechaEstimadaEntrega?: Dayjs | null

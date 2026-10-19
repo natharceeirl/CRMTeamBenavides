@@ -1,6 +1,6 @@
 import { Form, Input, InputNumber, Modal } from 'antd'
 import { useAbrirCaja, useCerrarCaja, useRegistrarMovimientoCaja } from '../api/caja'
-import { TIPO_MOVIMIENTO_CAJA, type CajaChicaDetalleResponse } from '../api/tipos'
+import { TIPO_MOVIMIENTO_CAJA, type CajaChicaDetalleResponse, type TipoMovimientoCaja } from '../api/tipos'
 import { soles } from '../utils/formato'
 import { AvisoError } from './AvisoError'
 
@@ -136,7 +136,7 @@ export function ModalMovimientoCaja({
   onCerrar,
   tipo,
   saldo,
-}: Readonly<Base & { tipo: number; saldo: number }>) {
+}: Readonly<Base & { tipo: TipoMovimientoCaja; saldo: number }>) {
   const [formulario] = Form.useForm<Movimiento>()
   const registrar = useRegistrarMovimientoCaja()
   const esEgreso = tipo === TIPO_MOVIMIENTO_CAJA.egreso

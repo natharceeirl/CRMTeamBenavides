@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { Form, Input, InputNumber, Modal, Select } from 'antd'
 import { useActualizarServicio, useCrearServicio } from '../api/servicios'
 import { AvisoError } from './AvisoError'
-import { TIPO_AFECTACION_IGV, type ServicioResponse } from '../api/tipos'
+import { TIPO_AFECTACION_IGV, type ServicioResponse, type TipoAfectacionIgv } from '../api/tipos'
 
 type Props = {
   abierto: boolean
@@ -13,7 +13,7 @@ type Props = {
 type Campos = {
   nombre: string
   precioSugerido: number
-  tipoAfectacionIgv: number
+  tipoAfectacionIgv: TipoAfectacionIgv
 }
 
 export function ModalServicio({ abierto, servicio, onCerrar }: Readonly<Props>) {

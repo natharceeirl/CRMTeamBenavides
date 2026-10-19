@@ -12,6 +12,8 @@ import { soles } from '../utils/formato'
 import {
   TIPO_AFECTACION_IGV,
   TIPO_ITEM_SERVICIO,
+  type TipoAfectacionIgv,
+  type TipoItemServicio,
 } from '../api/tipos'
 
 type Props = {
@@ -29,13 +31,13 @@ type Props = {
 }
 
 type Campos = {
-  tipoItem: number
+  tipoItem: TipoItemServicio
   productoId?: string
   servicioId?: string
   descripcion?: string
   cantidad: number
   precioUnitario?: number
-  tipoAfectacionIgv: number
+  tipoAfectacionIgv: TipoAfectacionIgv
 }
 
 export function ModalItemOrden({

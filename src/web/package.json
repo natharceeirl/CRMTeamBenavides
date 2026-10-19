@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "oxlint --max-warnings=0 src",
-    "verificar": "tsc -b && oxlint --max-warnings=0 src && vitest run"
+    "tipos:generar": "dotnet run -c Release --project ../../tools/GeneradorTipos -- src/api/generado/contratos.ts",
+    "tipos:verificar": "dotnet run -c Release --project ../../tools/GeneradorTipos -- src/api/generado/contratos.ts --verificar",
+    "verificar": "npm run tipos:verificar && tsc -b && oxlint --max-warnings=0 src && vitest run"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",

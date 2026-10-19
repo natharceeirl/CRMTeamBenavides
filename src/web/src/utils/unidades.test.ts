@@ -5,7 +5,8 @@ import { referenciaOrden } from './formato'
 describe('unidades', () => {
   it('nombra el tipo de unidad del enum del backend', () => {
     expect(nombreTipoUnidad({ tipoUnidadId: 2 })).toBe('Moto acuática')
-    expect(nombreTipoUnidad({ tipoUnidadId: undefined })).toBe('Unidad')
+    // Un valor que la web todavía no conoce (el back agregó un tipo nuevo).
+    expect(nombreTipoUnidad({ tipoUnidadId: 99 })).toBe('Unidad')
   })
 
   it('muestra la lectura en km o en horas según el medidor', () => {

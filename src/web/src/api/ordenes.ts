@@ -6,6 +6,7 @@ import { clavesPortal } from './portal'
 import { clavesClientes } from './clientes'
 import { clavesVehiculos } from './vehiculos'
 import type {
+  EstadoOrdenServicio,
   ActualizarOrdenRequest,
   ActualizarDetalleRequest,
   AgregarDetalleRequest,
@@ -49,7 +50,7 @@ export const nombresEstado: Record<number, string> = {
 }
 
 /** Misma matriz que valida el backend en OrdenServicioService.CambiarEstadoAsync. */
-export const transicionesValidas: Record<number, number[]> = {
+export const transicionesValidas: Record<number, EstadoOrdenServicio[]> = {
   0: [1, 6],
   1: [2, 6],
   2: [3, 6],

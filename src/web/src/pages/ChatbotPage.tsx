@@ -15,7 +15,7 @@ import {
   useResolverConsulta,
 } from '../api/chatbot'
 import { useSesion } from '../auth/sesion'
-import type { ConsultaBandejaResponse, FaqResponse } from '../api/tipos'
+import type { ConsultaBandejaResponse, EstadoAtencionConsulta, FaqResponse } from '../api/tipos'
 import { colores } from '../theme/tokens'
 import { fechaHora } from '../utils/formato'
 
@@ -61,7 +61,7 @@ export function ChatbotPage() {
 
   const [faqEnEdicion, setFaqEnEdicion] = useState<FaqResponse | null>(null)
   const [modalFaq, setModalFaq] = useState(false)
-  const [cierre, setCierre] = useState<{ id: string; estado: number } | null>(null)
+  const [cierre, setCierre] = useState<{ id: string; estado: EstadoAtencionConsulta } | null>(null)
   const [notas, setNotas] = useState('')
 
   const confirmarCierre = async () => {

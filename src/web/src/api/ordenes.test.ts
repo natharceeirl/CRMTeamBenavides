@@ -104,7 +104,9 @@ describe('motivoBloqueoAprobacion', () => {
   })
 
   it('sin respuesta del cliente registrada, tampoco se aprueba', () => {
-    expect(motivoBloqueoAprobacion({})).toMatch(/Falta que el cliente apruebe/)
+    expect(
+      motivoBloqueoAprobacion({ estadoPresupuestoClienteId: PRESUPUESTO.pendiente, estadoAprobacionGerenciaId: GERENCIA.noAplica }),
+    ).toMatch(/Falta que el cliente apruebe/)
   })
 })
 

@@ -40,6 +40,7 @@ import {
 import {
   nombresTipoAfectacion,
   nombresTipoItem,
+  type EstadoOrdenServicio,
   type DetalleServicioResponse,
   type HistorialEstadoOrdenResponse,
 } from '../api/tipos'
@@ -80,7 +81,7 @@ export function OrdenDetallePage() {
 
   const [textoDiagnostico, setTextoDiagnostico] = useState<string | null>(null)
   const [textoSolucion, setTextoSolucion] = useState<string | null>(null)
-  const [estadoDestino, setEstadoDestino] = useState<number | null>(null)
+  const [estadoDestino, setEstadoDestino] = useState<EstadoOrdenServicio | null>(null)
   const [observacionesCambio, setObservacionesCambio] = useState('')
   const [modalRepuesto, setModalRepuesto] = useState(false)
   const [itemEnEdicion, setItemEnEdicion] = useState<DetalleServicioResponse | null>(null)

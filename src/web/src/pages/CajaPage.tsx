@@ -11,6 +11,7 @@ import {
   type CajaChicaResponse,
   type MovimientoCajaResponse,
   type ResumenMetodosPagoCajaResponse,
+  type TipoMovimientoCaja,
 } from '../api/tipos'
 import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
@@ -116,7 +117,7 @@ export function CajaPage() {
   const [pestana, setPestana] = useState('actual')
   const [modalApertura, setModalApertura] = useState(false)
   const [modalCierre, setModalCierre] = useState(false)
-  const [tipoMovimiento, setTipoMovimiento] = useState<number | null>(null)
+  const [tipoMovimiento, setTipoMovimiento] = useState<TipoMovimientoCaja | null>(null)
   const [cajaVista, setCajaVista] = useState<string | null>(null)
   const detalleVisto = useCaja(cajaVista)
 
