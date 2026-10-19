@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { colores } from '../theme/tokens'
 import { indicesVisibles, ticksDeEje, topeDeEje, type PuntoSerie } from '../utils/series'
 
@@ -35,35 +35,33 @@ const identidad = (valor: number) => String(valor)
  * el contenedor no existe, y un efecto que corre al montar nunca lo veía, así
  * que el gráfico quedaba en el ancho mínimo.
  */
-function useAnchoDe(referencia: React.RefObject<HTMLDivElement | null>) {
+function useAnchoDe() {
+  const referencia = useRef<HTMLDivElement | null>(null)
   const [ancho, setAncho] = useState(0)
 
-  const medir = useCallback(
-    (elemento: HTMLDivElement | null) => {
-      referencia.current = elemento
-      if (!elemento) {
-        return
-      }
+  const medir = useCallback((elemento: HTMLDivElement | null) => {
+    referencia.current = elemento
+    if (!elemento) {
+      return
+    }
 
-      setAncho(elemento.clientWidth)
+    setAncho(elemento.clientWidth)
 
-      if (typeof ResizeObserver === 'undefined') {
-        return
-      }
+    if (typeof ResizeObserver === 'undefined') {
+      return
+    }
 
-      const observador = new ResizeObserver(([entrada]) => {
-        setAncho(entrada.contentRect.width)
-      })
-      observador.observe(elemento)
-      return () => {
-        observador.disconnect()
-        referencia.current = null
-      }
-    },
-    [referencia],
-  )
+    const observador = new ResizeObserver(([entrada]) => {
+      setAncho(entrada.contentRect.width)
+    })
+    observador.observe(elemento)
+    return () => {
+      observador.disconnect()
+      referencia.current = null
+    }
+  }, [])
 
-  return [ancho, medir] as const
+  return [ancho, medir, referencia] as const
 }
 
 /**
@@ -83,13 +81,17 @@ export function GraficoArea({
   cargando = false,
   vacio = 'Sin datos en el periodo',
 }: Readonly<Props>) {
-  const contenedor = useRef<HTMLDivElement>(null)
-  const [anchoMedido, medirContenedor] = useAnchoDe(contenedor)
+  const [anchoMedido, medirContenedor, contenedor] = useAnchoDe()
   const ancho = Math.max(anchoMedido, ANCHO_MINIMO)
   const [activo, setActivo] = useState<number | null>(null)
 
-  // Si cambia el periodo, el punto resaltado ya no significa lo mismo.
-  useEffect(() => setActivo(null), [puntos])
+  // Si cambia el periodo, el punto resaltado ya no significa lo mismo: se olvida al
+  // dibujar con los datos nuevos, sin un efecto que obligue a dibujar dos veces.
+  const [puntosVistos, setPuntosVistos] = useState(puntos)
+  if (puntosVistos !== puntos) {
+    setPuntosVistos(puntos)
+    setActivo(null)
+  }
 
   const hayDatos = puntos.length > 0
   const cortes = ticksDeEje(Math.max(...puntos.map((punto) => punto.valor), 0), { entero })

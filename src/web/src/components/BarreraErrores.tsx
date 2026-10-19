@@ -34,8 +34,6 @@ type Props = {
    * último recurso si falla el propio marco y solo puede recargar.
    */
   alcance: 'pantalla' | 'aplicacion'
-  /** Al cambiar (por ejemplo, la ruta), se olvida el error y se vuelve a mostrar el contenido. */
-  claveReinicio?: string
 }
 
 type Estado = { error: Error | null }
@@ -43,6 +41,8 @@ type Estado = { error: Error | null }
 /**
  * Si una pantalla falla al dibujarse, React desmonta todo y queda la página en
  * blanco. Esta barrera atrapa el error y muestra qué hacer, sin perder el menú.
+ * Para que una ruta nueva empiece sin el error de la anterior, se monta con `key`
+ * igual a la ruta.
  */
 export class BarreraErrores extends Component<Props, Estado> {
   state: Estado = { error: null }
@@ -53,12 +53,6 @@ export class BarreraErrores extends Component<Props, Estado> {
 
   componentDidCatch(error: Error, informacion: ErrorInfo) {
     console.error('Error al mostrar la pantalla', error, informacion.componentStack)
-  }
-
-  componentDidUpdate(anteriores: Props) {
-    if (this.state.error && anteriores.claveReinicio !== this.props.claveReinicio) {
-      this.setState({ error: null })
-    }
   }
 
   private readonly reintentar = () => this.setState({ error: null })

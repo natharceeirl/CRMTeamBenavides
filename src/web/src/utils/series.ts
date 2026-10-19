@@ -45,6 +45,8 @@ export function serieDiaria<T>(
   }
 
   const acumulado = new Map<string, number>()
+  // cursor sí avanza: setDate cambia la fecha en el lugar.
+  // oxlint-disable-next-line no-unmodified-loop-condition
   for (const cursor = new Date(desde); cursor <= hasta; cursor.setDate(cursor.getDate() + 1)) {
     acumulado.set(claveDelDia(cursor), 0)
   }

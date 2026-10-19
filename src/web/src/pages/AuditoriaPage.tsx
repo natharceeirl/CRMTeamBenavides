@@ -128,6 +128,8 @@ export function AuditoriaPage() {
             dataSource={eventos.data ?? []}
             pagination={false}
             loading={eventos.isPending}
+            // Es una función de render de la tabla, no un componente nuevo en cada render.
+            // oxlint-disable-next-line react/no-unstable-nested-components
             expandable={{ expandedRowRender: (evento) => <DetalleEvento evento={evento} /> }}
             locale={{ emptyText: 'No hay eventos con esos filtros' }}
           />

@@ -44,6 +44,8 @@ function FotoProtegida({ foto }: Readonly<{ foto: FotoOrdenServicioResponse }>) 
   useEffect(() => {
     if (!archivo.data) return
     const local = URL.createObjectURL(archivo.data)
+    // Sí es sincronizar con algo externo: la URL local se crea y se libera con el archivo.
+    // oxlint-disable-next-line react/set-state-in-effect
     setUrl(local)
     return () => URL.revokeObjectURL(local)
   }, [archivo.data])

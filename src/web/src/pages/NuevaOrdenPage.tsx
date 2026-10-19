@@ -175,6 +175,8 @@ export function NuevaOrdenPage() {
   const unidadElegidaId = unidad?.id
   useEffect(() => {
     if (unidadElegidaId) formulario.validateFields(['vehiculoId']).catch(() => undefined)
+    // textoOrdenAbierta no se usa adentro: es lo que, al llegar, obliga a revalidar el campo.
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies
   }, [textoOrdenAbierta, unidadElegidaId, formulario])
 
   const enviar = async (campos: Campos) => {

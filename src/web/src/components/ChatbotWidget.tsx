@@ -38,6 +38,8 @@ export function ChatbotWidget() {
   const escribiendo = consultar.isPending
   useEffect(() => {
     lista.current?.scrollTo?.({ top: lista.current.scrollHeight, behavior: 'smooth' })
+    // Las dependencias son a propósito lo que cambia el alto de la lista, no lo que usa el efecto.
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies
   }, [mensajes, sugerencias, formularioAgente, escribiendo, abierto])
 
   const agregar = (mensaje: Mensaje) => setMensajes((previos) => [...previos, mensaje])

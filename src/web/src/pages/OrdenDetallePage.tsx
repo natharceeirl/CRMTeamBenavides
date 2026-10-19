@@ -163,7 +163,7 @@ export function OrdenDetallePage() {
       render: (descripcion: string, detalle) => {
         const tipo = nombresTipoItem[detalle.tipoItem ?? (detalle.esRepuesto ? 0 : 2)] ?? detalle.tipoItemNombre
         const afectacion = detalle.tipoAfectacionIgv ?? 0
-        const datos = [
+        const rasgos = [
           tipo,
           detalle.productoCodigo,
           // Gravado es lo normal: solo se avisa cuando no lo es.
@@ -172,7 +172,7 @@ export function OrdenDetallePage() {
         return (
           <>
             <div>{descripcion}</div>
-            <div className="texto-secundario">{datos.join(' · ')}</div>
+            <div className="texto-secundario">{rasgos.join(' · ')}</div>
           </>
         )
       },

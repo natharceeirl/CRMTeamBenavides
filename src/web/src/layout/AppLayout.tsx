@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { BarreraErrores } from '../components/BarreraErrores'
 import { Logo } from '../components/Logo'
@@ -25,15 +25,16 @@ export function AppLayout() {
   const { pathname } = useLocation()
   const [cambiarPassword, setCambiarPassword] = useState(false)
   // En el celular el menú se pliega bajo un botón; en pantallas más anchas siempre se ve.
-  const [menuAbierto, setMenuAbierto] = useState(false)
-  useEffect(() => setMenuAbierto(false), [pathname])
+  // Se guarda en qué ruta se abrió: al navegar a otra queda cerrado sin un efecto aparte.
+  const [menuAbiertoEn, setMenuAbiertoEn] = useState<string | null>(null)
+  const menuAbierto = menuAbiertoEn === pathname
   // El tipo de cambio es del personal: el cliente en su portal no lo necesita.
   const tipoCambio = useTipoCambio(sesion.esPersonal)
   const textoTipoCambio = sesion.esPersonal ? resumenTipoCambio(tipoCambio.data) : null
 
   const cerrar = () => {
     salir()
-    navigate('/login', { replace: true })
+    void navigate('/login', { replace: true })
   }
 
 
@@ -59,7 +60,7 @@ export function AppLayout() {
           className="sidebar-alternar"
           aria-expanded={menuAbierto}
           aria-controls="menu-principal"
-          onClick={() => setMenuAbierto((abierto) => !abierto)}
+          onClick={() => setMenuAbiertoEn(menuAbierto ? null : pathname)}
         >
           {menuAbierto ? 'Cerrar' : 'Menú'}
         </button>
@@ -83,7 +84,7 @@ export function AppLayout() {
       </aside>
       <div className="contenido">
         {/* Si una pantalla falla, el menú sigue a mano; al cambiar de ruta se vuelve a intentar. */}
-        <BarreraErrores alcance="pantalla" claveReinicio={pathname}>
+        <BarreraErrores alcance="pantalla" key={pathname}>
           {/* Mientras se descarga el código de la pantalla, el menú ya está a la vista. */}
           <Suspense fallback={<CargandoPantalla />}>
             <Outlet />
