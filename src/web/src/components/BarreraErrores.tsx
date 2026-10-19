@@ -1,6 +1,21 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { Button } from 'antd'
 import { useNavigate } from 'react-router'
+import { esFallaDeCarga } from '../utils/errores'
+
+function AvisoRecargar({ titulo, texto }: Readonly<{ titulo: string; texto: string }>) {
+  return (
+    <div className="pagina" role="alert">
+      <section>
+        <h2>{titulo}</h2>
+        <p className="texto-secundario">{texto}</p>
+        <Button type="primary" onClick={() => window.location.reload()} style={{ marginTop: 16 }}>
+          Recargar
+        </Button>
+      </section>
+    </div>
+  )
+}
 
 /** Botón con el estilo de enlace del tema; la barrera es una clase y no puede usar hooks. */
 function IrAlInicio() {
@@ -54,17 +69,21 @@ export class BarreraErrores extends Component<Props, Estado> {
       return this.props.children
     }
 
+    if (esFallaDeCarga(error)) {
+      return (
+        <AvisoRecargar
+          titulo="Hay una versión nueva de la plataforma"
+          texto="Recarga la página para seguir trabajando con la versión actual."
+        />
+      )
+    }
+
     if (this.props.alcance === 'aplicacion') {
       return (
-        <div className="pagina" role="alert">
-          <section>
-            <h2>La plataforma tuvo un problema</h2>
-            <p className="texto-secundario">Recarga la página. Si vuelve a pasar, avisa al equipo de sistemas.</p>
-            <Button type="primary" onClick={() => window.location.reload()} style={{ marginTop: 16 }}>
-              Recargar
-            </Button>
-          </section>
-        </div>
+        <AvisoRecargar
+          titulo="La plataforma tuvo un problema"
+          texto="Recarga la página. Si vuelve a pasar, avisa al equipo de sistemas."
+        />
       )
     }
 

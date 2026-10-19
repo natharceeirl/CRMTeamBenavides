@@ -1,32 +1,42 @@
+import { lazy, type ComponentType } from 'react'
 import { Navigate, Route, Routes } from 'react-router'
 import { RutaProtegida } from './auth/RutaProtegida'
 import { RutaConPermiso } from './auth/RutaConPermiso'
 import { ACCESO_CHATBOT, ACCESO_ORDENES, ACCESO_PORTAL, PERMISOS } from './auth/acceso'
 import { AppLayout } from './layout/AppLayout'
 import { LoginPage } from './pages/LoginPage'
-import { InicioPage } from './pages/InicioPage'
-import { SinAccesoPage } from './pages/SinAccesoPage'
-import { PortalClientePage } from './pages/PortalClientePage'
-import { OrdenesPage } from './pages/OrdenesPage'
-import { NuevaOrdenPage } from './pages/NuevaOrdenPage'
-import { OrdenDetallePage } from './pages/OrdenDetallePage'
-import { ClientesPage } from './pages/ClientesPage'
-import { ClienteDetallePage } from './pages/ClienteDetallePage'
-import { UnidadesPage } from './pages/UnidadesPage'
-import { RepuestosPage } from './pages/RepuestosPage'
-import { VentasPage } from './pages/VentasPage'
-import { ReportesPage } from './pages/ReportesPage'
-import { UsuariosPage } from './pages/UsuariosPage'
-import { ChatbotPage } from './pages/ChatbotPage'
-import { AuditoriaPage } from './pages/AuditoriaPage'
-import { CajaPage } from './pages/CajaPage'
-import { ConfiguracionPage } from './pages/ConfiguracionPage'
-import { CitasPage } from './pages/CitasPage'
-import { PedidosLimaPage } from './pages/PedidosLimaPage'
-import { AprobacionesPage } from './pages/AprobacionesPage'
-import { ComprasPage } from './pages/ComprasPage'
-import { NuevaCompraPage } from './pages/NuevaCompraPage'
-import { ImportacionesPage } from './pages/ImportacionesPage'
+
+/**
+ * Cada pantalla se descarga recién al abrirla, así la primera carga no las trae todas.
+ * Las páginas exportan con nombre y `lazy` espera un `default`.
+ */
+function pantalla<M, K extends keyof M>(importar: () => Promise<M>, nombre: K) {
+  return lazy(async () => ({ default: (await importar())[nombre] as ComponentType }))
+}
+
+const InicioPage = pantalla(() => import('./pages/InicioPage'), 'InicioPage')
+const SinAccesoPage = pantalla(() => import('./pages/SinAccesoPage'), 'SinAccesoPage')
+const PortalClientePage = pantalla(() => import('./pages/PortalClientePage'), 'PortalClientePage')
+const OrdenesPage = pantalla(() => import('./pages/OrdenesPage'), 'OrdenesPage')
+const NuevaOrdenPage = pantalla(() => import('./pages/NuevaOrdenPage'), 'NuevaOrdenPage')
+const OrdenDetallePage = pantalla(() => import('./pages/OrdenDetallePage'), 'OrdenDetallePage')
+const ClientesPage = pantalla(() => import('./pages/ClientesPage'), 'ClientesPage')
+const ClienteDetallePage = pantalla(() => import('./pages/ClienteDetallePage'), 'ClienteDetallePage')
+const UnidadesPage = pantalla(() => import('./pages/UnidadesPage'), 'UnidadesPage')
+const RepuestosPage = pantalla(() => import('./pages/RepuestosPage'), 'RepuestosPage')
+const VentasPage = pantalla(() => import('./pages/VentasPage'), 'VentasPage')
+const ReportesPage = pantalla(() => import('./pages/ReportesPage'), 'ReportesPage')
+const UsuariosPage = pantalla(() => import('./pages/UsuariosPage'), 'UsuariosPage')
+const ChatbotPage = pantalla(() => import('./pages/ChatbotPage'), 'ChatbotPage')
+const AuditoriaPage = pantalla(() => import('./pages/AuditoriaPage'), 'AuditoriaPage')
+const CajaPage = pantalla(() => import('./pages/CajaPage'), 'CajaPage')
+const ConfiguracionPage = pantalla(() => import('./pages/ConfiguracionPage'), 'ConfiguracionPage')
+const CitasPage = pantalla(() => import('./pages/CitasPage'), 'CitasPage')
+const PedidosLimaPage = pantalla(() => import('./pages/PedidosLimaPage'), 'PedidosLimaPage')
+const AprobacionesPage = pantalla(() => import('./pages/AprobacionesPage'), 'AprobacionesPage')
+const ComprasPage = pantalla(() => import('./pages/ComprasPage'), 'ComprasPage')
+const NuevaCompraPage = pantalla(() => import('./pages/NuevaCompraPage'), 'NuevaCompraPage')
+const ImportacionesPage = pantalla(() => import('./pages/ImportacionesPage'), 'ImportacionesPage')
 
 export default function App() {
   return (

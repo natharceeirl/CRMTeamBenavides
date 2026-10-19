@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { BarreraErrores } from '../components/BarreraErrores'
 import { Logo } from '../components/Logo'
@@ -9,6 +9,14 @@ import { useSesion } from '../auth/sesion'
 import { cumpleAcceso, enlaces } from '../auth/acceso'
 import { useTipoCambio } from '../api/configuracion'
 import { resumenTipoCambio } from '../utils/tipoCambio'
+
+function CargandoPantalla() {
+  return (
+    <div className="pagina" aria-busy="true">
+      <p className="texto-secundario">Cargando…</p>
+    </div>
+  )
+}
 
 export function AppLayout() {
   const sesion = useSesion()
@@ -76,7 +84,10 @@ export function AppLayout() {
       <div className="contenido">
         {/* Si una pantalla falla, el menú sigue a mano; al cambiar de ruta se vuelve a intentar. */}
         <BarreraErrores alcance="pantalla" claveReinicio={pathname}>
-          <Outlet />
+          {/* Mientras se descarga el código de la pantalla, el menú ya está a la vista. */}
+          <Suspense fallback={<CargandoPantalla />}>
+            <Outlet />
+          </Suspense>
         </BarreraErrores>
       </div>
       <ChatbotWidget />
