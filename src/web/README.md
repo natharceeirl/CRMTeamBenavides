@@ -27,6 +27,15 @@ Los contratos de la API (`Features/**/*Contracts.cs`, los records terminados en 
 - **Si la web deja de compilar** después de generar, es que el contrato cambió: hay que ajustar la pantalla, no el archivo generado.
 - El generador sigue cómo serializa la API: propiedades en camelCase; enums como número, salvo los marcados con `JsonStringEnumConverter`; `| null` donde C# admite null. En las peticiones, los campos que admiten null o tienen valor por defecto son opcionales, y las propiedades calculadas (solo `get`) no se mandan.
 
+## Pruebas
+
+- Las funciones (`*.test.ts`) corren en Node, sin navegador.
+- Las pruebas de pantallas y componentes (`*.test.tsx`) empiezan con `// @vitest-environment jsdom` y usan las ayudas de `src/test/pantalla.tsx`:
+  - `montar` pone los mismos proveedores que la app: antd, React Query, la sesión y el router;
+  - `apiFalsa` reemplaza `fetch` por respuestas en memoria y deja ver lo que se mandó. Una ruta que no está definida responde 404, así que una llamada inesperada no pasa en silencio;
+  - `usuarioConSesion` inicia una sesión con los roles y permisos que devuelve `/auth/me`.
+- Se busca por lo que ve el usuario (rol, texto, etiqueta), no por clases de antd.
+
 ## Estructura
 
 | Carpeta o archivo | Contenido |
@@ -40,6 +49,7 @@ Los contratos de la API (`Features/**/*Contracts.cs`, los records terminados en 
 | `src/api/tipos.ts` | Reexporta los generados y suma los tipos propios de la web |
 | `src/utils/series.ts` | Agrupar por día y elegir los cortes del eje de los gráficos |
 | `src/pages` | Una pantalla por ruta |
+| `src/test/pantalla.tsx` | Ayudas para probar pantallas: proveedores, API falsa y sesión |
 | `src/data/ejemplo.ts` | Resto del wireframe; solo quedan los nueve estados propuestos del mapa funcional |
 
 ## Pantallas
