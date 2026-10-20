@@ -103,7 +103,8 @@ function leerJson(texto: string): unknown {
   }
 }
 
-function mensajeDeError(estado: number, datos: unknown): string {
+/** El motivo que manda la API, si lo manda. */
+function detalleDelError(datos: unknown): string | null {
   // La mayoría de endpoints responde { error }; caja chica y configuración, { mensaje }.
   if (datos && typeof datos === 'object') {
     for (const clave of ['error', 'mensaje'] as const) {
@@ -113,6 +114,12 @@ function mensajeDeError(estado: number, datos: unknown): string {
       }
     }
   }
+  return null
+}
+
+function mensajeDeError(estado: number, datos: unknown): string {
+  const detalle = detalleDelError(datos)
+  if (detalle) return detalle
 
   if (estado === 401) return 'La sesión expiró. Vuelve a iniciar sesión.'
   if (estado === 403) return 'No tienes permiso para esta operación.'
@@ -273,8 +280,14 @@ export async function iniciarSesion(datos: SolicitudLogin): Promise<Sesion> {
     throw new ErrorApi(0, 'No se pudo conectar con el servidor. ¿Está levantada la API?')
   }
 
-  if (respuesta.status === 401) {
-    throw new ErrorApi(401, 'Correo o contraseña incorrectos.')
+  // La API dice el motivo: credenciales, con el aviso del bloqueo, o demasiados intentos desde esta conexión.
+  if (respuesta.status === 401 || respuesta.status === 429) {
+    const detalle = detalleDelError(leerJson(await respuesta.text()))
+    const respaldo =
+      respuesta.status === 401
+        ? 'Correo o contraseña incorrectos.'
+        : 'Demasiados intentos de inicio de sesión. Espera un minuto y vuelve a intentar.'
+    throw new ErrorApi(respuesta.status, detalle ?? respaldo)
   }
   if (!respuesta.ok) {
     throw new ErrorApi(respuesta.status, 'No se pudo iniciar sesión.')

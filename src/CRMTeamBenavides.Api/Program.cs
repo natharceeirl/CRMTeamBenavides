@@ -41,6 +41,7 @@ using CRMTeamBenavides.Api.Middleware;
 using CRMTeamBenavides.Domain.Entities;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -48,6 +49,12 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// El comando crear-gerencia pregunta por la terminal: sin el detalle de cada consulta de EF entre las preguntas.
+if (ComandoGerencia.EsComando(args))
+{
+    builder.Logging.AddFilter((_, nivel) => nivel >= LogLevel.Warning);
+}
 
 const string CorsPolicyName = "AllowConfiguredOrigins";
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
@@ -91,7 +98,17 @@ builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
         .UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
         .AddInterceptors(sp.GetRequiredService<NotificacionesInterceptor>()));
 
-builder.Services.AddDataProtection();
+// Hoy solo firman el token de restablecer contraseña, que se usa en la misma petición.
+// En Docker la carpeta es un volumen, para que las llaves sigan después de reiniciar.
+var dataProtection = builder.Services.AddDataProtection().SetApplicationName("CRMTeamBenavides");
+var rutaLlaves = builder.Configuration["DataProtection:RutaLlaves"];
+if (!string.IsNullOrWhiteSpace(rutaLlaves))
+{
+    dataProtection.PersistKeysToFileSystem(new DirectoryInfo(rutaLlaves));
+}
+
+builder.Services.AddProxyInverso(builder.Configuration);
+builder.Services.AddLimiteLogin();
 
 builder.Services
     .AddIdentityCore<Usuario>(options =>
@@ -101,6 +118,7 @@ builder.Services
         options.Password.RequireUppercase = false;
         options.Password.RequireNonAlphanumeric = false;
         options.Password.RequiredLength = 6;
+        SeguridadLogin.ConfigurarBloqueo(options.Lockout);
     })
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddSignInManager()
@@ -218,6 +236,7 @@ builder.Services.AddScoped<IAprobacionService, AprobacionService>();
 builder.Services.AddScoped<IProveedorService, ProveedorService>();
 builder.Services.AddScoped<ICompraService, CompraService>();
 builder.Services.AddScoped<INotificacionService, NotificacionService>();
+builder.Services.AddScoped<GerenciaInicialService>();
 
 // ---------------------------------------------------------------------------
 // Yamaha API — infraestructura del conector
@@ -258,6 +277,8 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
+// Primero: lo que sigue tiene que ver el HTTPS y la IP real que reenvía Caddy.
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 
 // Configure the HTTP request pipeline and initial seeding.
@@ -275,8 +296,16 @@ using (var seedScope = app.Services.CreateScope())
     }
 }
 
+// Con los roles ya sembrados, el comando hace lo suyo y termina sin levantar el servidor.
+if (ComandoGerencia.EsComando(args))
+{
+    Environment.ExitCode = await ComandoGerencia.EjecutarAsync(app.Services, args);
+    return;
+}
+
 app.UseHttpsRedirection();
 app.UseCors(CorsPolicyName);
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();

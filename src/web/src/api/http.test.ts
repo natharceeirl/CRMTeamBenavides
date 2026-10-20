@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ErrorApi, guardarSesion, sesionActual, solicitar } from './http'
+import { ErrorApi, guardarSesion, iniciarSesion, sesionActual, solicitar } from './http'
 import type { Sesion } from './http'
 
 const enUnaHora = () => new Date(Date.now() + 60 * 60 * 1000).toISOString()
@@ -154,5 +154,30 @@ describe('solicitar', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 204 })))
 
     await expect(solicitar('/clientes/1', { metodo: 'DELETE' })).resolves.toBeUndefined()
+  })
+})
+
+describe('iniciarSesion', () => {
+  const credenciales = { email: 'tecnico@teambenavides.pe', password: 'no-es-la-clave' }
+
+  it('muestra el mensaje de la API, que avisa del bloqueo por intentos fallidos', async () => {
+    const mensaje = 'Correo o contraseña incorrectos. Después de 5 intentos fallidos la cuenta se bloquea 15 minutos.'
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(respuesta({ error: mensaje }, 401)))
+
+    await expect(iniciarSesion(credenciales)).rejects.toMatchObject({ estado: 401, message: mensaje })
+    expect(sesionActual()).toBeNull()
+  })
+
+  it('un 401 sin cuerpo sigue diciendo que el correo o la contraseña no coinciden', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(respuesta(null, 401)))
+
+    await expect(iniciarSesion(credenciales)).rejects.toMatchObject({ message: 'Correo o contraseña incorrectos.' })
+  })
+
+  it('con demasiados intentos desde la misma conexión dice que espere', async () => {
+    const mensaje = 'Demasiados intentos de inicio de sesión desde esta conexión. Espera un minuto y vuelve a intentar.'
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(respuesta({ error: mensaje }, 429)))
+
+    await expect(iniciarSesion(credenciales)).rejects.toMatchObject({ estado: 429, message: mensaje })
   })
 })

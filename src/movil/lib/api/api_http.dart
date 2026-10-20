@@ -59,8 +59,10 @@ class ApiHttp {
       await _guardar(sesion);
       return sesion;
     } on DioException catch (fallo) {
+      // La API dice el motivo: credenciales, con el aviso del bloqueo, o
+      // demasiados intentos desde esta conexión (429, que _mensajeDeError ya lee).
       if (fallo.response?.statusCode == 401) {
-        throw ErrorApi('Correo o contraseña incorrectos.', 401);
+        throw ErrorApi(_detalleDelError(fallo) ?? 'Correo o contraseña incorrectos.', 401);
       }
       throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
     }
@@ -659,7 +661,8 @@ class ApiHttp {
     }
   }
 
-  String _mensajeDeError(DioException fallo) {
+  /// El motivo que manda la API, si lo manda.
+  String? _detalleDelError(DioException fallo) {
     // Unos módulos responden { error }, otros (citas, pedidos) { mensaje }.
     final cuerpo = fallo.response?.data;
     if (cuerpo is Map) {
@@ -670,6 +673,12 @@ class ApiHttp {
         }
       }
     }
+    return null;
+  }
+
+  String _mensajeDeError(DioException fallo) {
+    final detalle = _detalleDelError(fallo);
+    if (detalle != null) return detalle;
 
     final estado = fallo.response?.statusCode;
     if (estado == 401) return 'La sesión expiró. Vuelve a iniciar sesión.';

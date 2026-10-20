@@ -203,6 +203,7 @@ De lo pedido el 15/09, la matriz de roles y el flujo de estados quedaron resuelt
 - Resumen de cambios de la reunión del 25/09: [docs/resumen-cambios-reunion.md](docs/resumen-cambios-reunion.md).
 - Reglas del módulo de compras: [docs/modulo-compras.md](docs/modulo-compras.md).
 - Notificaciones: [docs/notificaciones.md](docs/notificaciones.md).
+- Despliegue: [docs/despliegue.md](docs/despliegue.md). Incluye el comando `crear-gerencia` para el primer usuario de Gerencia y los límites del login.
 - Referencia visual del portal del cliente: [docs/referencias/app-cliente.html](docs/referencias/app-cliente.html). Versión publicada: https://claude.ai/artifact/JqzMRP5fjiEZXdRDvFmjDL
 - Documento técnico: `Team_Benavides_Resumen Técnico.pdf` (no está en el repositorio).
 - Guía día a día original, con el Go Live del 02/10: `guia.pdf` (no está en el repositorio). La reemplaza el plan de implementación.

@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using CRMTeamBenavides.Api.Configuration;
 using CRMTeamBenavides.Api.Services;
 
 namespace CRMTeamBenavides.Api.Features.Auth;
@@ -15,10 +16,12 @@ public static class AuthEndpoints
             var ipAddress = httpContext.Connection.RemoteIpAddress?.ToString();
             var result = await authService.LoginAsync(request, ipAddress);
 
+            // El mensaje avisa del bloqueo por intentos fallidos sin decir si la cuenta existe.
             return result.IsSuccess
                 ? Results.Ok(result.Data)
-                : Results.Unauthorized();
+                : Results.Json(new { error = SeguridadLogin.MensajeCredencialesInvalidas }, statusCode: StatusCodes.Status401Unauthorized);
         })
+        .RequireRateLimiting(SeguridadLogin.PoliticaPorIp)
         .WithName("Login");
 
         group.MapPost("/refresh", async (RefreshRequest request, IAuthService authService, HttpContext httpContext) =>

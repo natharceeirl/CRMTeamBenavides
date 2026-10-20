@@ -55,10 +55,23 @@ public class AuthService : IAuthService
             return AuthResult<LoginResponse>.Failure(AuthResultStatus.InvalidCredentials);
         }
 
+        // Una cuenta bloqueada responde igual, aunque la contraseña sea la correcta.
+        if (await _userManager.IsLockedOutAsync(usuario))
+        {
+            return AuthResult<LoginResponse>.Failure(AuthResultStatus.InvalidCredentials);
+        }
+
         var passwordValid = await _userManager.CheckPasswordAsync(usuario, request.Password);
         if (!passwordValid)
         {
+            // Identity cuenta el fallo y, al llegar al límite, bloquea la cuenta y pone el contador en cero.
+            await _userManager.AccessFailedAsync(usuario);
             return AuthResult<LoginResponse>.Failure(AuthResultStatus.InvalidCredentials);
+        }
+
+        if (await _userManager.GetAccessFailedCountAsync(usuario) > 0)
+        {
+            await _userManager.ResetAccessFailedCountAsync(usuario);
         }
 
         var response = await IssueTokensAsync(usuario, ipAddress);
@@ -261,6 +274,10 @@ public class AuthService : IAuthService
             var errores = string.Join("; ", result.Errors.Select(e => e.Description));
             return ServiceResult<bool>.Invalid(errores);
         }
+
+        // Quien restablece la contraseña también desbloquea la cuenta: no hay que esperar a que venza.
+        await _userManager.SetLockoutEndDateAsync(usuario, null);
+        await _userManager.ResetAccessFailedCountAsync(usuario);
 
         return ServiceResult<bool>.Success(true);
     }
