@@ -1,0 +1,4 @@
+# Lo que corre en el servidor Linux va siempre con LF, también en una copia de Windows,
+# por si se copia al servidor desde una PC.
+despliegue/** text eol=lf
+.dockerignore text eol=lf

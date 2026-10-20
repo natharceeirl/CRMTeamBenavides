@@ -1,0 +1,16 @@
+# syntax=docker/dockerfile:1
+
+# La web compilada, servida por Caddy, que además recibe el HTTPS y reenvía /api a
+# la API. Se construye desde la raíz del repositorio (ver docker-compose.yml).
+
+# Debian y no Alpine: TypeScript 7 y Vite traen binarios para glibc.
+FROM node:24-slim AS compilacion
+WORKDIR /web
+COPY src/web/package.json src/web/package-lock.json ./
+RUN npm ci
+COPY src/web/ ./
+RUN npm run build
+
+FROM caddy:2 AS web
+COPY despliegue/Caddyfile /etc/caddy/Caddyfile
+COPY --from=compilacion /web/dist /srv

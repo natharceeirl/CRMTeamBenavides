@@ -1,0 +1,97 @@
+# La plataforma en un servidor: Caddy (HTTPS y la web), la API y PostgreSQL.
+# Solo Caddy queda expuesto; la API y la base se ven por la red interna.
+#
+#   cp .env.ejemplo .env      # y completarlo
+#   docker compose up -d --build
+#
+# Paso a paso, migraciones y primer usuario: docs/despliegue.md.
+
+name: crm-team-benavides
+
+# Docker guarda los logs de cada contenedor sin límite: se rotan para no llenar el disco.
+x-registro: &registro
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-crm_teambenavides}
+      POSTGRES_USER: ${POSTGRES_USER:-crm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env}
+    volumes:
+      # Desde PostgreSQL 18 la imagen guarda los datos dentro de /var/lib/postgresql/18.
+      - base:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [interna]
+    logging: *registro
+
+  api:
+    build:
+      context: ..
+      dockerfile: despliegue/Dockerfile.api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # Sin cifrado GSS (Kerberos): la base está en la red interna, entra con contraseña, y la
+      # imagen no trae la librería; si no, Npgsql avisa en cada conexión que no la encuentra.
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=${POSTGRES_DB:-crm_teambenavides};Username=${POSTGRES_USER:-crm};Password=${POSTGRES_PASSWORD};Gss Encryption Mode=Disable
+      JwtSettings__SecretKey: ${JWT_SECRET_KEY:?Falta JWT_SECRET_KEY en .env}
+      # Solo desde la red interna (Caddy) se aceptan X-Forwarded-For y X-Forwarded-Proto.
+      Proxy__RedesConfiables__0: ${RED_INTERNA:-172.30.0.0/24}
+      Notificaciones__Proveedor: ${NOTIFICACIONES_PROVEEDOR:-Registro}
+      Notificaciones__Firebase__CredencialesJson: ${FIREBASE_CREDENCIALES_JSON:-}
+      # Yamaha sigue apagado hasta tener credenciales y autorización para enviar.
+      YamahaApi__Enabled: "false"
+      # Sin cada consulta SQL en el log.
+      Logging__LogLevel__Microsoft.EntityFrameworkCore: Warning
+    volumes:
+      # Fotos de las órdenes y llaves de Data Protection.
+      - datos-api:/datos
+    networks: [interna]
+    logging: *registro
+
+  caddy:
+    build:
+      context: ..
+      dockerfile: despliegue/Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      DOMINIO: ${DOMINIO:?Falta DOMINIO en .env}
+      HSTS_SEGUNDOS: ${HSTS_SEGUNDOS:-0}
+    ports:
+      - "${PUERTO_HTTP:-80}:80"
+      - "${PUERTO_HTTPS:-443}:443"
+      - "${PUERTO_HTTPS:-443}:443/udp"
+    volumes:
+      # Certificados de Let's Encrypt: si se pierden, Caddy los vuelve a pedir.
+      - caddy-datos:/data
+      - caddy-config:/config
+    networks: [interna]
+    logging: *registro
+
+networks:
+  interna:
+    ipam:
+      config:
+        - subnet: ${RED_INTERNA:-172.30.0.0/24}
+
+volumes:
+  base:
+  datos-api:
+  caddy-datos:
+  caddy-config:

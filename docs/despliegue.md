@@ -1,27 +1,98 @@
 # Despliegue
 
-Lo que la API necesita para correr en un servidor. Por ahora cubre la base nueva, el primer usuario de Gerencia, los límites del login y la configuración de producción. Los archivos de Docker, Caddy y las copias diarias se agregan en el paso siguiente.
+La plataforma corre en un solo servidor con Docker: Caddy recibe el HTTPS y sirve la web, la API atiende `/api` y PostgreSQL guarda los datos. Los archivos están en [despliegue/](../despliegue). Las copias diarias de la base se agregan en el paso siguiente.
 
-## Base nueva, paso a paso
+| Archivo | Qué es |
+|---|---|
+| `despliegue/docker-compose.yml` | Los tres contenedores, sus volúmenes y la red interna. Solo Caddy publica puertos. |
+| `despliegue/Dockerfile.api` | La API compilada. Tiene además una etapa que genera el script de migraciones. |
+| `despliegue/Dockerfile.web` | La web compilada dentro de la imagen de Caddy. |
+| `despliegue/Caddyfile` | HTTPS automático, `/api` hacia la API y el resto, la web. |
+| `despliegue/.env.ejemplo` | Las variables del servidor, sin valores. Se copia como `.env`, que no se sube al repositorio. |
 
-1. Crear la base vacía en PostgreSQL.
-2. Generar el script de migraciones, revisarlo y aplicarlo. La API no migra sola al arrancar.
+## Primera vez en un servidor
+
+Hace falta un servidor Linux con Docker, el DNS del dominio apuntando a él y los puertos 80 y 443 abiertos. Los comandos se corren en `despliegue/`, salvo el del paso 3.
+
+1. Copiar el repositorio al servidor y crear el `.env`:
 
    ```
-   dotnet ef migrations script --idempotent --project src/CRMTeamBenavides.Api --output migraciones.sql
-   psql -v ON_ERROR_STOP=1 -f migraciones.sql <base>
+   cp .env.ejemplo .env
    ```
 
-   El script se puede volver a correr: solo aplica las migraciones que faltan. Se probó el 19/10 en una base vacía: aplicó las 21 migraciones y la segunda corrida no cambió nada.
-3. Crear el primer usuario de Gerencia (sección siguiente).
-4. Levantar la API con la configuración de producción.
+   Completar `DOMINIO`, `POSTGRES_PASSWORD` y `JWT_SECRET_KEY`. Las claves se generan con `openssl rand -hex 32` y `openssl rand -hex 48`.
+2. Levantar solo la base:
+
+   ```
+   docker compose up -d db
+   ```
+
+3. Generar el script de migraciones desde la raíz del repositorio y revisarlo. La API no migra sola al arrancar.
+
+   ```
+   docker build -f despliegue/Dockerfile.api --target migraciones --output despliegue/migraciones .
+   ```
+
+4. Aplicarlo. El script se puede volver a correr: solo aplica las migraciones que faltan.
+
+   ```
+   docker compose exec -T db psql -U crm -d crm_teambenavides -v ON_ERROR_STOP=1 < migraciones/migraciones.sql
+   ```
+
+5. Crear el primer usuario de Gerencia (sección siguiente):
+
+   ```
+   docker compose run --rm api crear-gerencia
+   ```
+
+6. Levantar todo:
+
+   ```
+   docker compose up -d --build
+   ```
+
+   `docker compose ps` tiene que mostrar los tres contenedores en `healthy` o `running`. La primera vez Caddy tarda unos segundos en obtener el certificado.
+
+   Al arrancar, la API deja dos avisos que no son errores:
+   - las llaves de Data Protection se guardan sin cifrar, lo que en un volumen del servidor es aceptable;
+   - no encuentra un puerto HTTPS para redirigir. Lo provoca el chequeo de salud interno, que entra por HTTP; detrás de Caddy la API ya ve HTTPS.
+
+## Actualizar
+
+1. `git pull` en el servidor.
+2. Generar el script de migraciones (paso 3) y aplicarlo si trae migraciones nuevas, siempre con una copia de la base hecha antes.
+3. `docker compose up -d --build`. Se reconstruyen la API y la web; la base y los volúmenes no se tocan.
+
+Los logs se ven con `docker compose logs -f api` o `caddy`. Docker los rota: guarda cinco archivos de 10 MB por contenedor.
+
+## Ensayar en una PC
+
+Con Docker Desktop, el mismo paquete corre en Windows:
+
+- En el `.env`: `DOMINIO=localhost`, `HSTS_SEGUNDOS=0`, `PUERTO_HTTP=8080` y `PUERTO_HTTPS=8443`.
+- Se entra por https://localhost:8443. El certificado lo emite Caddy y el navegador avisa que no lo conoce.
+- El paso 4 usa `<`, que PowerShell no tiene: correrlo en Git Bash.
+- `docker compose down -v` borra todo, incluida la base.
+
+Se ensayó así el 20/10, siguiendo los pasos de arriba:
+- las imágenes se construyeron sin errores;
+- el script aplicó las 21 migraciones y una segunda corrida no cambió nada;
+- `crear-gerencia` creó la cuenta y rechazó una segunda.
+
+Con todo levantado:
+- las 17 pantallas del menú cargaron sin errores;
+- la API guardó la IP del usuario y no la de Caddy;
+- el intento 11 del minuto recibió un 429;
+- las llaves y las fotos siguieron ahí después de reiniciar la API;
+- la plantilla de Excel se generó bien en Linux.
 
 ## Primer usuario de Gerencia
 
 En producción la base nace sin usuarios: el usuario de desarrollo (`DevelopmentUser`) solo se crea en el entorno Development. El primero se crea con un comando de la misma API, sin levantar el servidor web:
 
 ```
-dotnet CRMTeamBenavides.Api.dll crear-gerencia
+docker compose run --rm api crear-gerencia                # con Docker
+dotnet CRMTeamBenavides.Api.dll crear-gerencia            # sin Docker
 ```
 
 - Pide correo, nombre completo y la contraseña dos veces. La contraseña no se muestra, así que no queda en el historial ni en variables.
@@ -33,7 +104,7 @@ dotnet CRMTeamBenavides.Api.dll crear-gerencia
 No hay recuperación por correo, y solo Gerencia restablece contraseñas. Si la única cuenta de Gerencia pierde la suya:
 
 ```
-dotnet CRMTeamBenavides.Api.dll crear-gerencia --restablecer
+docker compose run --rm api crear-gerencia --restablecer
 ```
 
 Cambia la contraseña de un usuario de Gerencia activo, le quita el bloqueo por intentos fallidos y cierra sus sesiones abiertas. Al resto de usuarios Gerencia les restablece la contraseña desde Usuarios, y eso también les quita el bloqueo.
@@ -47,15 +118,21 @@ Cambia la contraseña de un usuario de Gerencia activo, le quita el bloqueo por 
 
 Los valores están en `Configuration/SeguridadLogin.cs`. Todo el taller sale a internet por la misma IP: si 10 por minuto se queda corto, se sube ahí.
 
-## Configuración de producción
+## Configuración de la API
 
-Va en variables de entorno, nunca en `appsettings.json`. En las variables, `__` reemplaza a `:`.
+En Docker, `docker-compose.yml` arma estas variables a partir del `.env`. Sin Docker van igual en variables de entorno, nunca en `appsettings.json`. En las variables, `__` reemplaza a `:`.
 
 | Variable | Para qué |
 |---|---|
 | `ConnectionStrings__DefaultConnection` | La base de datos |
 | `JwtSettings__SecretKey` | Firma de los tokens: al menos 32 caracteres al azar |
-| `Proxy__RedesConfiables__0` | La red desde la que Caddy reenvía las peticiones, en notación CIDR (por ejemplo, la red de Docker). Sin esto la API no ve la IP real ni el HTTPS, y el límite por IP bloquearía a todos a la vez. De otras redes no se aceptan los encabezados `X-Forwarded-*`. |
+| `Proxy__RedesConfiables__0` | La red desde la que Caddy reenvía las peticiones, en notación CIDR. Sin esto la API no ve la IP real ni el HTTPS, y el límite por IP bloquearía a todos a la vez. De otras redes no se aceptan los encabezados `X-Forwarded-*`. |
 | `DataProtection__RutaLlaves` | Carpeta, en un volumen, donde se guardan las llaves de Data Protection para que sigan después de reiniciar. Al arrancar, la API avisa que se guardan sin cifrar; en un volumen del servidor es aceptable. |
+| `Almacenamiento__RutaBase` | Carpeta de las fotos de las órdenes, también en un volumen |
 | `Notificaciones__*` | Avisos al teléfono por Firebase: ver [notificaciones.md](notificaciones.md) |
 | `YamahaApi__Enabled` | Queda en `false` hasta tener las credenciales y la autorización para enviar a Yamaha |
+
+## Pendiente
+
+- **Copias diarias de la base** y una restauración probada.
+- **Ambiente de pruebas en el mismo servidor:** otra API y otra base con otro nombre de proyecto, y un segundo dominio en el mismo Caddy.

@@ -1,0 +1,40 @@
+# syntax=docker/dockerfile:1
+
+# La API: se compila con el SDK y corre con el runtime de ASP.NET. Se construye desde
+# la raíz del repositorio; docker compose lo hace solo (ver docker-compose.yml).
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS compilacion
+WORKDIR /fuente
+COPY src/CRMTeamBenavides.Api/CRMTeamBenavides.Api.csproj src/CRMTeamBenavides.Api/
+RUN dotnet restore src/CRMTeamBenavides.Api/CRMTeamBenavides.Api.csproj
+COPY src/CRMTeamBenavides.Api/ src/CRMTeamBenavides.Api/
+RUN dotnet publish src/CRMTeamBenavides.Api/CRMTeamBenavides.Api.csproj \
+      --configuration Release --no-restore --output /publicado /p:UseAppHost=false
+
+# El script de migraciones del mismo código que se despliega. La API no migra sola:
+# el script se revisa y se aplica a mano (ver docs/despliegue.md).
+#   docker build -f despliegue/Dockerfile.api --target migraciones --output despliegue/migraciones .
+FROM compilacion AS script-migraciones
+RUN dotnet tool install --global dotnet-ef --version 10.0.12
+ENV PATH="${PATH}:/root/.dotnet/tools"
+RUN dotnet ef migrations script --idempotent --no-build --configuration Release \
+      --project src/CRMTeamBenavides.Api --output /salida/migraciones.sql
+
+FROM scratch AS migraciones
+COPY --from=script-migraciones /salida/migraciones.sql /
+
+# La imagen que se despliega: la última, la que construye docker compose.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS api
+WORKDIR /app
+# Fotos de las órdenes y llaves de Data Protection van en un volumen montado en /datos.
+# La API corre con el usuario sin privilegios de la imagen (app), dueño de esa carpeta.
+RUN mkdir -p /datos/fotos /datos/llaves && chown -R app:app /datos
+COPY --from=compilacion /publicado .
+USER app
+ENV Almacenamiento__RutaBase=/datos/fotos \
+    DataProtection__RutaLlaves=/datos/llaves
+EXPOSE 8080
+# La imagen no trae curl: /health se pide con bash. Responde «Healthy» si llega a la base.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=3 \
+  CMD bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf "GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 && grep -q Healthy <&3'
+ENTRYPOINT ["dotnet", "CRMTeamBenavides.Api.dll"]

@@ -1,0 +1,16 @@
+# Las imágenes se construyen desde la raíz (ver despliegue/). Esto no entra al contexto.
+.git
+.vs
+.claude
+**/bin
+**/obj
+**/node_modules
+**/uploads
+src/web/dist
+src/web/vercel.json
+src/movil
+tests
+tools
+docs
+despliegue/.env
+despliegue/migraciones
