@@ -1024,10 +1024,35 @@ public class YamahaPostgresIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Test6D_ProcesoTerminaInesperadamente_PostgreSqlLiberaBloqueo_YPermiteContinuar()
     {
-        // ARRANGE:
+        // ARRANGE: un producto Yamaha, como en 6C. Sin él el lote de Stock sale vacío y el
+        // resultado correcto es SinCambios, no Exitoso; la prueba pasaba solo en bases que
+        // conservaban productos de corridas anteriores.
         await using (var dbSeed = _fixture.CreateDbContext())
         {
             await AsegurarConfiguracionEmpresaAsync(dbSeed);
+
+            var categoria = new CategoriaProducto
+            {
+                Id = Guid.NewGuid(),
+                Nombre = "Repuestos Yamaha",
+                Activo = true
+            };
+            dbSeed.CategoriasProducto.Add(categoria);
+
+            dbSeed.Productos.Add(new Producto
+            {
+                Id = Guid.NewGuid(),
+                CategoriaId = categoria.Id,
+                Codigo = "2DP-E4451-00",
+                Nombre = "Filtro de Aire NMAX",
+                Marca = "YAMAHA",
+                StockActual = 15,
+                Costo = 45.00m,
+                PrecioVenta = 65.00m,
+                Activo = true
+            });
+
+            await dbSeed.SaveChangesAsync();
         }
 
         var settings = new YamahaSettings
