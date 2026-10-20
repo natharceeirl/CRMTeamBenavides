@@ -205,6 +205,7 @@ builder.Services.AddScoped<IYamahaStockExporter, YamahaStockExporter>();
 builder.Services.AddScoped<IYamahaVentasExporter, YamahaVentasExporter>();
 builder.Services.AddScoped<IYamahaServicioTecnicoExporter, YamahaServicioTecnicoExporter>();
 builder.Services.AddScoped<IYamahaWatermarkService, YamahaWatermarkService>();
+builder.Services.AddScoped<IYamahaDistributedLock, PostgreSqlYamahaDistributedLock>();
 builder.Services.AddScoped<IYamahaSyncOrchestrator, YamahaSyncOrchestrator>();
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddHostedService<YamahaSyncBackgroundService>();

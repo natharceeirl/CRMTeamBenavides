@@ -44,6 +44,7 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
     private readonly IYamahaApiClient _apiClient;
     private readonly YamahaSettings _settings;
     private readonly ILogger<YamahaSyncOrchestrator> _logger;
+    private readonly IYamahaDistributedLock? _distributedLock;
 
     public YamahaSyncOrchestrator(
         ApplicationDbContext context,
@@ -53,7 +54,8 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
         IYamahaWatermarkService watermarkService,
         IYamahaApiClient apiClient,
         IOptions<YamahaSettings> settings,
-        ILogger<YamahaSyncOrchestrator> logger)
+        ILogger<YamahaSyncOrchestrator> logger,
+        IYamahaDistributedLock? distributedLock = null)
     {
         _context = context;
         _ventasExporter = ventasExporter;
@@ -63,6 +65,7 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
         _apiClient = apiClient;
         _settings = settings.Value;
         _logger = logger;
+        _distributedLock = distributedLock;
     }
 
     /// <inheritdoc />
@@ -81,25 +84,23 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
 
         if (!await semaphore.WaitAsync(tiempoEspera, cancellationToken))
         {
-            _logger.LogWarning("Se intentó sincronizar [{Servicio}], pero ya existe otra sincronización activa para este servicio.", servicio);
-            return new YamahaSyncEjecucionResultado(
-                SyncLogId: Guid.Empty,
-                Servicio: servicio,
-                Exitoso: false,
-                EsSimulacion: esSimulacion,
-                TotalLeidos: 0,
-                TotalValidos: 0,
-                TotalRechazados: 0,
-                PayloadHash: null,
-                CodigoHttp: null,
-                Mensaje: $"Ya existe una sincronización en curso para el servicio {servicio}. Se omitió la ejecución para evitar solapamiento.",
-                ErroresOAdvertencias: new[] { $"Concurrencia detectada en servicio {servicio}." },
-                Duracion: TimeSpan.Zero,
-                Resultado: YamahaResultadoSincronizacion.OmitidoPorConcurrencia);
+            _logger.LogWarning("Se intentó sincronizar [{Servicio}], pero ya existe otra sincronización activa para este servicio en este proceso.", servicio);
+            return CrearResultadoConcurrencia(servicio, esSimulacion);
         }
 
+        IAsyncDisposable? lockDistribuido = null;
         try
         {
+            if (_distributedLock is not null)
+            {
+                lockDistribuido = await _distributedLock.IntentarAdquirirBloqueoAsync(servicio, tiempoEspera, cancellationToken);
+                if (lockDistribuido is null)
+                {
+                    _logger.LogWarning("Se intentó sincronizar [{Servicio}], pero otra instancia del backend mantiene el bloqueo distribuido en PostgreSQL.", servicio);
+                    return CrearResultadoConcurrencia(servicio, esSimulacion);
+                }
+            }
+
             var stopwatch = Stopwatch.StartNew();
 
             // El rango se cierra un margen antes de "ahora" para que las transacciones con fecha justo
@@ -464,6 +465,10 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
         }
         finally
         {
+            if (lockDistribuido is not null)
+            {
+                await lockDistribuido.DisposeAsync();
+            }
             semaphore.Release();
         }
     }
@@ -538,8 +543,19 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
             return 0;
         }
 
+        var logsARecuperar = new List<YamahaSyncLog>();
         foreach (var log in logsAbandonados)
         {
+            if (_distributedLock is not null && await _distributedLock.EstaBloqueadoAsync(log.Servicio, cancellationToken))
+            {
+                _logger.LogWarning(
+                    "El log {SyncLogId} de [{Servicio}] supera el umbral de {Minutos} min pero su sesión mantiene un bloqueo activo en PostgreSQL. No se marcará como abandonado.",
+                    log.Id,
+                    log.Servicio,
+                    minutosExpiracion);
+                continue;
+            }
+
             log.RegistrarFallo(
                 mensajeError: $"Ejecucion interrumpida o abandonada. Supero el tiempo limite de expiracion de {minutosExpiracion} minutos (iniciada {log.FechaInicio:u}). Marcada como fallida automaticamente para permitir reintentos seguros.",
                 codigoHttp: null,
@@ -547,15 +563,40 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                 procesados: log.RegistrosProcesados,
                 validos: 0,
                 rechazados: log.RegistrosRechazados);
+
+            logsARecuperar.Add(log);
+        }
+
+        if (logsARecuperar.Count == 0)
+        {
+            return 0;
         }
 
         await _context.SaveChangesAsync(cancellationToken);
 
         _logger.LogWarning(
             "Se recuperaron {Count} ejecuciones de YamahaSyncLog abandonadas en estado 'EnProceso' anteriores a {UmbralUtc:u}.",
-            logsAbandonados.Count,
+            logsARecuperar.Count,
             umbralUtc);
 
-        return logsAbandonados.Count;
+        return logsARecuperar.Count;
     }
+
+    private static YamahaSyncEjecucionResultado CrearResultadoConcurrencia(
+        YamahaServicioSincronizacion servicio,
+        bool esSimulacion) =>
+        new(
+            SyncLogId: Guid.Empty,
+            Servicio: servicio,
+            Exitoso: false,
+            EsSimulacion: esSimulacion,
+            TotalLeidos: 0,
+            TotalValidos: 0,
+            TotalRechazados: 0,
+            PayloadHash: null,
+            CodigoHttp: null,
+            Mensaje: $"Ya existe una sincronización en curso para el servicio {servicio}. Se omitió la ejecución para evitar solapamiento.",
+            ErroresOAdvertencias: new[] { $"Concurrencia detectada en servicio {servicio}." },
+            Duracion: TimeSpan.Zero,
+            Resultado: YamahaResultadoSincronizacion.OmitidoPorConcurrencia);
 }
