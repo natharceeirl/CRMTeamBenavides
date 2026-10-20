@@ -14,3 +14,4 @@ tools
 docs
 despliegue/.env
 despliegue/migraciones
+despliegue/respaldos

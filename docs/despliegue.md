@@ -65,6 +65,41 @@ Hace falta un servidor Linux con Docker, el DNS del dominio apuntando a él y lo
 
 Los logs se ven con `docker compose logs -f api` o `caddy`. Docker los rota: guarda cinco archivos de 10 MB por contenedor.
 
+## Copias de la base
+
+El contenedor `respaldo` hace una copia diaria con `pg_dump` a la hora `HORA_RESPALDO` de Perú (03:00 por defecto). La guarda en `despliegue/respaldos/` y borra las de más de `RETENCION_DIAS` días (14 por defecto). Al arrancar hace una copia si no hay ninguna de las últimas 24 horas.
+
+- Cada copia se comprueba con `pg_restore --list` antes de darla por buena; una copia cortada a la mitad nunca queda con nombre de copia buena.
+- Si una copia falla, se reintenta en una hora. `docker compose ps` muestra `respaldo` como `unhealthy` si la última copia tiene más de 26 horas.
+- Una copia ya, por ejemplo antes de actualizar:
+
+  ```
+  docker compose exec respaldo sh /respaldo.sh ahora
+  ```
+
+### Restaurar una copia
+
+Reemplaza la base entera por la copia elegida. Antes guarda la base como está, en `respaldos/antes-de-restaurar-*.dump`, por si la copia no era la correcta. Esas copias no se borran solas.
+
+```
+docker compose stop api
+docker compose exec respaldo sh /respaldo.sh restaurar /respaldos/crm-AAAAMMDD-HHMM.dump
+docker compose start api
+```
+
+Si la API sigue conectada a la base, el script no hace nada y lo avisa.
+
+La copia también se puede restaurar fuera de Docker, en cualquier PostgreSQL 18:
+
+```
+createdb <base>
+pg_restore --no-owner --no-privileges --exit-on-error -d <base> crm-AAAAMMDD-HHMM.dump
+```
+
+### Fuera del servidor
+
+Una copia que vive solo en el servidor se pierde con él. Falta llevar `despliegue/respaldos/` a otro lugar cada día: el plan es Cloudflare R2, cuando haya cuenta. Mientras tanto, se pueden copiar a mano con `scp`.
+
 ## Ensayar en una PC
 
 Con Docker Desktop, el mismo paquete corre en Windows:
@@ -72,7 +107,7 @@ Con Docker Desktop, el mismo paquete corre en Windows:
 - En el `.env`: `DOMINIO=localhost`, `HSTS_SEGUNDOS=0`, `PUERTO_HTTP=8080` y `PUERTO_HTTPS=8443`.
 - Se entra por https://localhost:8443. El certificado lo emite Caddy y el navegador avisa que no lo conoce.
 - El paso 4 usa `<`, que PowerShell no tiene: correrlo en Git Bash.
-- `docker compose down -v` borra todo, incluida la base.
+- `docker compose down -v` borra todo, incluida la base. Las copias de `despliegue/respaldos/` quedan en la PC y se borran a mano.
 
 Se ensayó así el 20/10, siguiendo los pasos de arriba:
 - las imágenes se construyeron sin errores;
@@ -85,6 +120,14 @@ Con todo levantado:
 - el intento 11 del minuto recibió un 429;
 - las llaves y las fotos siguieron ahí después de reiniciar la API;
 - la plantilla de Excel se generó bien en Linux.
+
+Las copias se ensayaron el mismo día:
+- la primera salió al arrancar `respaldo` y otra salió sola a la hora programada;
+- la retención borró una copia de hace 20 días y dejó la de 10, junto con las de antes de restaurar;
+- con la API conectada, `restaurar` no hizo nada y lo avisó;
+- con la API detenida, `restaurar` dejó en Docker una copia de la base de desarrollo idéntica a la original: las mismas filas en las 45 tablas;
+- la web mostró esos datos sin errores;
+- una copia hecha en Docker se restauró en el PostgreSQL de Windows con las mismas filas.
 
 ## Primer usuario de Gerencia
 
@@ -134,5 +177,5 @@ En Docker, `docker-compose.yml` arma estas variables a partir del `.env`. Sin Do
 
 ## Pendiente
 
-- **Copias diarias de la base** y una restauración probada.
+- **Copia de los respaldos fuera del servidor**, por ejemplo a Cloudflare R2.
 - **Ambiente de pruebas en el mismo servidor:** otra API y otra base con otro nombre de proyecto, y un segundo dominio en el mismo Caddy.

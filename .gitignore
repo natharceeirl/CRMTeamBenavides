@@ -10,3 +10,4 @@ docs/capturas-modulos
 # Secretos del servidor y el script de migraciones que se genera para revisar
 despliegue/.env
 despliegue/migraciones/
+despliegue/respaldos/
