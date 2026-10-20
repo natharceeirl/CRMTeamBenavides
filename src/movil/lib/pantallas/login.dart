@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/sesion.dart';
 import '../tema.dart';
+import 'privacidad.dart';
 
 class PantallaLogin extends ConsumerStatefulWidget {
   const PantallaLogin({super.key});
@@ -150,6 +151,11 @@ class _PantallaLoginState extends ConsumerState<PantallaLogin> {
                               ),
                             )
                           : const Text('Ingresar'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () => abrirPrivacidad(context),
+                      child: const Text('Política de privacidad'),
                     ),
                   ],
                 ),

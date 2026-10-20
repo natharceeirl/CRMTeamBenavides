@@ -57,6 +57,7 @@ Los contratos de la API (`Features/**/*Contracts.cs`, los records terminados en 
 | Ruta | Pantalla |
 |---|---|
 | `/login` | Inicio de sesión |
+| `/privacidad` | Política de privacidad, pública. La enlazan la app y las tiendas, y `#eliminar-cuenta` es el enlace web para eliminar la cuenta que pide Google Play |
 | `/` | Tablero |
 | `/ordenes` | Órdenes de servicio |
 | `/ordenes/nueva` | Nueva orden (recepción) |

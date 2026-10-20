@@ -281,4 +281,100 @@ public class AuthService : IAuthService
 
         return ServiceResult<bool>.Success(true);
     }
+
+    /// <summary>
+    /// El cliente elimina su cuenta de la app y del portal (Google Play y Apple lo exigen).
+    /// Se borran los datos personales de la cuenta y se cierra el acceso; la ficha del
+    /// cliente, sus unidades, órdenes y comprobantes siguen siendo registros del taller.
+    /// La fila del usuario queda, anónima y desactivada, porque la auditoría y el
+    /// historial apuntan a ella. Más adelante el cliente puede activar otra cuenta.
+    /// </summary>
+    public async Task<ServiceResult<bool>> EliminarCuentaAsync(Guid usuarioId, EliminarCuentaRequest request)
+    {
+        var usuario = await _userManager.FindByIdAsync(usuarioId.ToString());
+        if (usuario is null || !usuario.Activo)
+        {
+            return ServiceResult<bool>.NotFound();
+        }
+
+        // Las cuentas del personal las crea y las da de baja Gerencia, desde Usuarios.
+        var roles = await _context.UsuarioRoles
+            .Where(ur => ur.UsuarioId == usuarioId && ur.Rol.Activo)
+            .Select(ur => ur.Rol.Nombre)
+            .ToListAsync();
+        if (!roles.Contains(RolesDefinidos.Cliente) || roles.Any(rol => rol != RolesDefinidos.Cliente))
+        {
+            return ServiceResult<bool>.Forbidden(
+                "Solo un cliente puede eliminar su cuenta desde aquí. Las cuentas del personal las da de baja Gerencia.");
+        }
+
+        // La contraseña cuenta para el bloqueo igual que en el login: un token robado no sirve para adivinarla.
+        if (await _userManager.IsLockedOutAsync(usuario))
+        {
+            return ServiceResult<bool>.Invalid(SeguridadLogin.MensajeCredencialesInvalidas);
+        }
+
+        if (string.IsNullOrEmpty(request.Password) || !await _userManager.CheckPasswordAsync(usuario, request.Password))
+        {
+            await _userManager.AccessFailedAsync(usuario);
+            return ServiceResult<bool>.Invalid("La contraseña no es correcta.");
+        }
+
+        await using var transaccion = await _context.Database.BeginTransactionAsync();
+        var ahora = DateTime.UtcNow;
+
+        var clientes = await _context.Clientes.Where(c => c.UsuarioId == usuarioId).ToListAsync();
+        foreach (var cliente in clientes)
+        {
+            cliente.UsuarioId = null;
+        }
+
+        var sesiones = await _context.RefreshTokens
+            .Where(rt => rt.UsuarioId == usuarioId && rt.FechaRevocacion == null)
+            .ToListAsync();
+        foreach (var sesion in sesiones)
+        {
+            sesion.FechaRevocacion = ahora;
+            sesion.FechaExpiracion = ahora;
+        }
+
+        // Sin teléfonos para avisos ni bandeja: son solo de esta cuenta.
+        _context.DispositivosNotificacion.RemoveRange(
+            await _context.DispositivosNotificacion.Where(d => d.UsuarioId == usuarioId).ToListAsync());
+        _context.Notificaciones.RemoveRange(
+            await _context.Notificaciones.Where(n => n.UsuarioId == usuarioId).ToListAsync());
+
+        _context.EventosAuditoria.Add(new EventoAuditoria
+        {
+            UsuarioId = usuarioId,
+            Fecha = ahora,
+            Accion = "Eliminar",
+            Entidad = "Usuario",
+            EntidadId = usuarioId.ToString(),
+            Detalle = "La cuenta la eliminó su titular. Se borraron sus datos personales; la ficha del cliente se conserva."
+        });
+        await _context.SaveChangesAsync();
+
+        var anonimo = $"cuenta-eliminada-{usuarioId:N}@cuentas.invalid";
+        usuario.UserName = anonimo;
+        usuario.Email = anonimo;
+        usuario.EmailConfirmed = false;
+        usuario.NombreCompleto = "Cuenta eliminada";
+        usuario.PhoneNumber = null;
+        usuario.PhoneNumberConfirmed = false;
+        usuario.PasswordHash = null;
+        usuario.Activo = false;
+        usuario.FechaModificacion = ahora;
+        usuario.ModificadoPorId = usuarioId;
+        var resultado = await _userManager.UpdateAsync(usuario);
+        if (!resultado.Succeeded)
+        {
+            return ServiceResult<bool>.Invalid(string.Join("; ", resultado.Errors.Select(e => e.Description)));
+        }
+        // Invalida cualquier token de Identity ya emitido, como el de restablecer la contraseña.
+        await _userManager.UpdateSecurityStampAsync(usuario);
+
+        await transaccion.CommitAsync();
+        return ServiceResult<bool>.Success(true);
+    }
 }

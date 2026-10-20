@@ -1,7 +1,43 @@
+import java.util.Base64
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// Firma de release: android/key.properties, fuera del repositorio, apunta al keystore
+// de subida y trae sus claves (ver src/movil/README.md, «Publicar»).
+val propiedadesFirma = Properties().apply {
+    val archivo = rootProject.file("key.properties")
+    if (archivo.exists()) archivo.inputStream().use { load(it) }
+}
+
+// Los --dart-define llegan a Gradle en base64, separados por comas.
+val dartDefines: Map<String, String> = (findProperty("dart-defines") as String?)
+    ?.split(",")
+    ?.filter { it.isNotBlank() }
+    ?.map { String(Base64.getDecoder().decode(it)) }
+    ?.associate { it.substringBefore("=") to it.substringAfter("=", "") }
+    ?: emptyMap()
+
+// Una versión de release mal armada se frena antes de compilar, no en el teléfono:
+// sin firma propia no se puede actualizar después, y sin API_URL con HTTPS no conecta.
+gradle.taskGraph.whenReady {
+    if (allTasks.none { it.name.contains("Release") }) return@whenReady
+
+    check(!propiedadesFirma.isEmpty) {
+        "Falta android/key.properties con la firma de release. Ver src/movil/README.md, «Publicar»."
+    }
+    val urlApi = dartDefines["API_URL"].orEmpty()
+    check(urlApi.startsWith("https://")) {
+        if (urlApi.isEmpty()) {
+            "Falta --dart-define=API_URL=https://… al compilar la versión de release."
+        } else {
+            "API_URL tiene que empezar con https:// en la versión de release (llegó «$urlApi»)."
+        }
+    }
 }
 
 // google-services.json trae el proyecto de Firebase y no se sube al repositorio:
@@ -38,11 +74,22 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            if (!propiedadesFirma.isEmpty) {
+                storeFile = file(propiedadesFirma.getProperty("storeFile"))
+                storePassword = propiedadesFirma.getProperty("storePassword")
+                keyAlias = propiedadesFirma.getProperty("keyAlias")
+                keyPassword = propiedadesFirma.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Nunca con la clave de depuración: un APK firmado así no se puede actualizar
+            // después con la firma de verdad. Sin key.properties la compilación se frena (arriba).
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

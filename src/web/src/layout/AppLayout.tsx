@@ -4,9 +4,10 @@ import { BarreraErrores } from '../components/BarreraErrores'
 import { Logo } from '../components/Logo'
 import { ChatbotWidget } from '../components/ChatbotWidget'
 import { ModalCambiarPassword } from '../components/ModalCambiarPassword'
+import { ModalEliminarCuenta } from '../components/ModalEliminarCuenta'
 import { CampanaNotificaciones } from '../components/CampanaNotificaciones'
 import { useSesion } from '../auth/sesion'
-import { cumpleAcceso, enlaces } from '../auth/acceso'
+import { cumpleAcceso, enlaces, esSoloCliente } from '../auth/acceso'
 import { useTipoCambio } from '../api/configuracion'
 import { resumenTipoCambio } from '../utils/tipoCambio'
 
@@ -24,6 +25,7 @@ export function AppLayout() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const [cambiarPassword, setCambiarPassword] = useState(false)
+  const [eliminarCuenta, setEliminarCuenta] = useState(false)
   // En el celular el menú se pliega bajo un botón; en pantallas más anchas siempre se ve.
   // Se guarda en qué ruta se abrió: al navegar a otra queda cerrado sin un efecto aparte.
   const [menuAbiertoEn, setMenuAbiertoEn] = useState<string | null>(null)
@@ -80,6 +82,12 @@ export function AppLayout() {
           <button type="button" className="sidebar-salir" onClick={cerrar}>
             Cerrar sesión
           </button>
+          {/* Solo el cliente: al personal lo da de baja Gerencia desde Usuarios. */}
+          {esSoloCliente(sesion) && (
+            <button type="button" className="sidebar-salir" onClick={() => setEliminarCuenta(true)}>
+              Eliminar mi cuenta
+            </button>
+          )}
         </div>
       </aside>
       <div className="contenido">
@@ -93,6 +101,7 @@ export function AppLayout() {
       </div>
       <ChatbotWidget />
       <ModalCambiarPassword abierto={cambiarPassword} onCerrar={() => setCambiarPassword(false)} />
+      <ModalEliminarCuenta abierto={eliminarCuenta} onCerrar={() => setEliminarCuenta(false)} onEliminada={cerrar} />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Alert, Button, Form, Input } from 'antd'
-import { Navigate, useLocation, useNavigate } from 'react-router'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router'
 import { Logo } from '../components/Logo'
 import { useSesion } from '../auth/sesion'
 import { ErrorApi } from '../api/http'
@@ -71,6 +71,9 @@ export function LoginPage() {
           </Button>
         </Form>
         {/* La recuperación de contraseña vuelve cuando la API tenga su endpoint. */}
+        <Link to="/privacidad" className="login-pie">
+          Política de privacidad
+        </Link>
       </div>
     </div>
   )

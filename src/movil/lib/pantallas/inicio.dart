@@ -10,10 +10,12 @@ import 'chatbot.dart';
 import 'citas_cliente.dart';
 import 'clientes.dart';
 import 'comunes.dart';
+import 'eliminar_cuenta.dart';
 import 'notificaciones.dart';
 import 'tienda.dart';
 import 'ordenes.dart';
 import 'portal_cliente.dart';
+import 'privacidad.dart';
 import 'tablero.dart';
 import 'unidades.dart';
 
@@ -122,7 +124,7 @@ List<_Seccion> _seccionesPara(EstadoSesion sesion) {
   ];
 }
 
-enum _Opcion { aprobaciones, cambiarPassword, salir }
+enum _Opcion { aprobaciones, cambiarPassword, privacidad, salir, eliminarCuenta }
 
 class PantallaInicio extends ConsumerStatefulWidget {
   const PantallaInicio({super.key});
@@ -180,15 +182,23 @@ class _PantallaInicioState extends ConsumerState<PantallaInicio> {
                   context.push('/aprobaciones');
                 case _Opcion.cambiarPassword:
                   abrirCambioDePassword(context);
+                case _Opcion.privacidad:
+                  abrirPrivacidad(context);
                 case _Opcion.salir:
                   ref.read(sesionProvider.notifier).salir();
+                case _Opcion.eliminarCuenta:
+                  abrirEliminarCuenta(context);
               }
             },
             itemBuilder: (context) => [
               if (sesion.tienePermiso(Permisos.ordenesAprobarGerencia))
                 const PopupMenuItem(value: _Opcion.aprobaciones, child: Text('Aprobaciones')),
               const PopupMenuItem(value: _Opcion.cambiarPassword, child: Text('Cambiar contraseña')),
+              const PopupMenuItem(value: _Opcion.privacidad, child: Text('Política de privacidad')),
               const PopupMenuItem(value: _Opcion.salir, child: Text('Cerrar sesión')),
+              // Solo el cliente: al personal lo da de baja Gerencia.
+              if (sesion.soloCliente)
+                const PopupMenuItem(value: _Opcion.eliminarCuenta, child: Text('Eliminar mi cuenta')),
             ],
           ),
         ],

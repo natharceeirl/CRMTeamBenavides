@@ -4,6 +4,7 @@ import type {
   ActualizarUsuarioRequest,
   CambiarPasswordRequest,
   CrearUsuarioRequest,
+  EliminarCuentaRequest,
   ResetPasswordRequest,
   RolResponse,
   UsuarioResponse,
@@ -121,6 +122,18 @@ export function useResetPasswordUsuario() {
         metodo: 'POST',
         cuerpo: { nuevaPassword: nuevoPassword } satisfies ResetPasswordRequest,
       }),
+  })
+}
+
+/**
+ * El cliente elimina su cuenta (POST /api/auth/eliminar-cuenta). La API borra sus datos
+ * personales y cierra sus sesiones; la ficha del cliente queda en el taller.
+ */
+export function useEliminarMiCuenta() {
+  return useMutation({
+    meta: { exito: 'Tu cuenta se eliminó' },
+    mutationFn: (datos: EliminarCuentaRequest) =>
+      solicitar<void>('/auth/eliminar-cuenta', { metodo: 'POST', cuerpo: datos }),
   })
 }
 

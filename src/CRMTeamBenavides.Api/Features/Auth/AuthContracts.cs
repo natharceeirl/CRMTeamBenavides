@@ -22,3 +22,6 @@ public record MeResponse(
 public record CambiarPasswordRequest(string PasswordActual, string PasswordNueva);
 
 public record ResetPasswordRequest(string NuevaPassword);
+
+/// <summary>El cliente elimina su propia cuenta; confirma con su contraseña.</summary>
+public record EliminarCuentaRequest(string Password);

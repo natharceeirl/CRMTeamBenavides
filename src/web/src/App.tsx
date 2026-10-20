@@ -1,4 +1,4 @@
-import { lazy, type ComponentType } from 'react'
+import { lazy, Suspense, type ComponentType } from 'react'
 import { Navigate, Route, Routes } from 'react-router'
 import { RutaProtegida } from './auth/RutaProtegida'
 import { RutaConPermiso } from './auth/RutaConPermiso'
@@ -37,11 +37,21 @@ const AprobacionesPage = pantalla(() => import('./pages/AprobacionesPage'), 'Apr
 const ComprasPage = pantalla(() => import('./pages/ComprasPage'), 'ComprasPage')
 const NuevaCompraPage = pantalla(() => import('./pages/NuevaCompraPage'), 'NuevaCompraPage')
 const ImportacionesPage = pantalla(() => import('./pages/ImportacionesPage'), 'ImportacionesPage')
+const PrivacidadPage = pantalla(() => import('./pages/PrivacidadPage'), 'PrivacidadPage')
 
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      {/* Pública: la enlazan la app y las tiendas, sin iniciar sesión. */}
+      <Route
+        path="/privacidad"
+        element={
+          <Suspense fallback={null}>
+            <PrivacidadPage />
+          </Suspense>
+        }
+      />
       <Route element={<RutaProtegida />}>
         <Route element={<AppLayout />}>
           <Route index element={<InicioPage />} />

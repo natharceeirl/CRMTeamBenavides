@@ -30,6 +30,8 @@ if (typeof window !== 'undefined') {
     unobserve = () => undefined
     disconnect = () => undefined
   }
+  // jsdom no desplaza la página: los enlaces a una sección (#eliminar-cuenta) lo usan.
+  Element.prototype.scrollIntoView ??= () => undefined
   // jsdom no calcula estilos de pseudo-elementos y lo avisa por consola en cada tabla.
   const estilosOriginales = window.getComputedStyle.bind(window)
   window.getComputedStyle = (elemento: Element) => estilosOriginales(elemento)

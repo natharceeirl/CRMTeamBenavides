@@ -10,4 +10,5 @@ public interface IAuthService
     Task<ServiceResult<bool>> LogoutAsync(Guid usuarioId);
     Task<ServiceResult<bool>> CambiarPasswordAsync(Guid usuarioId, CambiarPasswordRequest request);
     Task<ServiceResult<bool>> ResetPasswordAsync(Guid usuarioId, ResetPasswordRequest request);
+    Task<ServiceResult<bool>> EliminarCuentaAsync(Guid usuarioId, EliminarCuentaRequest request);
 }

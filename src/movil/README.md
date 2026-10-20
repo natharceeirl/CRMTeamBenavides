@@ -26,6 +26,9 @@ App en Flutter para Android e iOS. Consume la misma API que la web
 - Clientes: lista con búsqueda y ficha con sus unidades.
 - Unidades: lista con búsqueda.
 - Chatbot: consulta de FAQs y derivación a un asesor.
+- Cuenta: cambiar la contraseña y abrir la política de privacidad de la web, que
+  también se abre desde el login. El cliente además puede eliminar su cuenta, como
+  lo exigen Google Play y Apple; al personal lo da de baja Gerencia.
 
 Fuera de la orden y las citas, la app es de consulta. Crear y editar el resto se
 hace desde la web, que es donde vive la operación completa.
@@ -54,6 +57,57 @@ debe dejar pasar el puerto 5021.
 Para compilar y probar en iPhone (simulador, iPhone propio y TestFlight) ver
 [docs/guia-iphone.md](../../docs/guia-iphone.md): hace falta una Mac.
 
+## Publicar
+
+### Compilar la versión de release
+
+```
+flutter build appbundle --release --dart-define=API_URL=https://app.teambenavides.com
+```
+
+`build.gradle.kts` frena la compilación antes de empezar si falta la firma (abajo) o si `API_URL` no está o no empieza con `https://`. Una versión de release sin `API_URL` apuntaría en silencio a `10.0.2.2`, que en un teléfono no lleva a ningún lado. iOS se compila en un Mac, fuera de Gradle: ahí, al arrancar, la app muestra qué falta en vez de abrir el login.
+
+### Firma
+
+La versión de release nunca se firma con la clave de depuración: un APK firmado así no se puede actualizar después con otra clave.
+
+1. Quien guarda las credenciales del proyecto genera la clave de subida una sola vez, fuera del repositorio:
+
+   ```
+   keytool -genkeypair -keystore team-benavides-subida.jks -storetype PKCS12 -keyalg RSA -keysize 2048 -validity 10000 -alias subida
+   ```
+
+   El archivo y sus contraseñas van a un lugar seguro con copia, como un gestor de contraseñas. En Play Console se activa Play App Signing: Google guarda la clave con la que firma la app que se instala, y esta es solo la de subida. Si se pierde, Google permite cambiarla.
+2. Cada PC que publica crea `android/key.properties`, que git ignora:
+
+   ```
+   storeFile=C:/ruta/fuera/del/repositorio/team-benavides-subida.jks
+   storePassword=…
+   keyAlias=subida
+   keyPassword=…
+   ```
+
+Se probó el 20/10 con una clave desechable:
+- sin `key.properties`, sin `API_URL` o con `http://`, la compilación se detuvo con su mensaje;
+- con todo en orden, el APK salió firmado con esa clave y no con la de depuración.
+
+### Identificador de la app
+
+Todavía no se cambia: lo decide el Ingeniero. Una vez publicada la app, no se puede cambiar. Hoy Android e iOS ni siquiera coinciden:
+
+| Dónde | Valor actual |
+|---|---|
+| Android: `applicationId` y `namespace` en `android/app/build.gradle.kts`, y la carpeta de `MainActivity.kt` | `pe.natharce.crm_team_benavides` |
+| iOS: `PRODUCT_BUNDLE_IDENTIFIER` en `ios/Runner.xcodeproj/project.pbxproj`, en las tres configuraciones | `pe.natharce.crmTeamBenavides` |
+| Firebase: la app registrada en el proyecto, de la que salen `google-services.json` y `GoogleService-Info.plist` | El de Android |
+
+Al cambiarlo hay que tocar todos esos lugares a la vez y registrar la app de nuevo en el proyecto de Firebase de la empresa.
+
+### Lo que piden las tiendas
+
+- **Eliminar la cuenta desde la app:** está en el menú del cliente. El enlace web que pide Google es `https://<dominio>/privacidad#eliminar-cuenta`.
+- **Política de privacidad:** `https://<dominio>/privacidad`. Es un borrador; faltan los datos de la empresa y la revisión legal.
+
 ## Estructura
 
 | Carpeta | Qué contiene |
@@ -68,14 +122,10 @@ Para compilar y probar en iPhone (simulador, iPhone propio y TestFlight) ver
 ## Pendientes
 
 - **Ícono de la app:** sigue el de Flutter. Falta el logo en PNG del Ingeniero.
-- **Firma de release:** `android/app/build.gradle.kts` firma con la clave de
-  depuración. Para publicar hace falta un keystore propio, con sus credenciales
-  fuera del repositorio.
+- **Clave de subida:** la genera quien guarda las credenciales (ver «Publicar»).
 - **Cuenta de Google Play** (pago único) y **cuenta de Apple Developer**, que
   además exige un Mac para compilar iOS.
-- **Identificador de la app:** Android usa `pe.natharce.crm_team_benavides` y
-  iOS `pe.natharce.crmTeamBenavides`. Conviene unificarlos antes de publicar,
-  porque después no se pueden cambiar.
+- **Identificador de la app:** lo decide el Ingeniero antes de publicar (ver «Publicar»).
 - **Menús por rol:** la app ya recibe los roles desde `/api/auth/me`, pero no
   esconde nada todavía; falta la matriz de permisos del cliente.
 - La tienda en la app es consulta: registrar entradas, salidas y ajustes de

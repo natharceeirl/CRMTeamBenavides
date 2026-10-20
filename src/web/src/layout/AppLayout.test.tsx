@@ -78,3 +78,22 @@ describe('menú según el rol', () => {
     expect(llamadas.some((llamada) => llamada.ruta === '/configuracion/tipo-cambio')).toBe(false)
   })
 })
+
+describe('eliminar la cuenta desde la barra lateral', () => {
+  it('el cliente tiene la opción', async () => {
+    apiFalsa({ ...barraLateral, ...usuarioConSesion({ roles: ['Cliente'], permisos: ['portal.acceso'] }) })
+
+    montarLayout()
+
+    expect(await screen.findByRole('button', { name: 'Eliminar mi cuenta' })).toBeTruthy()
+  })
+
+  it('el personal no: a su cuenta la da de baja Gerencia', async () => {
+    apiFalsa({ ...barraLateral, ...usuarioConSesion({ roles: ['Vendedor'], permisos: ['ventas.ver'] }) })
+
+    montarLayout()
+
+    await waitFor(() => expect(enlacesDelMenu()).toEqual(['Ventas']))
+    expect(screen.queryByRole('button', { name: 'Eliminar mi cuenta' })).toBeNull()
+  })
+})

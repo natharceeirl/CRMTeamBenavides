@@ -58,6 +58,10 @@ export type CambiarPasswordRequest = {
   passwordNueva: string
 }
 
+export type EliminarCuentaRequest = {
+  password: string
+}
+
 export type LoginRequest = {
   email: string
   password: string

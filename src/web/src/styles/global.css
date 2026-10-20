@@ -612,6 +612,63 @@ h4 {
   font-size: 32px;
 }
 
+.login-pie {
+  align-self: flex-start;
+  font-size: 14px;
+  color: var(--color-texto-secundario);
+}
+
+/* Páginas públicas de texto, como la política de privacidad */
+.documento-publico {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 16px 64px;
+  line-height: 1.6;
+}
+
+.documento-publico-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 40px;
+}
+
+.documento-publico h1 {
+  margin-bottom: 4px;
+  font-size: 36px;
+}
+
+.documento-publico h2 {
+  margin: 36px 0 8px;
+  font-size: 22px;
+}
+
+.documento-publico .ant-alert {
+  margin-top: 24px;
+}
+
+/* Fuera de AppLayout los enlaces no llevan el tema de antd: el rojo accesible de la marca. */
+.documento-publico a {
+  color: var(--color-acento-700);
+}
+
+.documento-publico ul {
+  padding-left: 20px;
+}
+
+.documento-publico li + li {
+  margin-top: 6px;
+}
+
+/* Lo que falta completar en un borrador: a la vista hasta que llegue. */
+mark.pendiente {
+  padding: 0 4px;
+  border-radius: 2px;
+  background: var(--color-acento-100);
+  color: var(--color-texto);
+}
+
 /* Widget del chatbot */
 .chatbot-boton.ant-btn {
   position: fixed;

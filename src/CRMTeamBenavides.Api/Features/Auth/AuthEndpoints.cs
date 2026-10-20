@@ -92,5 +92,30 @@ public static class AuthEndpoints
         })
         .RequireAuthorization()
         .WithName("CambiarPassword");
+
+        group.MapPost("/eliminar-cuenta", async (EliminarCuentaRequest request, ClaimsPrincipal user, IAuthService authService) =>
+        {
+            var subClaim = user.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+                ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (!Guid.TryParse(subClaim, out var usuarioId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await authService.EliminarCuentaAsync(usuarioId, request);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.NoContent(),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.Forbidden => Results.Json(new { error = result.Error }, statusCode: StatusCodes.Status403Forbidden),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem()
+            };
+        })
+        .RequireAuthorization()
+        // Pide la contraseña: el mismo límite por IP que el login.
+        .RequireRateLimiting(SeguridadLogin.PoliticaPorIp)
+        .WithName("EliminarCuenta");
     }
 }

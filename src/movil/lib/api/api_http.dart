@@ -213,6 +213,16 @@ class ApiHttp {
     }
   }
 
+  /// El cliente elimina su cuenta (EliminarCuentaRequest en el backend). La API
+  /// borra sus datos personales y cierra sus sesiones; la ficha del cliente queda.
+  Future<void> eliminarCuenta(String password) async {
+    try {
+      await _dio.post<void>('/api/auth/eliminar-cuenta', data: {'password': password});
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
   Future<List<ProductoApi>> productos() async {
     final datos = await _lista('/api/productos');
     return datos.map(ProductoApi.desdeJson).toList();

@@ -23,12 +23,12 @@ export function ModalCambiarPassword({ abierto, onCerrar }: Readonly<Props>) {
     onCerrar()
   }
 
-  const enviar = async (campos: Campos) => {
-    await cambiar.mutateAsync({
-      passwordActual: campos.passwordActual,
-      passwordNueva: campos.passwordNueva,
-    })
-    cerrar()
+  // Con mutate y no mutateAsync: el error lo muestra AvisoError y no queda una promesa rechazada sin atender.
+  const enviar = (campos: Campos) => {
+    cambiar.mutate(
+      { passwordActual: campos.passwordActual, passwordNueva: campos.passwordNueva },
+      { onSuccess: cerrar },
+    )
   }
 
   return (
