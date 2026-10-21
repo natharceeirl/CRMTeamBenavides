@@ -145,9 +145,58 @@ public class ImportadorExcelService : IImportadorExcelService
             }
 
             // 1. Crear dinámicamente las categorías de Repuestos que no existan en la base de datos
-            var mapaCategoriasActual = await _context.CategoriasProducto
+            var categoriasActualesBd = await _context.CategoriasProducto
                 .Where(c => c.Activo)
-                .ToDictionaryAsync(c => c.Nombre.Trim(), c => c.Id, StringComparer.OrdinalIgnoreCase, ct);
+                .Select(c => new { c.Id, Nombre = c.Nombre != null ? c.Nombre.Trim() : string.Empty })
+                .ToListAsync(ct);
+
+            var mapaCategoriasActual = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+            var categoriasActualesAmbiguas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var grupo in categoriasActualesBd.Where(c => !string.IsNullOrWhiteSpace(c.Nombre)).GroupBy(c => c.Nombre, StringComparer.OrdinalIgnoreCase))
+            {
+                var ids = grupo.Select(x => x.Id).Distinct().ToList();
+                if (ids.Count > 1)
+                {
+                    categoriasActualesAmbiguas.Add(grupo.Key);
+                }
+                else
+                {
+                    mapaCategoriasActual[grupo.Key] = ids[0];
+                }
+            }
+
+            var repuestoConCategoriaAmbigua = parseo.RepuestosValidos.FirstOrDefault(r => categoriasActualesAmbiguas.Contains(r.Categoria));
+            if (repuestoConCategoriaAmbigua is not null)
+            {
+                await transaction.RollbackAsync(ct);
+
+                var errorAmb = new ErrorFilaImportacionDto(
+                    HojaRepuestos,
+                    repuestoConCategoriaAmbigua.Fila,
+                    "Categoria",
+                    repuestoConCategoriaAmbigua.Categoria,
+                    $"Existe ambigüedad en el catálogo del sistema: se encontraron múltiples categorías activas con el nombre '{repuestoConCategoriaAmbigua.Categoria}'. Resuelva la duplicidad en el sistema antes de importar.");
+
+                var resultadoAmb = parseo.Resultado with
+                {
+                    Exitoso = false,
+                    Clientes = parseo.Resultado.Clientes with { RegistrosCreados = 0 },
+                    Unidades = parseo.Resultado.Unidades is not null ? parseo.Resultado.Unidades with { RegistrosCreados = 0 } : null,
+                    Repuestos = parseo.Resultado.Repuestos is not null ? parseo.Resultado.Repuestos with { RegistrosCreados = 0 } : null,
+                    Catalogo = parseo.Resultado.Catalogo with { RegistrosCreados = 0 },
+                    Errores = new List<ErrorFilaImportacionDto> { errorAmb }
+                };
+
+                await RegistrarAuditoriaAsync(
+                    usuarioId,
+                    AccionEjecutarFallido,
+                    nombreArchivo,
+                    resultadoAmb,
+                    ct);
+
+                return resultadoAmb;
+            }
 
             foreach (var nombreCat in parseo.CategoriasNuevas)
             {
@@ -581,10 +630,27 @@ public class ImportadorExcelService : IImportadorExcelService
                 vehiculosBdList.Where(v => !string.IsNullOrWhiteSpace(v.VIN)).Select(v => v.VIN!),
                 StringComparer.OrdinalIgnoreCase);
 
-            var mapaCategoriasBd = await _context.CategoriasProducto
+            var categoriasBdActivas = await _context.CategoriasProducto
                 .AsNoTracking()
                 .Where(c => c.Activo)
-                .ToDictionaryAsync(c => c.Nombre.Trim(), c => c.Id, StringComparer.OrdinalIgnoreCase, ct);
+                .Select(c => new { c.Id, Nombre = c.Nombre != null ? c.Nombre.Trim() : string.Empty })
+                .ToListAsync(ct);
+
+            var mapaCategoriasBd = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+            var categoriasBdAmbiguas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var grupo in categoriasBdActivas.Where(c => !string.IsNullOrWhiteSpace(c.Nombre)).GroupBy(c => c.Nombre, StringComparer.OrdinalIgnoreCase))
+            {
+                var ids = grupo.Select(x => x.Id).Distinct().ToList();
+                if (ids.Count > 1)
+                {
+                    categoriasBdAmbiguas.Add(grupo.Key);
+                }
+                else
+                {
+                    mapaCategoriasBd[grupo.Key] = ids[0];
+                }
+            }
 
             // -----------------------------------------------------------------
             // 1. Validar Hoja Clientes
@@ -1013,7 +1079,16 @@ public class ImportadorExcelService : IImportadorExcelService
                     else
                     {
                         var catLimpia = rawCategoria.Trim();
-                        if (!mapaCategoriasBd.ContainsKey(catLimpia))
+                        if (categoriasBdAmbiguas.Contains(catLimpia))
+                        {
+                            errores.Add(new ErrorFilaImportacionDto(
+                                HojaRepuestos,
+                                r,
+                                "Categoria",
+                                catLimpia,
+                                $"Existe ambigüedad en el catálogo del sistema: se encontraron múltiples categorías activas con el nombre '{catLimpia}'. Resuelva la duplicidad en el sistema antes de importar."));
+                        }
+                        else if (!mapaCategoriasBd.ContainsKey(catLimpia))
                         {
                             categoriasNuevas.Add(catLimpia);
                         }

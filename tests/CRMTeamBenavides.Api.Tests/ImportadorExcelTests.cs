@@ -772,4 +772,280 @@ public class ImportadorExcelTests
         Assert.Equal(0, resultado.Repuestos?.RegistrosCreados);
         Assert.Contains(resultado.Errores, e => e.Hoja == "Archivo" && e.Columna == "Transaccion" && e.Mensaje.Contains("revertida por un conflicto"));
     }
+
+    // =========================================================================
+    // 11. Manejo determinista de categorías duplicadas y prevención de ambigüedad
+    // =========================================================================
+
+    private static void EscribirClienteEjemplo(IXLWorksheet ws)
+    {
+        EscribirCabecera(ws, ["TipoDocumento", "NumeroDocumento", "NombreCompleto", "Telefono", "Email", "Direccion"]);
+        ws.Cell(2, 1).Value = "DNI";
+        ws.Cell(2, 2).Value = "12345678";
+        ws.Cell(2, 3).Value = "Cliente Prueba";
+    }
+
+    [Fact]
+    public async Task ValidarYEjecutar_CategoriasUnicas_DebeProcesarNormalmente()
+    {
+        using var context = CrearDbContextMemoria();
+        var catLubricantes = new CategoriaProducto
+        {
+            Id = Guid.NewGuid(),
+            Nombre = "LUBRICANTES",
+            StockMinimoDefault = 4,
+            Activo = true,
+            FechaCreacion = DateTime.UtcNow
+        };
+        context.CategoriasProducto.Add(catLubricantes);
+        await context.SaveChangesAsync();
+
+        var fakeAuditoria = new FakeAuditoriaService();
+        var service = new ImportadorExcelService(context, fakeAuditoria);
+
+        using var stream = CrearLibroExcel(
+            llenarClientes: EscribirClienteEjemplo,
+            llenarRepuestos: ws =>
+            {
+                EscribirCabecera(ws, ["Codigo", "Nombre", "Categoria", "UnidadMedida", "Costo", "PrecioVenta", "StockActual", "StockMinimo"]);
+                ws.Cell(2, 1).Value = "MOT-001";
+                ws.Cell(2, 2).Value = "Aceite Yamalube 10W40";
+                ws.Cell(2, 3).Value = "Lubricantes"; // Coincide case-insensitive
+                ws.Cell(2, 4).Value = "litro";
+                ws.Cell(2, 5).Value = 35;
+                ws.Cell(2, 6).Value = 55;
+                ws.Cell(2, 7).Value = 10;
+                ws.Cell(2, 8).Value = 2;
+            });
+
+        // 1. Validar
+        var resultadoValidacion = await service.ValidarArchivoAsync(stream, "repuestos_unicos.xlsx", null, null);
+        Assert.True(resultadoValidacion.Exitoso);
+        Assert.Empty(resultadoValidacion.Errores);
+        Assert.Equal(1, resultadoValidacion.Repuestos?.FilasValidas);
+
+        // 2. Ejecutar
+        stream.Position = 0;
+        var resultadoEjecucion = await service.EjecutarImportacionAsync(stream, "repuestos_unicos.xlsx", null, null);
+        Assert.True(resultadoEjecucion.Exitoso);
+        Assert.Equal(1, resultadoEjecucion.Repuestos?.RegistrosCreados);
+
+        var prod = await context.Productos.FirstOrDefaultAsync(p => p.Codigo == "MOT-001");
+        Assert.NotNull(prod);
+        Assert.Equal(catLubricantes.Id, prod.CategoriaId);
+        Assert.Equal(1, await context.CategoriasProducto.CountAsync());
+    }
+
+    [Fact]
+    public async Task ValidarYEjecutar_CategoriasDuplicadasActivas_MismoNombreMayusculasYEspacios_DebeRetornarErrorControladoYNoLanzarExcepcion()
+    {
+        using var context = CrearDbContextMemoria();
+        var cat1 = new CategoriaProducto
+        {
+            Id = Guid.NewGuid(),
+            Nombre = "Repuestos",
+            StockMinimoDefault = 4,
+            Activo = true,
+            FechaCreacion = DateTime.UtcNow
+        };
+        var cat2 = new CategoriaProducto
+        {
+            Id = Guid.NewGuid(),
+            Nombre = "  repuestos  ", // Difiere solo en mayúsculas y espacios
+            StockMinimoDefault = 2,
+            Activo = true,
+            FechaCreacion = DateTime.UtcNow
+        };
+        context.CategoriasProducto.AddRange(cat1, cat2);
+        await context.SaveChangesAsync();
+
+        var fakeAuditoria = new FakeAuditoriaService();
+        var service = new ImportadorExcelService(context, fakeAuditoria);
+
+        using var stream = CrearLibroExcel(
+            llenarClientes: EscribirClienteEjemplo,
+            llenarRepuestos: ws =>
+            {
+                EscribirCabecera(ws, ["Codigo", "Nombre", "Categoria", "UnidadMedida", "Costo", "PrecioVenta", "StockActual", "StockMinimo"]);
+                ws.Cell(2, 1).Value = "REP-001";
+                ws.Cell(2, 2).Value = "Pastillas de freno";
+                ws.Cell(2, 3).Value = "REPUESTOS";
+                ws.Cell(2, 4).Value = "unidad";
+                ws.Cell(2, 5).Value = 25;
+                ws.Cell(2, 6).Value = 45;
+                ws.Cell(2, 7).Value = 0;
+            });
+
+        // 1. Validar: no debe lanzar ArgumentException, debe reportar error controlado
+        var resultadoValidacion = await service.ValidarArchivoAsync(stream, "repuestos_duplicados.xlsx", null, null);
+        Assert.False(resultadoValidacion.Exitoso);
+        Assert.Equal(1, resultadoValidacion.Repuestos?.FilasConError);
+        Assert.Equal(0, resultadoValidacion.Repuestos?.FilasValidas);
+
+        var errorAmb = Assert.Single(resultadoValidacion.Errores);
+        Assert.Equal("Repuestos", errorAmb.Hoja);
+        Assert.Equal(2, errorAmb.Fila);
+        Assert.Equal("Categoria", errorAmb.Columna);
+        Assert.Equal("REPUESTOS", errorAmb.ValorLeido);
+        Assert.Contains("ambigüedad", errorAmb.Mensaje, StringComparison.OrdinalIgnoreCase);
+
+        // 2. Ejecutar: no debe lanzar ArgumentException y debe abortar sin modificar datos
+        stream.Position = 0;
+        var resultadoEjecucion = await service.EjecutarImportacionAsync(stream, "repuestos_duplicados.xlsx", null, null);
+        Assert.False(resultadoEjecucion.Exitoso);
+        Assert.Equal(0, resultadoEjecucion.Repuestos?.RegistrosCreados);
+        Assert.Empty(await context.Productos.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ValidarYEjecutar_CategoriaActivaECategoriaInactivaConMismoNombre_DebeUsarActivaSinAmbiguedad()
+    {
+        using var context = CrearDbContextMemoria();
+        var catActiva = new CategoriaProducto
+        {
+            Id = Guid.NewGuid(),
+            Nombre = "Baterias",
+            StockMinimoDefault = 4,
+            Activo = true,
+            FechaCreacion = DateTime.UtcNow
+        };
+        var catInactiva = new CategoriaProducto
+        {
+            Id = Guid.NewGuid(),
+            Nombre = "  BATERIAS  ", // Mismo nombre normalizado pero INACTIVA
+            StockMinimoDefault = 2,
+            Activo = false,
+            FechaCreacion = DateTime.UtcNow.AddMonths(-1)
+        };
+        context.CategoriasProducto.AddRange(catActiva, catInactiva);
+        await context.SaveChangesAsync();
+
+        var fakeAuditoria = new FakeAuditoriaService();
+        var service = new ImportadorExcelService(context, fakeAuditoria);
+
+        using var stream = CrearLibroExcel(
+            llenarClientes: EscribirClienteEjemplo,
+            llenarRepuestos: ws =>
+            {
+                EscribirCabecera(ws, ["Codigo", "Nombre", "Categoria", "UnidadMedida", "Costo", "PrecioVenta", "StockActual", "StockMinimo"]);
+                ws.Cell(2, 1).Value = "BAT-001";
+                ws.Cell(2, 2).Value = "Batería Yuasa 12V";
+                ws.Cell(2, 3).Value = "baterias";
+                ws.Cell(2, 4).Value = "unidad";
+                ws.Cell(2, 5).Value = 120;
+                ws.Cell(2, 6).Value = 180;
+                ws.Cell(2, 7).Value = 3;
+            });
+
+        // 1. Validar: la inactiva no debe interferir ni crear ambigüedad
+        var resultadoValidacion = await service.ValidarArchivoAsync(stream, "baterias.xlsx", null, null);
+        Assert.True(resultadoValidacion.Exitoso);
+        Assert.Empty(resultadoValidacion.Errores);
+        Assert.Equal(1, resultadoValidacion.Repuestos?.FilasValidas);
+
+        // 2. Ejecutar: debe asociar al ID de la activa, no crear otra
+        stream.Position = 0;
+        var resultadoEjecucion = await service.EjecutarImportacionAsync(stream, "baterias.xlsx", null, null);
+        Assert.True(resultadoEjecucion.Exitoso);
+        Assert.Equal(1, resultadoEjecucion.Repuestos?.RegistrosCreados);
+
+        var prod = await context.Productos.FirstOrDefaultAsync(p => p.Codigo == "BAT-001");
+        Assert.NotNull(prod);
+        Assert.Equal(catActiva.Id, prod.CategoriaId);
+        Assert.Equal(2, await context.CategoriasProducto.CountAsync()); // No se agregaron categorías
+    }
+
+    [Fact]
+    public async Task ValidarArchivoAsync_ConAmbiguedadEnCategorias_NoDebeModificarBaseDeDatos()
+    {
+        using var context = CrearDbContextMemoria();
+        var cat1 = new CategoriaProducto { Id = Guid.NewGuid(), Nombre = "Filtros", Activo = true, FechaCreacion = DateTime.UtcNow };
+        var cat2 = new CategoriaProducto { Id = Guid.NewGuid(), Nombre = "FILTROS", Activo = true, FechaCreacion = DateTime.UtcNow };
+        context.CategoriasProducto.AddRange(cat1, cat2);
+        await context.SaveChangesAsync();
+
+        int cantClientesAntes = await context.Clientes.CountAsync();
+        int cantVehiculosAntes = await context.Vehiculos.CountAsync();
+        int cantProductosAntes = await context.Productos.CountAsync();
+        int cantCategoriasAntes = await context.CategoriasProducto.CountAsync();
+
+        var fakeAuditoria = new FakeAuditoriaService();
+        var service = new ImportadorExcelService(context, fakeAuditoria);
+
+        using var stream = CrearLibroExcel(
+            llenarClientes: ws =>
+            {
+                EscribirCabecera(ws, ["TipoDocumento", "NumeroDocumento", "NombreCompleto", "Telefono", "Email", "Direccion"]);
+                ws.Cell(2, 1).Value = "DNI";
+                ws.Cell(2, 2).Value = "12345678";
+                ws.Cell(2, 3).Value = "Juan Perez";
+            },
+            llenarRepuestos: ws =>
+            {
+                EscribirCabecera(ws, ["Codigo", "Nombre", "Categoria", "UnidadMedida", "Costo", "PrecioVenta", "StockActual", "StockMinimo"]);
+                ws.Cell(2, 1).Value = "FIL-001";
+                ws.Cell(2, 2).Value = "Filtro de aire";
+                ws.Cell(2, 3).Value = "filtros"; // Categ ambigua
+                ws.Cell(2, 4).Value = "unidad";
+                ws.Cell(2, 5).Value = 15;
+                ws.Cell(2, 6).Value = 30;
+                ws.Cell(2, 7).Value = 0;
+            });
+
+        var resultado = await service.ValidarArchivoAsync(stream, "ambiguedad_dryrun.xlsx", null, null);
+
+        Assert.False(resultado.Exitoso);
+        Assert.True(resultado.SoloValidacion);
+        Assert.NotEmpty(resultado.Errores);
+
+        // Verificación estricta de ausencia de escrituras
+        Assert.Equal(cantClientesAntes, await context.Clientes.CountAsync());
+        Assert.Equal(cantVehiculosAntes, await context.Vehiculos.CountAsync());
+        Assert.Equal(cantProductosAntes, await context.Productos.CountAsync());
+        Assert.Equal(cantCategoriasAntes, await context.CategoriasProducto.CountAsync());
+        Assert.False(context.ChangeTracker.HasChanges());
+    }
+
+    [Fact]
+    public async Task ValidarYEjecutar_CategoriaDuplicadaEnBdPeroExcelUsaOtraCategoriaUnica_DebeProcesarNormalmente()
+    {
+        using var context = CrearDbContextMemoria();
+        // Categorías duplicadas en BD no referenciadas por el Excel
+        var dup1 = new CategoriaProducto { Id = Guid.NewGuid(), Nombre = "Herramientas", Activo = true, FechaCreacion = DateTime.UtcNow };
+        var dup2 = new CategoriaProducto { Id = Guid.NewGuid(), Nombre = "HERRAMIENTAS", Activo = true, FechaCreacion = DateTime.UtcNow };
+        // Categoría única referenciada por el Excel
+        var unica = new CategoriaProducto { Id = Guid.NewGuid(), Nombre = "Aceites", Activo = true, FechaCreacion = DateTime.UtcNow };
+        context.CategoriasProducto.AddRange(dup1, dup2, unica);
+        await context.SaveChangesAsync();
+
+        var fakeAuditoria = new FakeAuditoriaService();
+        var service = new ImportadorExcelService(context, fakeAuditoria);
+
+        using var stream = CrearLibroExcel(
+            llenarClientes: EscribirClienteEjemplo,
+            llenarRepuestos: ws =>
+            {
+                EscribirCabecera(ws, ["Codigo", "Nombre", "Categoria", "UnidadMedida", "Costo", "PrecioVenta", "StockActual", "StockMinimo"]);
+                ws.Cell(2, 1).Value = "ACE-001";
+                ws.Cell(2, 2).Value = "Aceite 2T";
+                ws.Cell(2, 3).Value = "Aceites";
+                ws.Cell(2, 4).Value = "litro";
+                ws.Cell(2, 5).Value = 20;
+                ws.Cell(2, 6).Value = 35;
+                ws.Cell(2, 7).Value = 5;
+            });
+
+        var resultadoValidacion = await service.ValidarArchivoAsync(stream, "aceites.xlsx", null, null);
+        Assert.True(resultadoValidacion.Exitoso);
+        Assert.Empty(resultadoValidacion.Errores);
+
+        stream.Position = 0;
+        var resultadoEjecucion = await service.EjecutarImportacionAsync(stream, "aceites.xlsx", null, null);
+        Assert.True(resultadoEjecucion.Exitoso);
+        Assert.Equal(1, resultadoEjecucion.Repuestos?.RegistrosCreados);
+
+        var prod = await context.Productos.FirstOrDefaultAsync(p => p.Codigo == "ACE-001");
+        Assert.NotNull(prod);
+        Assert.Equal(unica.Id, prod.CategoriaId);
+    }
 }
