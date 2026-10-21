@@ -23,7 +23,7 @@ Medido el 21/10 en Docker, con los datos de desarrollo:
 | Compilar la imagen de la web | 1,23 GB de pico |
 
 Correr la plataforma sobra; compilar es lo justo, y las dos imágenes a la vez no entran. Por eso:
-- Al preparar el servidor se crea un swap de 2 GB:
+- Al preparar el servidor se crea un swap de 2 GB. Lo hace `preparar-servidor.sh`; a mano sería:
 
   ```
   sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
@@ -41,7 +41,8 @@ Por eso la web y la app achican cada foto antes de subirla, con la misma regla: 
 
 Hace falta el servidor con Docker y el swap, el DNS del dominio apuntando a él y los puertos 80 y 443 abiertos. Los comandos se corren en `despliegue/`, salvo el del paso 3.
 
-1. Copiar el repositorio al servidor y crear el `.env`:
+0. Crear la instancia de Lightsail (Ubuntu 24.04, plan de 2 GB) con `despliegue/preparar-servidor.sh` pegado en «Agregar script de lanzamiento». En el primer arranque, el script crea el swap, instala Docker y Compose y clona `develop` en `/opt/crm-team-benavides`. Cuando termina, `/var/log/cloud-init-output.log` dice «Servidor listo». En otro servidor se corre una vez con `sudo bash preparar-servidor.sh`.
+1. En `/opt/crm-team-benavides/despliegue`, crear el `.env`:
 
    ```
    cp .env.ejemplo .env
