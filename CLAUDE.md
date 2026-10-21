@@ -100,7 +100,7 @@ El mapa funcional (https://claude.ai/code/artifact/708d0351-bbde-48cd-9768-7d63f
 | Móvil | Flutter + Riverpod (o Bloc) + Dio + go_router |
 | Arquitectura | Una sola API, modular por área, sin microservicios |
 | IDE | VS 2026, Rider o VS Code + C# Dev Kit |
-| Hosting | Sin definir |
+| Hosting | AWS Lightsail de 2 GB con Docker (decidido el 21/10); ver [docs/despliegue.md](docs/despliegue.md) |
 
 Principios del documento técnico que no se negocian:
 
@@ -181,7 +181,7 @@ De lo pedido el 15/09, la matriz de roles y el flujo de estados quedaron resuelt
 ## Decisiones pendientes
 
 - Fecha del Go Live: propuesta el viernes 20/11/2026.
-- Hosting y proveedor.
+- Hosting: se usa AWS Lightsail de 2 GB (21/10); falta crear la cuenta a nombre de Team Benavides.
 - Qué acciones aprueba Gerencia.
 - Presupuesto: aprobación completa o por ítem, y cobro del diagnóstico si se rechaza.
 - Formato de atención: qué campos van estructurados y si la firma es impresa o en pantalla.

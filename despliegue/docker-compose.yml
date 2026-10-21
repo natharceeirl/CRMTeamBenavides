@@ -31,6 +31,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      # Tras un apagado brusco PostgreSQL se recupera antes de aceptar conexiones: sin
+      # este margen, compose da la base por caída y no levanta la API.
+      start_period: 60s
+      start_interval: 2s
     networks: [interna]
     logging: *registro
 

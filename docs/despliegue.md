@@ -10,9 +10,34 @@ La plataforma corre en un solo servidor con Docker: Caddy recibe el HTTPS y sirv
 | `despliegue/Caddyfile` | HTTPS automático, `/api` hacia la API y el resto, la web. |
 | `despliegue/.env.ejemplo` | Las variables del servidor, sin valores. Se copia como `.env`, que no se sube al repositorio. |
 
+## Servidor
+
+Se usa **AWS Lightsail de 2 GB** (decidido el 21/10): 2 GB de memoria, 60 GB de disco SSD y 3 TB de transferencia al mes, por unos US$13 al mes con snapshots. Falta crear la cuenta a nombre de Team Benavides.
+
+Medido el 21/10 en Docker, con los datos de desarrollo:
+
+| Qué | Memoria |
+|---|---|
+| La plataforma corriendo: API, PostgreSQL, Caddy y copias | 220 MB |
+| Compilar la imagen de la API | 1,24 GB de pico |
+| Compilar la imagen de la web | 1,23 GB de pico |
+
+Correr la plataforma sobra; compilar es lo justo, y las dos imágenes a la vez no entran. Por eso:
+- Al preparar el servidor se crea un swap de 2 GB:
+
+  ```
+  sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+  echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+  ```
+
+- Las imágenes se compilan de a una (`docker compose build api` y después `docker compose build caddy`), nunca con `up --build`, que las compila juntas.
+- Cuando las imágenes se compilen en GitHub Actions, el servidor solo las descargará.
+
+El disco de 60 GB alcanza para años: el sistema, Docker y las imágenes ocupan unos 10 GB, y la base de un taller no pasa de 1 GB. Lo que crece son las fotos de las órdenes.
+
 ## Primera vez en un servidor
 
-Hace falta un servidor Linux con Docker, el DNS del dominio apuntando a él y los puertos 80 y 443 abiertos. Los comandos se corren en `despliegue/`, salvo el del paso 3.
+Hace falta el servidor con Docker y el swap, el DNS del dominio apuntando a él y los puertos 80 y 443 abiertos. Los comandos se corren en `despliegue/`, salvo el del paso 3.
 
 1. Copiar el repositorio al servidor y crear el `.env`:
 
@@ -45,10 +70,12 @@ Hace falta un servidor Linux con Docker, el DNS del dominio apuntando a él y lo
    docker compose run --rm api crear-gerencia
    ```
 
-6. Levantar todo:
+6. Compilar las imágenes de a una y levantar todo:
 
    ```
-   docker compose up -d --build
+   docker compose build api
+   docker compose build caddy
+   docker compose up -d
    ```
 
    `docker compose ps` tiene que mostrar los tres contenedores en `healthy` o `running`. La primera vez Caddy tarda unos segundos en obtener el certificado.
@@ -61,7 +88,7 @@ Hace falta un servidor Linux con Docker, el DNS del dominio apuntando a él y lo
 
 1. `git pull` en el servidor.
 2. Generar el script de migraciones (paso 3) y aplicarlo si trae migraciones nuevas, siempre con una copia de la base hecha antes.
-3. `docker compose up -d --build`. Se reconstruyen la API y la web; la base y los volúmenes no se tocan.
+3. `docker compose build api`, `docker compose build caddy` y `docker compose up -d`. Se reconstruyen la API y la web; la base y los volúmenes no se tocan.
 
 Los logs se ven con `docker compose logs -f api` o `caddy`. Docker los rota: guarda cinco archivos de 10 MB por contenedor.
 
