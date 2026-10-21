@@ -59,6 +59,35 @@ hay_copia_de_hoy() {
   [ -n "$(find "$DESTINO" -name 'crm-*.dump' -mmin -1440 | head -n 1)" ]
 }
 
+# Al reiniciar el servidor, Docker levanta todos los contenedores a la vez (depends_on
+# solo ordena el primer «compose up»): la base puede tardar en aceptar conexiones.
+esperar_base() {
+  intentos=0
+  until pg_isready --quiet; do
+    [ "$intentos" -eq 0 ] && registrar "esperando a que la base acepte conexiones"
+    intentos=$(( intentos + 1 ))
+    [ "$intentos" -ge 60 ] && return 1
+    sleep 5
+  done
+}
+
+# Una copia, y si falla, otra en una hora; mientras, el chequeo de salud marca el contenedor.
+copiar_con_reintento() {
+  esperar_base || registrar "la base no respondió en 5 minutos"
+  if copiar; then
+    limpiar
+    return 0
+  fi
+  registrar "ERROR: la copia falló; se reintenta en una hora"
+  sleep 3600
+  esperar_base || registrar "la base no respondió en 5 minutos"
+  if copiar; then
+    limpiar
+  else
+    registrar "ERROR: el reintento también falló"
+  fi
+}
+
 restaurar() {
   origen="$1"
   [ -f "$origen" ] || { registrar "no existe $origen"; exit 1; }
@@ -96,20 +125,13 @@ case "${1:-}" in
     registrar "copia diaria a las $HORA (hora de Perú); se guardan $DIAS días"
     # Al arrancar (primer despliegue o después de una caída) no se espera a la noche.
     if ! hay_copia_de_hoy; then
-      copiar || registrar "ERROR: la copia falló"
+      copiar_con_reintento
     fi
     while true; do
       espera=$(segundos_hasta_la_proxima)
       registrar "próxima copia en $(( espera / 3600 )) h $(( espera % 3600 / 60 )) min"
       sleep "$espera"
-      if copiar; then
-        limpiar
-      else
-        # Se reintenta en una hora; mientras, el chequeo de salud marca el contenedor.
-        registrar "ERROR: la copia falló; se reintenta en una hora"
-        sleep 3600
-        copiar || registrar "ERROR: el reintento también falló"
-      fi
+      copiar_con_reintento
     done
     ;;
   *)

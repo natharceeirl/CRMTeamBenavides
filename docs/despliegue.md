@@ -97,6 +97,7 @@ Los logs se ven con `docker compose logs -f api` o `caddy`. Docker los rota: gua
 El contenedor `respaldo` hace una copia diaria con `pg_dump` a la hora `HORA_RESPALDO` de Perú (03:00 por defecto). La guarda en `despliegue/respaldos/` y borra las de más de `RETENCION_DIAS` días (14 por defecto). Al arrancar hace una copia si no hay ninguna de las últimas 24 horas.
 
 - Cada copia se comprueba con `pg_restore --list` antes de darla por buena; una copia cortada a la mitad nunca queda con nombre de copia buena.
+- Antes de copiar espera a que la base acepte conexiones, hasta 5 minutos. Al reiniciar el servidor, Docker levanta todos los contenedores a la vez y la base tarda en arrancar.
 - Si una copia falla, se reintenta en una hora. `docker compose ps` muestra `respaldo` como `unhealthy` si la última copia tiene más de 26 horas.
 - Una copia ya, por ejemplo antes de actualizar:
 
