@@ -35,6 +35,8 @@ Correr la plataforma sobra; compilar es lo justo, y las dos imágenes a la vez n
 
 El disco de 60 GB alcanza para años: el sistema, Docker y las imágenes ocupan unos 10 GB, y la base de un taller no pasa de 1 GB. Lo que crece son las fotos de las órdenes.
 
+Por eso la web y la app achican cada foto antes de subirla, con la misma regla: lado mayor de 1920 px y JPEG al 80 %. La API rechaza las de más de 3 MB (`Almacenamiento:TamanioMaximoMb`). Probado el 21/10: una foto de 4000×3000 y 5,8 MB quedó guardada con 457 KB. A ese peso, 100 fotos al día suman unos 16 GB al año.
+
 ## Primera vez en un servidor
 
 Hace falta el servidor con Docker y el swap, el DNS del dominio apuntando a él y los puertos 80 y 443 abiertos. Los comandos se corren en `despliegue/`, salvo el del paso 3.
@@ -124,9 +126,13 @@ createdb <base>
 pg_restore --no-owner --no-privileges --exit-on-error -d <base> crm-AAAAMMDD-HHMM.dump
 ```
 
+### Las fotos no están en esta copia
+
+`pg_dump` copia la base, no los archivos. Las fotos de las órdenes viven en el volumen `datos-api` y hoy solo las cubren los snapshots de Lightsail. Si se restaura la base sola, las órdenes muestran fotos que ya no existen: pasó en el ensayo del 21/10. Para volver a una fecha hay que restaurar la base y las fotos de ese mismo día.
+
 ### Fuera del servidor
 
-Una copia que vive solo en el servidor se pierde con él. Falta llevar `despliegue/respaldos/` a otro lugar cada día: el plan es Cloudflare R2, cuando haya cuenta. Mientras tanto, se pueden copiar a mano con `scp`.
+Una copia que vive solo en el servidor se pierde con él. Falta llevar cada día `despliegue/respaldos/` y las fotos a otro lugar. El plan es Cloudflare R2 cuando haya cuenta, con una sincronización incremental para que las fotos no se suban enteras cada vez. Mientras tanto, se pueden copiar a mano con `scp`.
 
 ## Ensayar en una PC
 
@@ -205,5 +211,5 @@ En Docker, `docker-compose.yml` arma estas variables a partir del `.env`. Sin Do
 
 ## Pendiente
 
-- **Copia de los respaldos fuera del servidor**, por ejemplo a Cloudflare R2.
+- **Copia de la base y de las fotos fuera del servidor**, por ejemplo a Cloudflare R2.
 - **Ambiente de pruebas en el mismo servidor:** otra API y otra base con otro nombre de proyecto, y un segundo dominio en el mismo Caddy.

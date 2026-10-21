@@ -5,6 +5,7 @@ import { useEliminarFotoOrden, useFotosOrden, useSubirFotoOrden } from '../api/f
 import { solicitarBlob } from '../api/http'
 import type { FotoOrdenServicioResponse } from '../api/tipos'
 import { fechaHora } from '../utils/formato'
+import { achicarFoto, PESO_MAXIMO_FOTO, PESO_MAXIMO_ORIGINAL, pesoLegible } from '../utils/imagen'
 import { AvisoError } from './AvisoError'
 import { EtiquetaEstado } from './EtiquetaEstado'
 
@@ -25,7 +26,6 @@ const ETAPAS = [
 ]
 
 const TIPOS_PERMITIDOS = ['image/jpeg', 'image/png', 'image/webp']
-const TAMANO_MAXIMO = 10 * 1024 * 1024
 
 const nombreEtapa = (etapa: number) => ETAPAS.find((opcion) => opcion.value === etapa)?.label ?? 'Etapa'
 
@@ -66,6 +66,7 @@ export function ModalFotosOrden({ abierto, ordenServicioId, numeroOrden, soloLec
   const [filtroEtapa, setFiltroEtapa] = useState<number | 'todas'>('todas')
   const [archivo, setArchivo] = useState<File | null>(null)
   const [errorArchivo, setErrorArchivo] = useState<string | null>(null)
+  const [preparando, setPreparando] = useState(false)
   const [etapa, setEtapa] = useState(0)
   const [observacion, setObservacion] = useState('')
   const [formularioAbierto, setFormularioAbierto] = useState(false)
@@ -81,25 +82,46 @@ export function ModalFotosOrden({ abierto, ordenServicioId, numeroOrden, soloLec
     subirFoto.reset()
   }
 
+  // Se achica antes de subirla, como en la app: así el disco del servidor guarda cientos de KB y no 5 MB.
+  const prepararFoto = async (elegido: File) => {
+    setPreparando(true)
+    try {
+      const lista = await achicarFoto(elegido)
+      if (lista.size > PESO_MAXIMO_FOTO) {
+        setErrorArchivo(`Aun achicada, la foto pesa ${pesoLegible(lista.size)}; el máximo es ${pesoLegible(PESO_MAXIMO_FOTO)}.`)
+        setArchivo(null)
+      } else {
+        setArchivo(lista)
+      }
+    } catch {
+      setErrorArchivo('No se pudo leer la foto. Prueba con otra.')
+      setArchivo(null)
+    } finally {
+      setPreparando(false)
+    }
+  }
+
   const elegirArchivo = (elegido: File) => {
+    setArchivo(null)
     if (!TIPOS_PERMITIDOS.includes(elegido.type)) {
       setErrorArchivo('Solo se aceptan fotos JPG, PNG o WEBP.')
-      setArchivo(null)
-    } else if (elegido.size > TAMANO_MAXIMO) {
-      setErrorArchivo('La foto pesa más de 10 MB.')
-      setArchivo(null)
+    } else if (elegido.size > PESO_MAXIMO_ORIGINAL) {
+      setErrorArchivo(`La foto pesa más de ${pesoLegible(PESO_MAXIMO_ORIGINAL)}.`)
     } else {
       setErrorArchivo(null)
-      setArchivo(elegido)
+      void prepararFoto(elegido)
     }
     // No se sube sola: espera a «Guardar foto».
     return false
   }
 
-  const subir = async () => {
+  // Con mutate y no mutateAsync: el error lo muestra AvisoError y no queda una promesa rechazada sin atender.
+  const subir = () => {
     if (!archivo) return
-    await subirFoto.mutateAsync({ ordenServicioId, archivo, etapa, observacion: observacion.trim() || undefined })
-    limpiarFormulario()
+    subirFoto.mutate(
+      { ordenServicioId, archivo, etapa, observacion: observacion.trim() || undefined },
+      { onSuccess: limpiarFormulario },
+    )
   }
 
   const opcionesFiltro = [
@@ -139,13 +161,17 @@ export function ModalFotosOrden({ abierto, ordenServicioId, numeroOrden, soloLec
               <Form.Item
                 label="Foto"
                 validateStatus={errorArchivo ? 'error' : undefined}
-                help={errorArchivo ?? 'JPG, PNG o WEBP, hasta 10 MB.'}
+                help={errorArchivo ?? 'JPG, PNG o WEBP. Se achica a 1920 px antes de subirla.'}
               >
                 <Space wrap>
                   <Upload accept={TIPOS_PERMITIDOS.join(',')} showUploadList={false} beforeUpload={elegirArchivo}>
-                    <Button>{archivo ? 'Cambiar foto' : 'Elegir foto'}</Button>
+                    <Button loading={preparando}>{archivo ? 'Cambiar foto' : 'Elegir foto'}</Button>
                   </Upload>
-                  {archivo && <span className="texto-secundario">{archivo.name}</span>}
+                  {archivo && (
+                    <span className="texto-secundario">
+                      {archivo.name} · {pesoLegible(archivo.size)}
+                    </span>
+                  )}
                 </Space>
               </Form.Item>
               <Form.Item label="Etapa">
@@ -162,7 +188,7 @@ export function ModalFotosOrden({ abierto, ordenServicioId, numeroOrden, soloLec
               </Form.Item>
             </div>
             <Space>
-              <Button type="primary" onClick={subir} disabled={!archivo} loading={subirFoto.isPending}>
+              <Button type="primary" onClick={subir} disabled={!archivo || preparando} loading={subirFoto.isPending}>
                 Guardar foto
               </Button>
               <Button onClick={limpiarFormulario}>Cancelar</Button>

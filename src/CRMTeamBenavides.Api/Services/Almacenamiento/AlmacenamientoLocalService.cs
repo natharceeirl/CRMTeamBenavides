@@ -7,7 +7,13 @@ public class AlmacenamientoOptions
     public const string SectionName = "Almacenamiento";
 
     public string RutaBase { get; set; } = "uploads";
-    public int TamanioMaximoMb { get; set; } = 10;
+
+    /// <summary>
+    /// La web y la app achican la foto antes de subirla (1920 px, JPEG al 80 %), así que
+    /// llega con unos cientos de KB. El límite frena una foto sin achicar venga de donde venga,
+    /// para que no llene el disco del servidor.
+    /// </summary>
+    public int TamanioMaximoMb { get; set; } = 3;
 }
 
 public class AlmacenamientoLocalService : IAlmacenamientoArchivoService
