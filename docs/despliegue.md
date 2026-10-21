@@ -41,7 +41,7 @@ Por eso la web y la app achican cada foto antes de subirla, con la misma regla: 
 
 Hace falta el servidor con Docker y el swap, el DNS del dominio apuntando a él y los puertos 80 y 443 abiertos. Los comandos se corren en `despliegue/`, salvo el del paso 3.
 
-0. Crear la instancia de Lightsail (Ubuntu 24.04, plan de 2 GB) con `despliegue/preparar-servidor.sh` pegado en «Agregar script de lanzamiento». En el primer arranque, el script crea el swap, instala Docker y Compose y clona `develop` en `/opt/crm-team-benavides`. Cuando termina, `/var/log/cloud-init-output.log` dice «Servidor listo». En otro servidor se corre una vez con `sudo bash preparar-servidor.sh`.
+0. Crear la instancia de Lightsail (Ubuntu 24.04, plan de 2 GB) con `despliegue/preparar-servidor.sh` pegado en «Agregar script de lanzamiento». En el primer arranque, el script crea el swap, instala Docker y Compose y clona `develop` en `/opt/crm-team-benavides`. Cuando termina, `/var/log/cloud-init-output.log` dice «Servidor listo». En otro servidor se corre una vez con `sudo sh preparar-servidor.sh`. Lightsail corre el script con `sh` y no con `bash`, así que el script no usa nada propio de `bash`.
 1. En `/opt/crm-team-benavides/despliegue`, crear el `.env`:
 
    ```

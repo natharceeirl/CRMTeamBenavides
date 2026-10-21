@@ -1,10 +1,12 @@
-#!/bin/bash
+#!/bin/sh
 # Prepara un Ubuntu 24.04 recién creado para la plataforma: swap, Docker y el repositorio.
 #
 # En Lightsail se pega en «Agregar script de lanzamiento» al crear la instancia: corre una
 # sola vez, como root, en el primer arranque, y deja su salida en /var/log/cloud-init-output.log.
-# En otro servidor: sudo bash preparar-servidor.sh. Se puede volver a correr sin romper nada.
-set -euo pipefail
+# Lightsail lo mete dentro de un script suyo y lo corre con sh, no con bash: por eso nada de
+# bash aquí (un «set -o pipefail» lo detuvo el 21/10 sin hacer nada).
+# En otro servidor: sudo sh preparar-servidor.sh. Se puede volver a correr sin romper nada.
+set -eu
 
 REPOSITORIO=https://github.com/natharceeirl/CRMTeamBenavides.git
 RAMA=develop
