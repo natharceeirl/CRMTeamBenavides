@@ -1,0 +1,111 @@
+# Despliega develop en el servidor, a pedido: Actions → Desplegar → Run workflow.
+# Primero corre las pruebas del back y de la web; si pasan, entra al servidor por SSH y
+# corre despliegue/actualizar.sh con el commit. Secretos y uso: docs/despliegue.md, «Actualizar».
+#
+# El repositorio es público y este log también: el servidor y su llave van solo en secretos.
+name: Desplegar
+
+on:
+  workflow_dispatch:
+    inputs:
+      aplicar_migraciones:
+        description: Aplicar las migraciones nuevas (revisarlas antes)
+        type: boolean
+        default: false
+      commit:
+        description: Commit de develop (vacío = el último). Sirve para volver a una versión anterior.
+        type: string
+        default: ''
+
+# Un despliegue a la vez: el que llega después espera al anterior.
+concurrency:
+  group: despliegue
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  pruebas:
+    name: Pruebas
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      commit: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Commit a desplegar
+        id: commit
+        env:
+          PEDIDO: ${{ inputs.commit }}
+        run: |
+          if [ "$GITHUB_REF" != refs/heads/develop ]; then
+            echo "::error::Se despliega solo desde develop."
+            exit 1
+          fi
+          case $PEDIDO in
+            *[!0-9a-fA-F]*) echo "::error::El commit tiene que ser un SHA."; exit 1 ;;
+          esac
+          if ! sha=$(git rev-parse --verify --quiet "${PEDIDO:-HEAD}^{commit}"); then
+            echo "::error::No existe el commit $PEDIDO."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$sha" HEAD; then
+            echo "::error::El commit $PEDIDO no está en develop."
+            exit 1
+          fi
+          git checkout --quiet "$sha"
+          git log --oneline -1
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      # Las de categoría Integration necesitan un PostgreSQL de pruebas local.
+      - name: Pruebas del back
+        run: dotnet test tests/CRMTeamBenavides.Api.Tests --filter "Category!=Integration"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/web/package-lock.json
+
+      # Tipos generados al día, TypeScript, oxlint y vitest.
+      - name: Pruebas de la web
+        working-directory: src/web
+        run: |
+          npm ci
+          npm run verificar
+
+  desplegar:
+    name: Servidor
+    needs: pruebas
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: produccion
+    steps:
+      - name: Llave SSH
+        env:
+          CLAVE: ${{ secrets.SERVIDOR_SSH_CLAVE }}
+          HUELLA: ${{ secrets.SERVIDOR_SSH_HUELLA }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$CLAVE" > ~/.ssh/servidor
+          chmod 600 ~/.ssh/servidor
+          # La huella fija del servidor: si cambia, ssh no se conecta.
+          printf '%s\n' "$HUELLA" > ~/.ssh/known_hosts
+
+      # La llave solo puede correr actualizar.sh: lo que se manda es el commit y si migrar.
+      - name: Desplegar
+        env:
+          SERVIDOR: ${{ secrets.SERVIDOR_HOST }}
+          COMMIT: ${{ needs.pruebas.outputs.commit }}
+          MIGRAR: ${{ inputs.aplicar_migraciones && 'migrar' || 'sin-migrar' }}
+        run: >-
+          ssh -i ~/.ssh/servidor -o BatchMode=yes -o StrictHostKeyChecking=yes
+          -o ServerAliveInterval=30 "ubuntu@$SERVIDOR" "$COMMIT $MIGRAR"
