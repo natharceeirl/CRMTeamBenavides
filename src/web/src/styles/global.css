@@ -599,6 +599,64 @@ h4 {
   color: var(--color-fondo);
 }
 
+.login-marca-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.login-marca-texto h1,
+.login-marca-texto p {
+  margin: 0;
+}
+
+/* Las cuatro líneas del taller, como etiquetas con el acento a la izquierda. */
+.login-lineas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.login-lineas li {
+  padding-left: 10px;
+  border-left: 3px solid var(--color-acento);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-fondo);
+}
+
+.tacometro {
+  align-self: center;
+  width: min(100%, 400px);
+  height: auto;
+}
+
+/* Dibujada apuntando a 6000 r/min: 50 grados más la dejan en 8500, al borde de la zona roja. */
+.tacometro-aguja {
+  transform-box: view-box;
+  transform-origin: 160px 160px;
+  transform: rotate(50deg);
+  animation: tacometro-aguja 1.4s cubic-bezier(0.25, 1.3, 0.45, 1) 0.3s both;
+}
+
+/* Sube desde cero, como al dar contacto. */
+@keyframes tacometro-aguja {
+  from {
+    transform: rotate(-120deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tacometro-aguja {
+    animation: none;
+  }
+}
+
 .login-formulario {
   display: flex;
   flex-direction: column;
@@ -756,6 +814,11 @@ mark.pendiente {
 @media (max-width: 900px) {
   .login {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* En una sola columna el panel va arriba del formulario: sin el dibujo, no lo empuja hacia abajo. */
+  .tacometro {
+    display: none;
   }
 
   .formulario-grid {

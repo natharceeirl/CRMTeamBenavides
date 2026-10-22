@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Alert, Button, Form, Input } from 'antd'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router'
 import { Logo } from '../components/Logo'
+import { Tacometro } from '../components/Tacometro'
 import { useSesion } from '../auth/sesion'
 import { ErrorApi } from '../api/http'
 
@@ -42,8 +43,17 @@ export function LoginPage() {
     <div className="login">
       <div className="login-marca">
         <Logo variante="oscuro" alto={40} />
-        <h1>Gestión del taller y la tienda</h1>
-        <p>Concesionario autorizado Yamaha · Arequipa</p>
+        <Tacometro />
+        <div className="login-marca-texto">
+          <h1>Gestión del taller y la tienda</h1>
+          <p>Concesionario autorizado Yamaha · Arequipa</p>
+          <ul className="login-lineas">
+            <li>Motocicletas</li>
+            <li>Cuatrimotos</li>
+            <li>Náutica</li>
+            <li>Línea de fuerza</li>
+          </ul>
+        </div>
       </div>
       <div className="login-formulario">
         <div>
