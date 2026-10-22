@@ -9,7 +9,7 @@ La plataforma corre en un solo servidor con Docker: Caddy recibe el HTTPS y sirv
 | `despliegue/Dockerfile.web` | La web compilada dentro de la imagen de Caddy. |
 | `despliegue/Caddyfile` | HTTPS automático, `/api` hacia la API y el resto, la web. |
 | `despliegue/.env.ejemplo` | Las variables del servidor, sin valores. Se copia como `.env`, que no se sube al repositorio. |
-| `despliegue/actualizar.sh` | Pasa el servidor a un commit de `develop`. Lo llama el workflow `.github/workflows/desplegar.yml`. |
+| `despliegue/actualizar.sh` | Pasa el servidor a un commit de `main`. Lo llama el workflow `.github/workflows/desplegar.yml`. |
 
 ## Servidor
 
@@ -42,7 +42,7 @@ Por eso la web y la app achican cada foto antes de subirla, con la misma regla: 
 
 Hace falta el servidor con Docker y el swap, el DNS del dominio apuntando a él y los puertos 80 y 443 abiertos. Los comandos se corren en `despliegue/`, salvo el del paso 3.
 
-0. Crear la instancia de Lightsail (Ubuntu 24.04, plan de 2 GB) con `despliegue/preparar-servidor.sh` pegado en «Agregar script de lanzamiento». En el primer arranque, el script crea el swap, instala Docker y Compose y clona `develop` en `/opt/crm-team-benavides`. Cuando termina, `/var/log/cloud-init-output.log` dice «Servidor listo». En otro servidor se corre una vez con `sudo sh preparar-servidor.sh`. Lightsail corre el script con `sh` y no con `bash`, así que el script no usa nada propio de `bash`.
+0. Crear la instancia de Lightsail (Ubuntu 24.04, plan de 2 GB) con `despliegue/preparar-servidor.sh` pegado en «Agregar script de lanzamiento». En el primer arranque, el script crea el swap, instala Docker y Compose y clona `main` en `/opt/crm-team-benavides`. Cuando termina, `/var/log/cloud-init-output.log` dice «Servidor listo». En otro servidor se corre una vez con `sudo sh preparar-servidor.sh`. Lightsail corre el script con `sh` y no con `bash`, así que el script no usa nada propio de `bash`.
 1. En `/opt/crm-team-benavides/despliegue`, crear el `.env`:
 
    ```
@@ -90,11 +90,22 @@ Hace falta el servidor con Docker y el swap, el DNS del dominio apuntando a él 
 
 ## Actualizar
 
-Se actualiza a pedido, nunca solo con un push: en GitHub, **Actions → Desplegar → Run workflow**, con la rama `develop`. El workflow hace dos cosas:
+Desde el 22/10, `main` es la rama de producción: tiene solo lo que ya salió o va a salir, y es la rama por defecto en GitHub. El trabajo del día sigue en `develop`. Sacar una versión lleva dos pasos:
+
+1. Pasar `develop` a `main`:
+
+   ```
+   git push origin develop:main
+   ```
+
+   Solo avanza si `main` está detrás de `develop`, así que nunca pisa nada. Se lleva todo lo que haya en `develop` en ese momento.
+2. En GitHub, **Actions → Desplegar → Run workflow** con la rama `main`. Un push no despliega nada por sí solo.
+
+El workflow hace dos cosas:
 
 1. Corre las pruebas del back, menos las de integración, y la verificación de la web: tipos generados, TypeScript, oxlint y vitest. Si alguna falla, no toca el servidor.
 2. Entra al servidor por SSH y corre `despliegue/actualizar.sh` con ese commit. El script:
-   - deja el repositorio del servidor en ese commit, que tiene que estar en `develop` de GitHub;
+   - deja el repositorio del servidor en ese commit, que tiene que estar en `main` de GitHub;
    - si hay migraciones que la base todavía no tiene, las lista y para, salvo que se haya marcado «Aplicar migraciones»;
    - compila la imagen de la API y después la de la web, mientras la versión actual sigue atendiendo;
    - hace una copia de la base;
@@ -108,12 +119,13 @@ Al cambiar los contenedores, la web deja de responder unos segundos: conviene de
 - **Volver a una versión anterior:** correr el workflow con ese commit en «Commit». Esto sirve solo si entre las dos versiones no hubo migraciones. Si las hubo, la base no vuelve atrás sola: se restaura la copia que se hizo antes (sección siguiente).
 - **Si se corta la conexión con GitHub:** el despliegue sigue en el servidor y una migración no queda a medias. El registro de cada despliegue queda en `~/despliegues/`.
 - **Un despliegue a la vez:** GitHub pone en cola el siguiente, y el servidor además tiene un candado.
+- **Arreglo urgente con trabajo a medias en `develop`:** el arreglo se hace en una rama que sale de `main`. Esa rama se une a `main`, se despliega y después se trae a `develop`.
 
 Los logs de la API se ven con `docker compose logs -f api`, y los de Caddy con `docker compose logs -f caddy`. Docker los rota: guarda cinco archivos de 10 MB por contenedor.
 
 ### Configurar GitHub, una vez
 
-- El workflow tiene que estar en la rama por defecto del repositorio. Si no, GitHub no muestra el botón «Run workflow». Esa rama es `main`, que tiene una copia del workflow solo para eso. Lo que corre es la versión de `develop`, la rama que se elige en el botón. Si cambia el workflow, se copia también a `main`.
+- El workflow tiene que estar en la rama por defecto del repositorio, que es `main`. Si no, GitHub no muestra el botón «Run workflow».
 - Los secretos van en Settings → Secrets and variables → Actions. El repositorio y los logs de sus workflows son públicos, así que la IP y la llave nunca van en el código:
 
   | Secreto | Qué es |
@@ -139,9 +151,9 @@ Los logs de la API se ven con `docker compose logs -f api`, y los de Caddy con `
 En el servidor, desde `/opt/crm-team-benavides`:
 
 ```
-git fetch origin develop
-sh despliegue/actualizar.sh $(git rev-parse origin/develop)            # sin migraciones nuevas
-sh despliegue/actualizar.sh $(git rev-parse origin/develop) migrar     # aplicándolas
+git fetch origin main
+sh despliegue/actualizar.sh $(git rev-parse origin/main)            # sin migraciones nuevas
+sh despliegue/actualizar.sh $(git rev-parse origin/main) migrar     # aplicándolas
 ```
 
 ## Copias de la base

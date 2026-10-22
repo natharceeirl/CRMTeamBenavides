@@ -114,15 +114,16 @@ Principios del documento técnico que no se negocian:
 ## Repositorio
 
 - GitHub: https://github.com/natharceeirl/CRMTeamBenavides
-- Ramas (desde el 16/09): todo el trabajo va directo sobre `develop`. Front y back hacen sus commits ahí; no se crean ramas `feature/*` ni Pull Requests para el día a día.
+- Ramas: el trabajo del día va directo sobre `develop`, como desde el 16/09; front y back hacen sus commits ahí, sin ramas `feature/*` ni Pull Requests. Desde el 22/10, `main` es la rama de producción y la rama por defecto en GitHub, y comparte historia con `develop`.
 
   ```
-  main       (historia antigua, sin relación con develop)
+  main       ← lo que está en producción
   └─ develop ← Santiago y Paolo
   ```
 
-- Flujo: `git pull` antes de empezar y antes de subir → commits en `develop` → `git push`.
-- Pendiente: `main` (`f4806a0`) y `develop` (raíz `7775b93`) tienen historias sin relación, porque `develop` se rehízo sobre la rama del back. Hay que resolverlo antes del despliegue.
+- Flujo diario: `git pull` antes de empezar y antes de subir → commits en `develop` → `git push`. Un clon nuevo abre en `main`: primero `git switch develop`.
+- Sacar una versión: `git push origin develop:main` y después Actions → Desplegar → Run workflow con `main`. Se lleva todo lo que haya en `develop`, así que lo que se sube a `develop` tiene que compilar y pasar las pruebas. Detalle en [docs/despliegue.md](docs/despliegue.md).
+- Nunca se hace force push a `main`.
 - Estructura:
   - `CRMTeamBenavides.slnx` y `src/CRMTeamBenavides.Api`: la API .NET 10 con entidades de dominio, servicios, endpoints por área en `Features/`, `ApplicationDbContext` y migraciones.
   - `src/web`: la web administrativa en React + TypeScript + Vite + Ant Design, conectada a la API: tablero, órdenes, clientes, unidades, repuestos, ventas y comprobantes, reportes, chatbot y usuarios; ver `src/web/README.md`.

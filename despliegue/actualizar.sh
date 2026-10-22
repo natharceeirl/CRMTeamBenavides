@@ -1,5 +1,5 @@
 #!/bin/sh
-# Actualiza el servidor a un commit de develop: imágenes nuevas, copia de la base,
+# Actualiza el servidor a un commit de main: imágenes nuevas, copia de la base,
 # migraciones si las hay y arranque. Lo llama el workflow «Desplegar» de GitHub
 # (.github/workflows/desplegar.yml) por SSH, con una llave que en ~/.ssh/authorized_keys
 # solo puede correr este script:
@@ -57,17 +57,18 @@ iniciar() {
   return "$estado"
 }
 
-# 2. Con el candado: deja el código en el commit pedido, que tiene que estar en develop de
+# 2. Con el candado: deja el código en el commit pedido, que tiene que estar en main de
 # GitHub. Después sigue con la versión del script de ese commit, no con la de antes.
 codigo() {
   cd "$REPOSITORIO"
   [ -z "$(git status --porcelain --untracked-files=no)" ] \
     || falla "El repositorio del servidor tiene cambios sin commitear; no se toca nada."
-  git fetch --quiet origin develop
-  git merge-base --is-ancestor "$1" origin/develop 2>/dev/null \
-    || falla "El commit $1 no está en develop de GitHub."
+  git fetch --quiet origin main
+  git merge-base --is-ancestor "$1" origin/main 2>/dev/null \
+    || falla "El commit $1 no está en main de GitHub."
   anterior=$(git rev-parse --short HEAD)
-  git reset --quiet --hard "$1"
+  # La rama local main queda en el commit desplegado, aunque sea uno anterior.
+  git checkout --quiet --force -B main "$1"
   paso "Código en $(git log --oneline -1) (antes: $anterior)"
   exec sh "$SCRIPT" --resto "$1" "$2"
 }

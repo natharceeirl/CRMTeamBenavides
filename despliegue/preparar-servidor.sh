@@ -9,7 +9,7 @@
 set -eu
 
 REPOSITORIO=https://github.com/natharceeirl/CRMTeamBenavides.git
-RAMA=develop
+RAMA=main
 DESTINO=/opt/crm-team-benavides
 USUARIO=ubuntu
 
