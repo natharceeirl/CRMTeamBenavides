@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App as AppAntd, ConfigProvider } from 'antd'
 import esES from 'antd/locale/es_ES'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { afterEach, vi } from 'vitest'
+import { afterAll, afterEach, vi } from 'vitest'
 import { guardarSesion } from '../api/http'
 import { ProveedorSesion } from '../auth/sesion'
 import type { MeResponse } from '../api/tipos'
@@ -43,6 +43,12 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
+
+// Al desmontar, antd deja temporizadores cortos: el formulario espera 10 ms para limpiar
+// sus errores y las animaciones, un cuadro. Si se disparan cuando vitest ya cerró jsdom,
+// React no encuentra window y la corrida falla aunque pasen todas las pruebas (pasó en
+// GitHub Actions el 22/10). Se les da tiempo antes de que termine cada archivo.
+afterAll(() => new Promise((listo) => setTimeout(listo, 50)))
 
 type Pedido = { metodo: string; ruta: string; url: URL; cuerpo: BodyInit | null | undefined }
 type Respuesta = ((pedido: Pedido) => unknown) | object | string | number | boolean | null
