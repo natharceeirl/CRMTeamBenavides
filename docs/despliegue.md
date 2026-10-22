@@ -9,6 +9,7 @@ La plataforma corre en un solo servidor con Docker: Caddy recibe el HTTPS y sirv
 | `despliegue/Dockerfile.web` | La web compilada dentro de la imagen de Caddy. |
 | `despliegue/Caddyfile` | HTTPS automático, `/api` hacia la API y el resto, la web. |
 | `despliegue/.env.ejemplo` | Las variables del servidor, sin valores. Se copia como `.env`, que no se sube al repositorio. |
+| `despliegue/actualizar.sh` | Pasa el servidor a un commit de `develop`. Lo llama el workflow `.github/workflows/desplegar.yml`. |
 
 ## Servidor
 
@@ -31,7 +32,7 @@ Correr la plataforma sobra; compilar es lo justo, y las dos imágenes a la vez n
   ```
 
 - Las imágenes se compilan de a una (`docker compose build api` y después `docker compose build caddy`), nunca con `up --build`, que las compila juntas.
-- Cuando las imágenes se compilen en GitHub Actions, el servidor solo las descargará.
+- Al actualizar desde GitHub Actions, las imágenes se siguen compilando en el servidor. El 21/10, el primer despliegue completo tardó unos 2 minutos: migraciones, API y web.
 
 El disco de 60 GB alcanza para años: el sistema, Docker y las imágenes ocupan unos 10 GB, y la base de un taller no pasa de 1 GB. Lo que crece son las fotos de las órdenes.
 
@@ -89,11 +90,59 @@ Hace falta el servidor con Docker y el swap, el DNS del dominio apuntando a él 
 
 ## Actualizar
 
-1. `git pull` en el servidor.
-2. Generar el script de migraciones (paso 3) y aplicarlo si trae migraciones nuevas, siempre con una copia de la base hecha antes.
-3. `docker compose build api`, `docker compose build caddy` y `docker compose up -d`. Se reconstruyen la API y la web; la base y los volúmenes no se tocan.
+Se actualiza a pedido, nunca solo con un push: en GitHub, **Actions → Desplegar → Run workflow**, con la rama `develop`. El workflow hace dos cosas:
 
-Los logs se ven con `docker compose logs -f api` o `caddy`. Docker los rota: guarda cinco archivos de 10 MB por contenedor.
+1. Corre las pruebas del back, menos las de integración, y la verificación de la web: tipos generados, TypeScript, oxlint y vitest. Si alguna falla, no toca el servidor.
+2. Entra al servidor por SSH y corre `despliegue/actualizar.sh` con ese commit. El script:
+   - deja el repositorio del servidor en ese commit, que tiene que estar en `develop` de GitHub;
+   - si hay migraciones que la base todavía no tiene, las lista y para, salvo que se haya marcado «Aplicar migraciones»;
+   - compila la imagen de la API y después la de la web, mientras la versión actual sigue atendiendo;
+   - hace una copia de la base;
+   - aplica las migraciones nuevas, si se pidió;
+   - levanta los contenedores nuevos y espera a que queden sanos;
+   - comprueba, a través de Caddy, que la web responde 200 y la API responde 401 sin sesión.
+
+Al cambiar los contenedores, la web deja de responder unos segundos: conviene desplegar fuera del horario del taller. La base y los volúmenes no se tocan.
+
+- **Migraciones:** antes de marcar la casilla, revisar en el commit el `Up()` de cada migración nueva, que aparece listada en el log del workflow.
+- **Volver a una versión anterior:** correr el workflow con ese commit en «Commit». Esto sirve solo si entre las dos versiones no hubo migraciones. Si las hubo, la base no vuelve atrás sola: se restaura la copia que se hizo antes (sección siguiente).
+- **Si se corta la conexión con GitHub:** el despliegue sigue en el servidor y una migración no queda a medias. El registro de cada despliegue queda en `~/despliegues/`.
+- **Un despliegue a la vez:** GitHub pone en cola el siguiente, y el servidor además tiene un candado.
+
+Los logs de la API se ven con `docker compose logs -f api`, y los de Caddy con `docker compose logs -f caddy`. Docker los rota: guarda cinco archivos de 10 MB por contenedor.
+
+### Configurar GitHub, una vez
+
+- El workflow tiene que estar en la rama por defecto del repositorio. Si no, GitHub no muestra el botón «Run workflow».
+- Los secretos van en Settings → Secrets and variables → Actions. El repositorio y los logs de sus workflows son públicos, así que la IP y la llave nunca van en el código:
+
+  | Secreto | Qué es |
+  |---|---|
+  | `SERVIDOR_HOST` | La IP fija del servidor |
+  | `SERVIDOR_SSH_CLAVE` | La llave privada que se usa solo para desplegar |
+  | `SERVIDOR_SSH_HUELLA` | La huella del servidor: la línea que da `ssh-keyscan -t ed25519 IP`. Si el servidor cambia, ssh no se conecta. |
+
+- En el servidor, la llave pública está en `~/.ssh/authorized_keys` con este prefijo, que la deja correr solo el script, sin terminal y sin reenvíos:
+
+  ```
+  restrict,command="sh /opt/crm-team-benavides/despliegue/actualizar.sh" ssh-ed25519 ... github-actions-desplegar
+  ```
+
+- **Para cambiar la llave:**
+  1. Generar una nueva con `ssh-keygen -t ed25519 -N "" -C github-actions-desplegar -f llave`.
+  2. Agregar `llave.pub` con ese prefijo.
+  3. Reemplazar el secreto `SERVIDOR_SSH_CLAVE`.
+  4. Borrar la línea de la llave anterior.
+
+### Sin GitHub
+
+En el servidor, desde `/opt/crm-team-benavides`:
+
+```
+git fetch origin develop
+sh despliegue/actualizar.sh $(git rev-parse origin/develop)            # sin migraciones nuevas
+sh despliegue/actualizar.sh $(git rev-parse origin/develop) migrar     # aplicándolas
+```
 
 ## Copias de la base
 
