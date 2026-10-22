@@ -113,7 +113,7 @@ Los logs de la API se ven con `docker compose logs -f api`, y los de Caddy con `
 
 ### Configurar GitHub, una vez
 
-- El workflow tiene que estar en la rama por defecto del repositorio. Si no, GitHub no muestra el botón «Run workflow».
+- El workflow tiene que estar en la rama por defecto del repositorio. Si no, GitHub no muestra el botón «Run workflow». Esa rama es `main`, que tiene una copia del workflow solo para eso. Lo que corre es la versión de `develop`, la rama que se elige en el botón. Si cambia el workflow, se copia también a `main`.
 - Los secretos van en Settings → Secrets and variables → Actions. El repositorio y los logs de sus workflows son públicos, así que la IP y la llave nunca van en el código:
 
   | Secreto | Qué es |
