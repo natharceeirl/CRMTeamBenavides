@@ -61,10 +61,9 @@ public sealed class YamahaVentasExporter : IYamahaVentasExporter
 
         query = query.Where(v => v.Comprobante!.FechaCreacion <= hastaUtc.Value && v.Fecha <= hastaUtc.Value);
 
-        if (soloVentasMostrador)
-        {
-            query = query.Where(v => v.OrdenServicioId == null);
-        }
+        // Regla estricta Yamaha v3 (confirmación YMDP): las operaciones de taller se reportan
+        // exclusivamente mediante Servicio 3; el Servicio 1 filtra siempre OrdenServicioId == null.
+        query = query.Where(v => v.OrdenServicioId == null);
 
         int tamanioLote = _settings.TamanioLoteExportacion > 0 ? _settings.TamanioLoteExportacion : 500;
         int offset = 0;
@@ -106,14 +105,7 @@ public sealed class YamahaVentasExporter : IYamahaVentasExporter
             }
         }
 
-        if (soloVentasMostrador)
-        {
-            observaciones.Add("D-02: Se filtraron exclusivamente ventas directas de mostrador (OrdenServicioId == null) para prevenir duplicidad con Servicio Técnico.");
-        }
-        else
-        {
-            observaciones.Add("D-02: Se incluyeron ventas asociadas a órdenes de taller; riesgo latente de doble reporte de repuestos hasta resolución formal de YMDP.");
-        }
+        observaciones.Add("D-02: Se excluyeron estrictamente ventas vinculadas a órdenes de taller (OrdenServicioId == null) para prevenir duplicidad con Servicio Técnico conforme a la decisión final de Yamaha v3.");
 
         return new YamahaExportacionResultado<YamahaVentaV3Dto>(
             RegistrosValidos: dtosValidos,

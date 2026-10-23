@@ -357,14 +357,15 @@ public class YamahaMappingServiceTests
     }
 
     [Fact]
-    public void MapearVenta_VinculadaAOrdenServicio_DebeAsignarCanalTallerYObervacionD02()
+    public void MapearVenta_VinculadaAOrdenServicio_DebeRetornarNoProyectableExplicandoServicio3()
     {
         var contexto = CrearContextoPrueba();
+        var ordenId = Guid.NewGuid();
         var venta = new Venta
         {
             Id = Guid.NewGuid(),
             Estado = EstadoVenta.Confirmada,
-            OrdenServicioId = Guid.NewGuid(),
+            OrdenServicioId = ordenId,
             Cliente = new Cliente { NombreCompleto = "Juan Perez", NumeroDocumento = "71234567", TipoDocumento = TipoDocumentoCliente.DNI },
             Comprobante = new Comprobante { Tipo = "Boleta", Serie = "B001", Numero = "00000001", Estado = "Emitido", FechaCreacion = DateTime.UtcNow },
             Detalles = new List<DetalleVenta>
@@ -383,12 +384,70 @@ public class YamahaMappingServiceTests
 
         var loteRes = _mapper.MapearVenta(venta, contexto);
 
-        Assert.True(loteRes.EsLoteCompletamenteValido);
-        var dto = loteRes.DtosProyectados[0];
-        Assert.Equal("TALLER", dto.Canal);
+        Assert.False(loteRes.EsLoteCompletamenteValido);
+        Assert.Equal(0, loteRes.TotalValidos);
+        Assert.Equal(1, loteRes.TotalNoProyectables);
+        Assert.Empty(loteRes.DtosProyectados);
+        var reg = Assert.Single(loteRes.Registros);
+        Assert.False(reg.EsValido);
+        Assert.Contains(reg.ErroresBloqueantes, err => err.Contains(ordenId.ToString()) && err.Contains("Servicio 3"));
+    }
 
-        var obs = loteRes.Registros[0].Observaciones;
-        Assert.Contains(obs, o => o.Contains("D-02") && o.Contains("TALLER"));
+    [Fact]
+    public void MapearDetalleVenta_VinculadoAOrdenServicio_DebeRetornarNoProyectableExplicandoServicio3()
+    {
+        var contexto = CrearContextoPrueba();
+        var ordenId = Guid.NewGuid();
+        var venta = new Venta
+        {
+            Id = Guid.NewGuid(),
+            Estado = EstadoVenta.Confirmada,
+            OrdenServicioId = ordenId,
+            Cliente = new Cliente { NombreCompleto = "Juan Perez", NumeroDocumento = "71234567", TipoDocumento = TipoDocumentoCliente.DNI },
+            Comprobante = new Comprobante { Tipo = "Boleta", Serie = "B001", Numero = "00000001", Estado = "Emitido", FechaCreacion = DateTime.UtcNow }
+        };
+        var detalle = new DetalleVenta
+        {
+            Producto = new Producto { Codigo = "2DP-E4451-00", Nombre = "Elemento Filtro de Aire NMAX" },
+            Cantidad = 1,
+            PrecioUnitario = 45.00m,
+            Total = 45.00m,
+            SubtotalGravado = 38.14m,
+            Activo = true
+        };
+
+        var res = _mapper.MapearDetalleVenta(venta, detalle, contexto);
+
+        Assert.False(res.EsValido);
+        Assert.Null(res.Dto);
+        Assert.Contains(res.ErroresBloqueantes, err => err.Contains(ordenId.ToString()) && err.Contains("Servicio 3"));
+    }
+
+    [Fact]
+    public void MapearProductoStock_CostoDeAdquisicion_DebeUsarProductoCosto()
+    {
+        var contexto = CrearContextoPrueba();
+        var producto = new Producto
+        {
+            Id = Guid.NewGuid(),
+            Codigo = "90793-AJ421",
+            Nombre = "Aceite Yamalube 4T 10W-40",
+            Costo = 28.50m,
+            PrecioVenta = 42.00m,
+            StockActual = 15,
+            Marca = "YAMAHA",
+            FechaCreacion = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc),
+            Activo = true
+        };
+
+        var res = _mapper.MapearProductoStock(producto, contexto);
+
+        Assert.True(res.EsValido);
+        Assert.NotNull(res.Dto);
+        Assert.Equal(28.50m, res.Dto.CostoVentaSinIGV);
+        Assert.Equal(33.63m, res.Dto.CostoVentaConIGV);
+        Assert.Equal(15, res.Dto.StockDisponible);
+        Assert.Contains(res.Observaciones, o => o.Contains("D-03") && o.Contains("costo de adquisición"));
     }
 
     [Fact]

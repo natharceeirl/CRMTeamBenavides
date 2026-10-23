@@ -47,6 +47,13 @@ public sealed class YamahaMappingService : IYamahaMappingService
             errores.Add($"La venta se encuentra en estado '{venta.Estado}' (Activo={venta.Activo}). Solo se pueden proyectar ventas activas en estado Confirmada.");
         }
 
+        // Regla estricta Yamaha v3 (confirmación YMDP): las operaciones de taller se reportan
+        // exclusivamente mediante Servicio 3 (Servicio Técnico). Servicio 1 (Ventas) rechaza ventas de taller.
+        if (venta.OrdenServicioId.HasValue)
+        {
+            errores.Add($"La venta está vinculada a la Orden de Servicio {venta.OrdenServicioId.Value}. Las operaciones de taller se reportan exclusivamente mediante el Servicio 3 (Servicio Técnico) de Yamaha v3.");
+        }
+
         // Validación de comprobante de facturación
         comprobante ??= venta.Comprobante;
         if (comprobante is null)
@@ -76,7 +83,11 @@ public sealed class YamahaMappingService : IYamahaMappingService
                 tipoDocVenta = resTipoDoc.Valor!;
                 if (string.Equals(tipoDocVenta, YamahaV3Catalogos.DocumentoVentaNotaCredito, StringComparison.Ordinal))
                 {
-                    errores.Add("La proyección de comprobantes tipo 'NOTA DE CREDITO' está bloqueada (D-04): el flujo contable y la regla de signos negativos de la Sección 4.2 están pendientes de definición.");
+                    // Bloqueo explícito D-04: El CRM Team Benavides no cuenta actualmente con un módulo ni entidad
+                    // contable de Nota de Crédito (solo emite Boletas y Facturas, y las anulaciones son meramente
+                    // administrativas en VentaService cambiando Estado = Anulada). No se deben sintetizar notas de
+                    // crédito ficticias a partir de anulaciones para no generar deducciones apócrifas en Yamaha.
+                    errores.Add("La proyección de comprobantes tipo 'NOTA DE CREDITO' está bloqueada (D-04): el CRM no cuenta con módulo ni entidad de Notas de Crédito; las anulaciones de ventas son administrativas y no generan notas de crédito electrónicas.");
                 }
             }
         }
@@ -271,6 +282,23 @@ public sealed class YamahaMappingService : IYamahaMappingService
                 TotalNoProyectables: 1);
         }
 
+        // Regla estricta Yamaha v3 (confirmación YMDP): las operaciones de taller se reportan
+        // exclusivamente mediante Servicio 3 (Servicio Técnico). Servicio 1 (Ventas) rechaza ventas de taller.
+        if (venta.OrdenServicioId.HasValue)
+        {
+            return new YamahaMapeoLoteResultado<YamahaVentaV3Dto>(
+                Array.Empty<YamahaVentaV3Dto>(),
+                new[]
+                {
+                    YamahaMapeoRegistroResultado<YamahaVentaV3Dto>.NoProyectable(
+                        $"Venta-{venta.Id}",
+                        $"La venta está vinculada a la Orden de Servicio {venta.OrdenServicioId.Value}. Las operaciones de taller se reportan exclusivamente mediante el Servicio 3 (Servicio Técnico) de Yamaha v3.")
+                },
+                TotalProcesados: 0,
+                TotalValidos: 0,
+                TotalNoProyectables: 1);
+        }
+
         var detallesActivos = venta.Detalles.Where(d => d.Activo).ToList();
         if (detallesActivos.Count == 0)
         {
@@ -375,12 +403,12 @@ public sealed class YamahaMappingService : IYamahaMappingService
         }
 
         // Sección 5.2: En repuestos (SP), StockDisponible = 0 es plenamente válido.
-        // D-03: Mapeamos CostoVentaSinIGV desde producto.Costo (costo de adquisición)
+        // D-03: Mapeamos CostoVentaSinIGV desde producto.Costo (costo de adquisición acordado con Yamaha)
         // y calculamos CostoVentaConIGV agregando el 18% de IGV.
         var costoSinIgv = Math.Round(producto.Costo, 2, MidpointRounding.AwayFromZero);
         var costoConIgv = Math.Round(costoSinIgv * 1.18m, 2, MidpointRounding.AwayFromZero);
 
-        observaciones.Add("D-03: CostoVenta proyectado desde Producto.Costo; sujeto a confirmación con Yamaha si corresponde a Costo o PrecioVenta.");
+        observaciones.Add("D-03: CostoVenta proyectado desde Producto.Costo como costo de adquisición acordado con Yamaha.");
 
         if (!string.Equals(producto.Marca?.Trim(), "YAMAHA", StringComparison.OrdinalIgnoreCase))
         {

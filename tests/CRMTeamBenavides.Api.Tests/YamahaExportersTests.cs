@@ -239,14 +239,15 @@ public class YamahaExportersTests
         Assert.Equal("B001-000101", resMostrador.RegistrosValidos[0].NumeroComprobante);
         Assert.Equal("MOSTRADOR", resMostrador.RegistrosValidos[0].Canal);
 
-        // 2. Incluir ambas
-        var resAmbas = await exporter.ExportarVentasAsync(
+        // 2. Con regla estricta Yamaha v3, incluso si soloVentasMostrador = false, la venta de taller se excluye
+        var resSinFiltro = await exporter.ExportarVentasAsync(
             desdeUtc: DateTime.UtcNow.AddDays(-5),
             soloVentasMostrador: false);
 
-        Assert.Equal(2, resAmbas.RegistrosValidos.Count);
-        Assert.Contains(resAmbas.RegistrosValidos, v => v.Canal == "MOSTRADOR");
-        Assert.Contains(resAmbas.RegistrosValidos, v => v.Canal == "TALLER");
+        Assert.Single(resSinFiltro.RegistrosValidos);
+        Assert.Equal("B001-000101", resSinFiltro.RegistrosValidos[0].NumeroComprobante);
+        Assert.Equal("MOSTRADOR", resSinFiltro.RegistrosValidos[0].Canal);
+        Assert.Contains(resSinFiltro.ObservacionesYAdvertencias, o => o.Contains("D-02") && o.Contains("excluyeron estrictamente ventas vinculadas a órdenes de taller"));
 
         // 3. Filtrar fuera de rango
         var resVacio = await exporter.ExportarVentasAsync(
