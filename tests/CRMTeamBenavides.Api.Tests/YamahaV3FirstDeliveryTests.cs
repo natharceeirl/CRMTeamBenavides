@@ -50,9 +50,9 @@ public class YamahaV3FirstDeliveryTests
         Assert.Equal(39, propiedadesReales.Length);
         Assert.Equal(camposEsperados, propiedadesReales);
 
-        // Para SP, AnioModelo no aplica y se serializa como cadena vacía según Sección 3.4
-        Assert.Equal(JsonValueKind.String, elemento.GetProperty("AnioModelo").ValueKind);
-        Assert.Equal(string.Empty, elemento.GetProperty("AnioModelo").GetString());
+        // Para SP, AnioModelo no aplica y se serializa como número 0 conforme a las aclaraciones de Yamaha v3
+        Assert.Equal(JsonValueKind.Number, elemento.GetProperty("AnioModelo").ValueKind);
+        Assert.Equal(0, elemento.GetProperty("AnioModelo").GetInt32());
     }
 
     [Fact]
@@ -110,6 +110,11 @@ public class YamahaV3FirstDeliveryTests
         Assert.False(elemento.TryGetProperty("MOSinIGV", out _));
         Assert.False(elemento.TryGetProperty("RepuestosSinIGV", out _));
         Assert.False(elemento.TryGetProperty("IGV", out _));
+        // Para mano de obra STE, Cantidad y PrecioUnit no aplican y se serializan como números 0 y 0.00
+        Assert.Equal(JsonValueKind.Number, elemento.GetProperty("Cantidad").ValueKind);
+        Assert.Equal(0, elemento.GetProperty("Cantidad").GetInt32());
+        Assert.Equal(JsonValueKind.Number, elemento.GetProperty("PrecioUnit").ValueKind);
+        Assert.Equal(0.00m, elemento.GetProperty("PrecioUnit").GetDecimal());
     }
 
     [Fact]
@@ -503,6 +508,144 @@ public class YamahaV3FirstDeliveryTests
 
         Assert.Throws<JsonException>(() =>
             JsonSerializer.Deserialize<List<YamahaVentaV3Dto>>(jsonInvalido, YamahaJsonSerializer.Options));
+    }
+
+    // =========================================================================
+    // Pruebas unitarias para convertidores numéricos condicionales (Yamaha v3)
+    // =========================================================================
+
+    [Fact]
+    public void YamahaNullableIntJsonConverter_ValorNulo_DebeEmitirNumeroCero()
+    {
+        var venta = CrearVentaSpValida() with { AnioModelo = null };
+        var json = YamahaJsonSerializer.SerializarVentas([venta]);
+
+        using var doc = JsonDocument.Parse(json);
+        var prop = doc.RootElement[0].GetProperty("AnioModelo");
+
+        Assert.Equal(JsonValueKind.Number, prop.ValueKind);
+        Assert.Equal(0, prop.GetInt32());
+        Assert.Contains("\"AnioModelo\":0", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void YamahaNullableIntJsonConverter_ValorValido_DebeEmitirEnteroNumerico()
+    {
+        var venta = CrearVentaSpValida() with { AnioModelo = 2024 };
+        var json = YamahaJsonSerializer.SerializarVentas([venta]);
+
+        using var doc = JsonDocument.Parse(json);
+        var prop = doc.RootElement[0].GetProperty("AnioModelo");
+
+        Assert.Equal(JsonValueKind.Number, prop.ValueKind);
+        Assert.Equal(2024, prop.GetInt32());
+        Assert.Contains("\"AnioModelo\":2024", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void YamahaNullableIntJsonConverter_CeroExplicito_DebeEmitirCeroNumerico()
+    {
+        var venta = CrearVentaSpValida() with { AnioModelo = 0 };
+        var json = YamahaJsonSerializer.SerializarVentas([venta]);
+
+        using var doc = JsonDocument.Parse(json);
+        var prop = doc.RootElement[0].GetProperty("AnioModelo");
+
+        Assert.Equal(JsonValueKind.Number, prop.ValueKind);
+        Assert.Equal(0, prop.GetInt32());
+        Assert.Contains("\"AnioModelo\":0", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void YamahaNullableIntJsonConverter_ValorNegativo_DebeEmitirNegativoNumerico()
+    {
+        var venta = CrearVentaSpValida() with { AnioModelo = -5 };
+        var json = YamahaJsonSerializer.SerializarVentas([venta]);
+
+        using var doc = JsonDocument.Parse(json);
+        var prop = doc.RootElement[0].GetProperty("AnioModelo");
+
+        Assert.Equal(JsonValueKind.Number, prop.ValueKind);
+        Assert.Equal(-5, prop.GetInt32());
+        Assert.Contains("\"AnioModelo\":-5", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void YamahaNullableDecimal2JsonConverter_ValorNulo_DebeEmitirCeroPuntoCeroCeroNumerico()
+    {
+        var ste = CrearLineaServicioTecnicoManoDeObraValida() with { PrecioUnit = null };
+        var json = YamahaJsonSerializer.SerializarServicioTecnico([ste]);
+
+        using var doc = JsonDocument.Parse(json);
+        var prop = doc.RootElement[0].GetProperty("PrecioUnit");
+
+        Assert.Equal(JsonValueKind.Number, prop.ValueKind);
+        Assert.Equal(0.00m, prop.GetDecimal());
+        Assert.Contains("\"PrecioUnit\":0.00", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void YamahaNullableDecimal2JsonConverter_ValorValido_DebeEmitirDosDecimalesNumericos()
+    {
+        var ste = CrearLineaServicioTecnicoManoDeObraValida() with { PrecioUnit = 125.50m };
+        var json = YamahaJsonSerializer.SerializarServicioTecnico([ste]);
+
+        using var doc = JsonDocument.Parse(json);
+        var prop = doc.RootElement[0].GetProperty("PrecioUnit");
+
+        Assert.Equal(JsonValueKind.Number, prop.ValueKind);
+        Assert.Equal(125.50m, prop.GetDecimal());
+        Assert.Contains("\"PrecioUnit\":125.50", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void YamahaNullableDecimal2JsonConverter_CeroExplicito_DebeEmitirCeroPuntoCeroCeroNumerico()
+    {
+        var ste = CrearLineaServicioTecnicoManoDeObraValida() with { PrecioUnit = 0m };
+        var json = YamahaJsonSerializer.SerializarServicioTecnico([ste]);
+
+        using var doc = JsonDocument.Parse(json);
+        var prop = doc.RootElement[0].GetProperty("PrecioUnit");
+
+        Assert.Equal(JsonValueKind.Number, prop.ValueKind);
+        Assert.Equal(0.00m, prop.GetDecimal());
+        Assert.Contains("\"PrecioUnit\":0.00", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void YamahaNullableDecimal2JsonConverter_ValorNegativo_DebeEmitirDosDecimalesNegativosNumericos()
+    {
+        var ste = CrearLineaServicioTecnicoManoDeObraValida() with { PrecioUnit = -45.20m };
+        var json = YamahaJsonSerializer.SerializarServicioTecnico([ste]);
+
+        using var doc = JsonDocument.Parse(json);
+        var prop = doc.RootElement[0].GetProperty("PrecioUnit");
+
+        Assert.Equal(JsonValueKind.Number, prop.ValueKind);
+        Assert.Equal(-45.20m, prop.GetDecimal());
+        Assert.Contains("\"PrecioUnit\":-45.20", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void YamahaNullableJsonConverters_Deserializacion_DebeAceptarNumeroNullYCadenas()
+    {
+        const string jsonVenta = """[{"RazonSocial":"TB","RUC":"20601234567","AnioModelo":2023},{"RazonSocial":"TB","RUC":"20601234567","AnioModelo":0},{"RazonSocial":"TB","RUC":"20601234567","AnioModelo":null},{"RazonSocial":"TB","RUC":"20601234567","AnioModelo":""}]""";
+        var listaVentas = JsonSerializer.Deserialize<List<YamahaVentaV3Dto>>(jsonVenta, YamahaJsonSerializer.Options);
+        Assert.NotNull(listaVentas);
+        Assert.Equal(4, listaVentas.Count);
+        Assert.Equal(2023, listaVentas[0].AnioModelo);
+        Assert.Equal(0, listaVentas[1].AnioModelo);
+        Assert.Null(listaVentas[2].AnioModelo);
+        Assert.Null(listaVentas[3].AnioModelo);
+
+        const string jsonSte = """[{"RazonSocial":"TB","RUC":"20601234567","PrecioUnit":85.50},{"RazonSocial":"TB","RUC":"20601234567","PrecioUnit":0.00},{"RazonSocial":"TB","RUC":"20601234567","PrecioUnit":null},{"RazonSocial":"TB","RUC":"20601234567","PrecioUnit":""}]""";
+        var listaSte = JsonSerializer.Deserialize<List<YamahaServicioTecnicoV3Dto>>(jsonSte, YamahaJsonSerializer.Options);
+        Assert.NotNull(listaSte);
+        Assert.Equal(4, listaSte.Count);
+        Assert.Equal(85.50m, listaSte[0].PrecioUnit);
+        Assert.Equal(0.00m, listaSte[1].PrecioUnit);
+        Assert.Null(listaSte[2].PrecioUnit);
+        Assert.Null(listaSte[3].PrecioUnit);
     }
 
     [Fact]

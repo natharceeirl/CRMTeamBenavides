@@ -178,7 +178,7 @@ public sealed record YamahaVentaV3Dto
 
     /// <summary>
     /// Año modelo del vehículo (INT, Condicional: obligatorio para MC y ATV; no aplica para OM ni SP).
-    /// Cuando es <c>null</c> (no aplica), el convertidor escribe <c>""</c> según la Sección 3.4.
+    /// Cuando es <c>null</c> (no aplica), el convertidor escribe el número JSON <c>0</c> conforme a las aclaraciones de Yamaha v3.
     /// </summary>
     [JsonPropertyName("AnioModelo")]
     [JsonConverter(typeof(YamahaNullableIntJsonConverter))]
@@ -411,7 +411,7 @@ public sealed record YamahaServicioTecnicoV3Dto
 
     /// <summary>
     /// Cantidad de unidades (INT, Condicional: obligatorio para SubLineaNegocio = SP; no aplica para STE).
-    /// Cuando es <c>null</c> (no aplica), el convertidor escribe <c>""</c> según la Sección 3.4.
+    /// Cuando es <c>null</c> (no aplica), el convertidor escribe el número JSON <c>0</c> conforme a las aclaraciones de Yamaha v3.
     /// </summary>
     [JsonPropertyName("Cantidad")]
     [JsonConverter(typeof(YamahaNullableIntJsonConverter))]
@@ -427,7 +427,7 @@ public sealed record YamahaServicioTecnicoV3Dto
 
     /// <summary>
     /// Precio unitario del repuesto (DECIMAL(10,2), solo aplica para SubLineaNegocio = SP).
-    /// Cuando es <c>null</c> (en mano de obra STE), escribe <c>""</c> según la Sección 3.4.
+    /// Cuando es <c>null</c> (en mano de obra STE), escribe el número JSON <c>0.00</c> conforme a las aclaraciones de Yamaha v3.
     /// </summary>
     [JsonPropertyName("PrecioUnit")]
     [JsonConverter(typeof(YamahaNullableDecimal2JsonConverter))]
@@ -478,8 +478,8 @@ public sealed class YamahaDecimal2JsonConverter : JsonConverter<decimal>
 
 /// <summary>
 /// Serializa un <see cref="decimal"/> condicional anulable: si tiene valor, escribe el número con
-/// dos decimales (<c>0.00</c>); si es <c>null</c> (no aplica a la línea actual), escribe una cadena vacía <c>""</c>
-/// conforme a la Sección 3.4 de la especificación de Yamaha v3.
+/// dos decimales (<c>0.00</c>); si es <c>null</c> (no aplica a la línea actual), escribe el número JSON <c>0.00</c>
+/// conforme a las aclaraciones de formato numérico de Yamaha v3.
 /// </summary>
 public sealed class YamahaNullableDecimal2JsonConverter : JsonConverter<decimal?>
 {
@@ -518,7 +518,7 @@ public sealed class YamahaNullableDecimal2JsonConverter : JsonConverter<decimal?
     {
         if (!value.HasValue)
         {
-            writer.WriteStringValue(string.Empty);
+            writer.WriteRawValue("0.00", skipInputValidation: true);
             return;
         }
 
@@ -531,7 +531,7 @@ public sealed class YamahaNullableDecimal2JsonConverter : JsonConverter<decimal?
 /// <summary>
 /// Serializa un <see cref="int"/> condicional anulable (<c>AnioModelo</c> en Ventas y <c>Cantidad</c> en STE):
 /// si tiene valor, escribe el entero JSON; si es <c>null</c> (no aplica a la línea actual),
-/// escribe una cadena vacía <c>""</c> conforme a la Sección 3.4 de la especificación de Yamaha v3.
+/// escribe el número JSON <c>0</c> conforme a las aclaraciones de formato numérico de Yamaha v3.
 /// </summary>
 public sealed class YamahaNullableIntJsonConverter : JsonConverter<int?>
 {
@@ -570,7 +570,7 @@ public sealed class YamahaNullableIntJsonConverter : JsonConverter<int?>
     {
         if (!value.HasValue)
         {
-            writer.WriteStringValue(string.Empty);
+            writer.WriteNumberValue(0);
             return;
         }
 
