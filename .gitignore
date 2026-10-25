@@ -7,6 +7,8 @@ obj/
 .claude/settings.local.json
 uploads/
 docs/capturas-modulos
+# Datos del cliente, como el catálogo para la migración: el repositorio es público.
+*.xlsx
 # Secretos del servidor y el script de migraciones que se genera para revisar
 despliegue/.env
 despliegue/migraciones/
