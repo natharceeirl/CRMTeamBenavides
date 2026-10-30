@@ -270,6 +270,16 @@ En Docker, `docker-compose.yml` arma estas variables a partir del `.env`. Sin Do
 | `Almacenamiento__RutaBase` | Carpeta de las fotos de las órdenes, también en un volumen |
 | `Notificaciones__*` | Avisos al teléfono por Firebase: ver [notificaciones.md](notificaciones.md) |
 | `YamahaApi__Enabled` | Queda en `false` hasta tener las credenciales y la autorización para enviar a Yamaha |
+| `YamahaApi__CodigoPuntoVenta` | Código del concesionario asignado por Yamaha (ej: `20455687765_1`) |
+| `YamahaApi__NombreComercialPuntoVenta` | Nombre comercial con sede (ej: `Team Benavides`) |
+| `YamahaApi__TipoPuntoVenta` | Tipo de punto de venta (fijo: `3S`) |
+| `YamahaApi__VentasEndpointUrl` | URL del endpoint HTTP POST `ReceiveRetailVentas` |
+| `YamahaApi__StockEndpointUrl` | URL del endpoint HTTP POST `ReceiveRetailStock` |
+| `YamahaApi__ServicioTecnicoEndpointUrl` | URL del endpoint HTTP POST `ReceiveRetailServicioTecnico` |
+| `YamahaApi__FunctionKey` | Clave secreta compartida de Azure Functions (`?code=...`) |
+| `YamahaApi__*FunctionKey` | Claves específicas por servicio (`VentasFunctionKey`, `StockFunctionKey`, `ServicioTecnicoFunctionKey`) si son distintas de `FunctionKey` |
+| `YamahaApi__HoraCierreStockPeru` | Hora local de Perú del cierre diario de Stock (por defecto `22:00`) |
+| `YamahaApi__HoraLimiteRecuperacionStockPeru` | Hora límite de recuperación de la jornada anterior (por defecto `08:00`) |
 
 ## Pendiente
 
