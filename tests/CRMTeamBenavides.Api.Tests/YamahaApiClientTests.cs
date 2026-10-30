@@ -269,4 +269,170 @@ public class YamahaApiClientTests
 
         Assert.Contains("no está configurada", ex.Message);
     }
+
+    // -------------------------------------------------------------------------
+    // Pruebas específicas de construcción robusta de URLs (Yamaha v3)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void ConstruirUriConClave_UrlSinParametros_AgregaExactamenteUnParametroCode()
+    {
+        var urlBase = "https://azure.example.com/api/ReceiveRetailVentas";
+        var fakeKey = "test-function-key-123";
+
+        var uri = YamahaApiClient.ConstruirUriConClave(urlBase, fakeKey, "ReceiveRetailVentas");
+
+        Assert.Equal("https://azure.example.com/api/ReceiveRetailVentas?code=test-function-key-123", uri.AbsoluteUri);
+        Assert.Equal("?code=test-function-key-123", uri.Query);
+    }
+
+    [Fact]
+    public void ConstruirUriConClave_UrlQueYaContieneCodeVacio_ReemplazaSinDuplicar()
+    {
+        var urlBase = "https://azure.example.com/api/ReceiveRetailVentas?code=";
+        var fakeKey = "test-function-key-123";
+
+        var uri = YamahaApiClient.ConstruirUriConClave(urlBase, fakeKey, "ReceiveRetailVentas");
+
+        Assert.Equal("https://azure.example.com/api/ReceiveRetailVentas?code=test-function-key-123", uri.AbsoluteUri);
+        Assert.DoesNotContain("code=&code=", uri.AbsoluteUri);
+    }
+
+    [Fact]
+    public void ConstruirUriConClave_UrlConCodeValorAnterior_ReemplazaPorClaveConfigurada()
+    {
+        var urlBase = "https://azure.example.com/api/ReceiveRetailStock?code=valor-anterior-obsoleto";
+        var fakeKey = "clave-nueva-456";
+
+        var uri = YamahaApiClient.ConstruirUriConClave(urlBase, fakeKey, "ReceiveRetailStock");
+
+        Assert.Equal("https://azure.example.com/api/ReceiveRetailStock?code=clave-nueva-456", uri.AbsoluteUri);
+        Assert.DoesNotContain("valor-anterior-obsoleto", uri.AbsoluteUri);
+    }
+
+    [Fact]
+    public void ConstruirUriConClave_UrlConOtrosParametros_PreservaParametrosYAgregaCode()
+    {
+        var urlBase = "https://azure.example.com/api/ReceiveRetailServicioTecnico?version=3&formato=json";
+        var fakeKey = "clave-ste-789";
+
+        var uri = YamahaApiClient.ConstruirUriConClave(urlBase, fakeKey, "ReceiveRetailServicioTecnico");
+
+        Assert.Contains("version=3", uri.Query);
+        Assert.Contains("formato=json", uri.Query);
+        Assert.Contains("code=clave-ste-789", uri.Query);
+        Assert.StartsWith("https://azure.example.com/api/ReceiveRetailServicioTecnico?", uri.AbsoluteUri);
+    }
+
+    [Fact]
+    public void ConstruirUriConClave_UrlConParametrosCodeRepetidos_EliminaTodosLosCodePreviosYDejaUnoSolo()
+    {
+        var urlBase = "https://azure.example.com/api/ReceiveRetailVentas?code=&code=old1&modulo=ventas&code=old2";
+        var fakeKey = "clave-unica-999";
+
+        var uri = YamahaApiClient.ConstruirUriConClave(urlBase, fakeKey, "ReceiveRetailVentas");
+
+        Assert.Contains("modulo=ventas", uri.Query);
+        Assert.Contains("code=clave-unica-999", uri.Query);
+        Assert.DoesNotContain("old1", uri.AbsoluteUri);
+        Assert.DoesNotContain("old2", uri.AbsoluteUri);
+        // Validar que sólo hay una aparición de 'code='
+        var countCode = uri.Query.Split("code=").Length - 1;
+        Assert.Equal(1, countCode);
+    }
+
+    [Fact]
+    public void ConstruirUriConClave_FunctionKeyConCaracteresEspeciales_CodificaCorrectamenteUrl()
+    {
+        var urlBase = "https://azure.example.com/api/ReceiveRetailStock";
+        var fakeKeyConEspeciales = "fake+key/with=special&chars==";
+
+        var uri = YamahaApiClient.ConstruirUriConClave(urlBase, fakeKeyConEspeciales, "ReceiveRetailStock");
+
+        Assert.Contains("code=fake%2Bkey%2Fwith%3Dspecial%26chars%3D%3D", uri.AbsoluteUri);
+        Assert.DoesNotContain("&chars", uri.Query); // No debe desbordar como un nuevo parámetro de consulta
+    }
+
+    [Theory]
+    [InlineData("https://yamaha-data-api-gwcjcgabesdzc8fw.brazilsouth-01.azurewebsites.net/api/ReceiveRetailVentas?code=")]
+    [InlineData("https://yamaha-data-api-gwcjcgabesdzc8fw.brazilsouth-01.azurewebsites.net/api/ReceiveRetailStock?code=")]
+    [InlineData("https://yamaha-data-api-gwcjcgabesdzc8fw.brazilsouth-01.azurewebsites.net/api/ReceiveRetailServicioTecnico?code=")]
+    public void ConstruirUriConClave_EndpointsOficialesYamaha_GeneranUrisExactasSinDuplicarCode(string endpointOficialConCode)
+    {
+        var fakeKey = "dummy-testing-key-xyz";
+
+        var uri = YamahaApiClient.ConstruirUriConClave(endpointOficialConCode, fakeKey, "ServicioOficial");
+
+        Assert.True(uri.IsAbsoluteUri);
+        Assert.EndsWith("?code=dummy-testing-key-xyz", uri.AbsoluteUri);
+        Assert.DoesNotContain("&code=", uri.AbsoluteUri);
+        Assert.DoesNotContain("code=&", uri.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task EnviarVentasAsync_ConUrlConfiguradaConCodeVacio_EnviaPeticionConUnicoParametroCode()
+    {
+        var settings = new YamahaSettings
+        {
+            Enabled = true,
+            VentasEndpointUrl = "https://azure.example.com/api/ReceiveRetailVentas?code=",
+            VentasFunctionKey = "clave-despacho-123"
+        };
+
+        var handler = new MockHttpMessageHandler();
+        handler.EncolarRespuesta(System.Net.HttpStatusCode.OK, "{\"status\":\"ok\"}");
+
+        using var httpClient = new HttpClient(handler);
+        var client = new YamahaApiClient(
+            httpClient,
+            NullLogger<YamahaApiClient>.Instance,
+            Options.Create(settings));
+
+        var resultado = await client.EnviarVentasAsync(new List<YamahaVentaV3Dto>());
+
+        Assert.True(resultado.EsExitoso);
+        var peticion = Assert.Single(handler.PeticionesRecibidas);
+        var uriFinal = peticion.RequestUri!.ToString();
+        Assert.Equal("https://azure.example.com/api/ReceiveRetailVentas?code=clave-despacho-123", uriFinal);
+        Assert.DoesNotContain("&code=", uriFinal);
+    }
+[Fact]
+    public void ConstruirUriConClave_FunctionKeyVacia_ConUrlQueContieneCodeValorAnterior_EliminaCodeSinDejarCredencialResidual()
+    {
+        var urlBase = "https://azure.example.com/api/ReceiveRetailVentas?code=old-stale-key-12345";
+        var fakeKeyVacia = "";
+
+        var uri = YamahaApiClient.ConstruirUriConClave(urlBase, fakeKeyVacia, "ReceiveRetailVentas");
+
+        Assert.Equal("https://azure.example.com/api/ReceiveRetailVentas", uri.AbsoluteUri);
+        Assert.Empty(uri.Query);
+        Assert.DoesNotContain("old-stale-key-12345", uri.AbsoluteUri);
+        Assert.DoesNotContain("code", uri.AbsoluteUri);
+    }
+
+    [Fact]
+    public void ConstruirUriConClave_FunctionKeyVacia_ConUrlQueContieneOtrosParametrosYCode_PreservaOtrosParametrosYEliminaCode()
+    {
+        var urlBase = "https://azure.example.com/api/ReceiveRetailVentas?version=3&code=old-key&modulo=ventas";
+        string? fakeKeyNula = null;
+
+        var uri = YamahaApiClient.ConstruirUriConClave(urlBase, fakeKeyNula, "ReceiveRetailVentas");
+
+        Assert.Contains("version=3", uri.Query);
+        Assert.Contains("modulo=ventas", uri.Query);
+        Assert.DoesNotContain("code", uri.Query);
+        Assert.DoesNotContain("old-key", uri.AbsoluteUri);
+    }
+
+    [Fact]
+    public void ConstruirUriConClave_FunctionKeyEspaciosEnBlanco_ConUrlQueContieneCodeVacio_EliminaParametroCodeCompletamente()
+    {
+        var urlBase = "https://azure.example.com/api/ReceiveRetailVentas?code=";
+        var fakeKeyEspacios = "   ";
+
+        var uri = YamahaApiClient.ConstruirUriConClave(urlBase, fakeKeyEspacios, "ReceiveRetailVentas");
+
+        Assert.Equal("https://azure.example.com/api/ReceiveRetailVentas", uri.AbsoluteUri);
+        Assert.Empty(uri.Query);
+    }
 }

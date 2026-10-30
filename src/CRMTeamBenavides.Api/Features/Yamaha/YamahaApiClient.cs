@@ -89,7 +89,7 @@ public sealed class YamahaApiClient : IYamahaApiClient
         }
     }
 
-    private static Uri ConstruirUriConClave(string? urlBase, string? functionKey, string nombreServicio)
+    internal static Uri ConstruirUriConClave(string? urlBase, string? functionKey, string nombreServicio = "Desconocido")
     {
         if (string.IsNullOrWhiteSpace(urlBase))
         {
@@ -98,15 +98,21 @@ public sealed class YamahaApiClient : IYamahaApiClient
         }
 
         var uriBuilder = new UriBuilder(urlBase.Trim());
+        var queryExistente = uriBuilder.Query.TrimStart('?');
+
+        // Eliminar cualquier parámetro de consulta cuyo nombre sea 'code' (independientemente de si tiene valor o no),
+        // garantizando que no queden credenciales residuales ni se dupliquen parámetros.
+        var partes = queryExistente.Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Where(p => !p.StartsWith("code=", StringComparison.OrdinalIgnoreCase) &&
+                        !string.Equals(p, "code", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
         if (!string.IsNullOrWhiteSpace(functionKey))
         {
-            var queryExistente = uriBuilder.Query.TrimStart('?');
-            var paramCode = $"code={Uri.EscapeDataString(functionKey.Trim())}";
-            uriBuilder.Query = string.IsNullOrEmpty(queryExistente)
-                ? paramCode
-                : $"{queryExistente}&{paramCode}";
+            partes.Add($"code={Uri.EscapeDataString(functionKey.Trim())}");
         }
 
+        uriBuilder.Query = string.Join("&", partes);
         return uriBuilder.Uri;
     }
 
