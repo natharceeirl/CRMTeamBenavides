@@ -228,10 +228,12 @@ public static partial class YamahaV3Validator
             ValidarDocumentoCliente(
                 i,
                 idReg,
-                r.TipoDocumentoCliente,
-                r.NumeroDocumentoCliente,
+                r.TipoDocumento,
+                r.NumeroDocumento,
                 "YAM-V-DOCCLI",
-                hallazgos);
+                hallazgos,
+                nombreCampoTipo: "TipoDocumento",
+                nombreCampoNumero: "NumeroDocumento");
 
             if (!string.IsNullOrEmpty(r.CanalContactoCliente) &&
                 !YamahaV3Catalogos.CanalesContactoClientePermitidos.Contains(r.CanalContactoCliente))
@@ -1103,22 +1105,24 @@ public static partial class YamahaV3Validator
         string? tipoDocumentoCliente,
         string? numeroDocumentoCliente,
         string prefijoRegla,
-        List<YamahaValidacionHallazgoDto> hallazgos)
+        List<YamahaValidacionHallazgoDto> hallazgos,
+        string nombreCampoTipo = "TipoDocumentoCliente",
+        string nombreCampoNumero = "NumeroDocumentoCliente")
     {
         if (string.IsNullOrWhiteSpace(numeroDocumentoCliente))
         {
-            AgregarError(hallazgos, indice, idReg, "NumeroDocumentoCliente", $"{prefijoRegla}-001",
-                "El campo NumeroDocumentoCliente es obligatorio.");
+            AgregarError(hallazgos, indice, idReg, nombreCampoNumero, $"{prefijoRegla}-001",
+                $"El campo {nombreCampoNumero} es obligatorio.");
             return;
         }
 
-        ValidarLongitudVarchar(indice, idReg, "NumeroDocumentoCliente", numeroDocumentoCliente, hallazgos);
+        ValidarLongitudVarchar(indice, idReg, nombreCampoNumero, numeroDocumentoCliente, hallazgos);
 
         if (!string.IsNullOrEmpty(tipoDocumentoCliente) &&
             !YamahaV3Catalogos.TiposDocumentoClientePermitidos.Contains(tipoDocumentoCliente))
         {
-            AgregarError(hallazgos, indice, idReg, "TipoDocumentoCliente", $"{prefijoRegla}-002",
-                $"El valor '{tipoDocumentoCliente}' no es válido en TipoDocumentoCliente. Valores permitidos: DNI, CE, RUC, DOC NO DOMICILIADO.");
+            AgregarError(hallazgos, indice, idReg, nombreCampoTipo, $"{prefijoRegla}-002",
+                $"El valor '{tipoDocumentoCliente}' no es válido en {nombreCampoTipo}. Valores permitidos: DNI, CE, RUC, DOC NO DOMICILIADO.");
             return;
         }
 
@@ -1126,24 +1130,24 @@ public static partial class YamahaV3Validator
         {
             if (!Dni8DigitosRegex().IsMatch(numeroDocumentoCliente))
             {
-                AgregarError(hallazgos, indice, idReg, "NumeroDocumentoCliente", $"{prefijoRegla}-003",
-                    "Cuando TipoDocumentoCliente es 'DNI', NumeroDocumentoCliente debe tener exactamente 8 dígitos numéricos.");
+                AgregarError(hallazgos, indice, idReg, nombreCampoNumero, $"{prefijoRegla}-003",
+                    $"Cuando {nombreCampoTipo} es 'DNI', {nombreCampoNumero} debe tener exactamente 8 dígitos numéricos.");
             }
         }
         else if (string.Equals(tipoDocumentoCliente, YamahaV3Catalogos.DocClienteCe, StringComparison.Ordinal))
         {
             if (!Ce9CaracteresRegex().IsMatch(numeroDocumentoCliente))
             {
-                AgregarError(hallazgos, indice, idReg, "NumeroDocumentoCliente", $"{prefijoRegla}-004",
-                    "Cuando TipoDocumentoCliente es 'CE', NumeroDocumentoCliente debe tener exactamente 9 caracteres alfanuméricos.");
+                AgregarError(hallazgos, indice, idReg, nombreCampoNumero, $"{prefijoRegla}-004",
+                    $"Cuando {nombreCampoTipo} es 'CE', {nombreCampoNumero} debe tener exactamente 9 caracteres alfanuméricos.");
             }
         }
         else if (string.Equals(tipoDocumentoCliente, YamahaV3Catalogos.DocClienteRuc, StringComparison.Ordinal))
         {
             if (!Ruc11DigitosRegex().IsMatch(numeroDocumentoCliente))
             {
-                AgregarError(hallazgos, indice, idReg, "NumeroDocumentoCliente", $"{prefijoRegla}-005",
-                    "Cuando TipoDocumentoCliente es 'RUC', NumeroDocumentoCliente debe tener exactamente 11 dígitos numéricos.");
+                AgregarError(hallazgos, indice, idReg, nombreCampoNumero, $"{prefijoRegla}-005",
+                    $"Cuando {nombreCampoTipo} es 'RUC', {nombreCampoNumero} debe tener exactamente 11 dígitos numéricos.");
             }
         }
         else if (string.IsNullOrEmpty(tipoDocumentoCliente))
@@ -1155,8 +1159,8 @@ public static partial class YamahaV3Validator
 
             if (!esInferible)
             {
-                AgregarError(hallazgos, indice, idReg, "TipoDocumentoCliente", $"{prefijoRegla}-006",
-                    "Para documentos cuyo formato no corresponde a DNI (8 dígitos), CE (9 caracteres) o RUC (11 dígitos), debe enviarse explícitamente TipoDocumentoCliente = 'DOC NO DOMICILIADO'.");
+                AgregarError(hallazgos, indice, idReg, nombreCampoTipo, $"{prefijoRegla}-006",
+                    $"Para documentos cuyo formato no corresponde a DNI (8 dígitos), CE (9 caracteres) o RUC (11 dígitos), debe enviarse explícitamente {nombreCampoTipo} = 'DOC NO DOMICILIADO'.");
             }
         }
     }

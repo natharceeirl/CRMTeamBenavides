@@ -646,8 +646,8 @@ public class YamahaMappingServiceTests
 
         var loteRes = _mapper.MapearVenta(venta, contexto);
         Assert.True(loteRes.EsLoteCompletamenteValido);
-        Assert.Equal("DOC NO DOMICILIADO", loteRes.DtosProyectados[0].TipoDocumentoCliente);
-        Assert.NotEqual("DNI", loteRes.DtosProyectados[0].TipoDocumentoCliente);
+        Assert.Equal("DOC NO DOMICILIADO", loteRes.DtosProyectados[0].TipoDocumento);
+        Assert.NotEqual("DNI", loteRes.DtosProyectados[0].TipoDocumento);
 
         var validacion = YamahaV3Validator.ValidarLoteVentas(loteRes.DtosProyectados);
         Assert.True(validacion.EsLoteValido);
@@ -926,10 +926,36 @@ public class YamahaMappingServiceTests
         Assert.Equal(45.00m, lineaSp.PrecioUnit);
         Assert.Equal("2DP-E4451-00", lineaSp.CodigoYamaha);
 
+        // Ambas líneas permanecen vinculadas a la misma OT y vehículo
+        Assert.Equal(lineaSte.NumeroOrdenTrabajo, lineaSp.NumeroOrdenTrabajo);
+        Assert.Equal(lineaSte.Placa, lineaSp.Placa);
+        Assert.Equal(lineaSte.Chasis, lineaSp.Chasis);
+        Assert.Equal(lineaSte.FechaFacturacion, lineaSp.FechaFacturacion);
+
         // Validación estricta con el validador oficial Yamaha v3
         var validacion = YamahaV3Validator.ValidarLoteServicioTecnico(loteRes.DtosProyectados);
         Assert.True(validacion.EsLoteValido, string.Join("; ", validacion.Hallazgos.Select(h => $"{h.Campo}: {h.Mensaje}")));
         Assert.Equal(0, validacion.TotalErroresBloqueantes);
+
+        // Verificación de serialización JSON: TipoServicio '-' para SP y TipoServicio oficial ('MP') para STE
+        var json = YamahaJsonSerializer.SerializarServicioTecnico(loteRes.DtosProyectados);
+        using var doc = JsonDocument.Parse(json);
+        var array = doc.RootElement;
+        Assert.Equal(2, array.GetArrayLength());
+
+        var objSte = array[0];
+        Assert.Equal("STE", objSte.GetProperty("SubLineaNegocio").GetString());
+        Assert.Equal("MP", objSte.GetProperty("TipoServicio").GetString());
+        Assert.Equal(0, objSte.GetProperty("Cantidad").GetInt32());
+        Assert.Equal(0.00m, objSte.GetProperty("PrecioUnit").GetDecimal());
+        Assert.Equal("", objSte.GetProperty("CodigoYamaha").GetString());
+
+        var objSp = array[1];
+        Assert.Equal("SP", objSp.GetProperty("SubLineaNegocio").GetString());
+        Assert.Equal("-", objSp.GetProperty("TipoServicio").GetString());
+        Assert.Equal(1, objSp.GetProperty("Cantidad").GetInt32());
+        Assert.Equal(45.00m, objSp.GetProperty("PrecioUnit").GetDecimal());
+        Assert.Equal("2DP-E4451-00", objSp.GetProperty("CodigoYamaha").GetString());
     }
 
     [Fact]

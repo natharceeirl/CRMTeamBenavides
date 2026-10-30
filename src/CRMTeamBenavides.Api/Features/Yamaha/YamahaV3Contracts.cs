@@ -253,11 +253,11 @@ public sealed record YamahaVentaV3Dto
     [JsonPropertyName("NombreCompletoCliente")]
     public string NombreCompletoCliente { get; init; } = string.Empty;
 
-    [JsonPropertyName("TipoDocumentoCliente")]
-    public string TipoDocumentoCliente { get; init; } = string.Empty;
+    [JsonPropertyName("TipoDocumento")]
+    public string TipoDocumento { get; init; } = string.Empty;
 
-    [JsonPropertyName("NumeroDocumentoCliente")]
-    public string NumeroDocumentoCliente { get; init; } = string.Empty;
+    [JsonPropertyName("NumeroDocumento")]
+    public string NumeroDocumento { get; init; } = string.Empty;
 
     [JsonPropertyName("CanalContactoCliente")]
     public string CanalContactoCliente { get; init; } = string.Empty;

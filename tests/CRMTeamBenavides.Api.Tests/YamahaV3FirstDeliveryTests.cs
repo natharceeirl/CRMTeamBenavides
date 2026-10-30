@@ -41,7 +41,7 @@ public class YamahaV3FirstDeliveryTests
             "MontoSinIGV", "MontoConIGV", "Canal", "LineaNegocio", "TipoPuntoVenta",
             "NumeroMotor", "Moneda", "PrecioFinal", "CodigoYamaha", "Descripcion",
             "CantidadVendida", "DescuentoPorcentaje", "DescuentoSoles", "PrecioUnitarioConIGV",
-            "TipoCliente", "NombreCompletoCliente", "TipoDocumentoCliente", "NumeroDocumentoCliente",
+            "TipoCliente", "NombreCompletoCliente", "TipoDocumento", "NumeroDocumento",
             "CanalContactoCliente", "DistritoCliente", "CiudadCliente", "DepartamentoCliente",
             "DireccionCliente", "MotoActualCliente", "CelularCliente", "CorreoCliente"
         ];
@@ -687,14 +687,14 @@ public class YamahaV3FirstDeliveryTests
     {
         var ventaExtranjeroSinTipo = CrearVentaSpValida() with
         {
-            TipoDocumentoCliente = string.Empty,
-            NumeroDocumentoCliente = "PASS-99887766" // 13 caracteres (no es 8, 9 ni 11)
+            TipoDocumento = string.Empty,
+            NumeroDocumento = "PASS-99887766" // 13 caracteres (no es 8, 9 ni 11)
         };
 
         var resultado = YamahaV3Validator.ValidarLoteVentas([ventaExtranjeroSinTipo]);
 
         Assert.False(resultado.EsLoteValido);
-        Assert.Contains(resultado.Hallazgos, h => h.CodigoRegla == "YAM-V-DOCCLI-006" && h.Campo == "TipoDocumentoCliente");
+        Assert.Contains(resultado.Hallazgos, h => h.CodigoRegla == "YAM-V-DOCCLI-006" && h.Campo == "TipoDocumento");
     }
 
     [Fact]
@@ -803,8 +803,8 @@ public class YamahaV3FirstDeliveryTests
         PrecioUnitarioConIGV = 118.00m,
         TipoCliente = "CLIENTE FINAL",
         NombreCompletoCliente = "Juan Pérez López",
-        TipoDocumentoCliente = "DNI",
-        NumeroDocumentoCliente = "45678912",
+        TipoDocumento = "DNI",
+        NumeroDocumento = "45678912",
         CanalContactoCliente = "PRESENCIAL",
         DistritoCliente = string.Empty,
         CiudadCliente = string.Empty,
@@ -933,5 +933,17 @@ public class YamahaV3FirstDeliveryTests
                 Mensajes.Add(exception.ToString());
             }
         }
+    }
+
+    [Fact]
+    public void SerializarVentas_DebeContenerTipoDocumentoYNumeroDocumento_YNoTipoDocumentoCliente()
+    {
+        var venta = CrearVentaSpValida();
+        var json = YamahaJsonSerializer.SerializarVentas([venta]);
+
+        Assert.Contains("\"TipoDocumento\":", json);
+        Assert.Contains("\"NumeroDocumento\":", json);
+        Assert.DoesNotContain("\"TipoDocumentoCliente\":", json);
+        Assert.DoesNotContain("\"NumeroDocumentoCliente\":", json);
     }
 }
