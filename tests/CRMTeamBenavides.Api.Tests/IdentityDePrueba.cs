@@ -1,6 +1,7 @@
 using CRMTeamBenavides.Api.Configuration;
 using CRMTeamBenavides.Api.Features.Auth;
 using CRMTeamBenavides.Api.Services;
+using CRMTeamBenavides.Api.Services.Notificaciones;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Data.Seed;
 using CRMTeamBenavides.Domain.Entities;
@@ -14,8 +15,8 @@ using Xunit;
 namespace CRMTeamBenavides.Api.Tests;
 
 /// <summary>
-/// Identity y el login sobre EF InMemory, con el mismo bloqueo que Program.cs. Cada
-/// llamada usa su propio scope, como cada petición en la API.
+/// Identity y el login sobre EF InMemory, con el mismo bloqueo y el mismo interceptor de
+/// notificaciones que Program.cs. Cada llamada usa su propio scope, como cada petición en la API.
 /// </summary>
 internal sealed class IdentityDePrueba : IDisposable
 {
@@ -31,9 +32,11 @@ internal sealed class IdentityDePrueba : IDisposable
 
         servicios.AddLogging();
         servicios.AddDataProtection();
-        servicios.AddDbContext<ApplicationDbContext>(opciones => opciones
+        servicios.AddSingleton<NotificacionesInterceptor>();
+        servicios.AddDbContext<ApplicationDbContext>((sp, opciones) => opciones
             .UseInMemoryDatabase(nombreBase)
-            .ConfigureWarnings(avisos => avisos.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
+            .ConfigureWarnings(avisos => avisos.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .AddInterceptors(sp.GetRequiredService<NotificacionesInterceptor>()));
         servicios
             .AddIdentityCore<Usuario>(opciones => SeguridadLogin.ConfigurarBloqueo(opciones.Lockout))
             .AddEntityFrameworkStores<ApplicationDbContext>()
@@ -49,6 +52,11 @@ internal sealed class IdentityDePrueba : IDisposable
         servicios.AddScoped<ITokenService, TokenService>();
         servicios.AddScoped<IAuthService, AuthService>();
         servicios.AddScoped<GerenciaInicialService>();
+        servicios.AddScoped<IAuditoriaService, AuditoriaService>();
+        servicios.AddScoped<IConfiguracionService, ConfiguracionService>();
+        servicios.AddScoped<ActivacionCuentaService>();
+        servicios.AddScoped<AprobacionService>();
+        servicios.AddScoped<OrdenServicioService>();
 
         _servicios = servicios.BuildServiceProvider();
     }

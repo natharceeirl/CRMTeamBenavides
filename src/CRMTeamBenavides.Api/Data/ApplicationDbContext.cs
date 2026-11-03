@@ -161,6 +161,9 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
             entity.HasIndex(c => c.NumeroDocumento)
                 .IsUnique()
                 .HasFilter("\"Activo\" = true AND \"NumeroDocumento\" IS NOT NULL AND \"NumeroDocumento\" <> ''");
+
+            // SHA-256 en hexadecimal.
+            entity.Property(c => c.CodigoActivacionHash).HasMaxLength(64);
         });
 
         // --- Propiedades calculadas ---

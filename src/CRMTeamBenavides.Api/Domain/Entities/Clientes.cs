@@ -32,6 +32,14 @@ public class Cliente : BaseEntity
     public Guid? UsuarioId { get; set; }
     public Usuario? Usuario { get; set; }
 
+    /// <summary>
+    /// Código con el que el cliente activa su cuenta en la app, junto con su DNI. Lo
+    /// genera el personal en la ficha; se guarda solo su hash y sirve una vez.
+    /// </summary>
+    public string? CodigoActivacionHash { get; set; }
+    public DateTime? CodigoActivacionVence { get; set; }
+    public int CodigoActivacionIntentos { get; set; }
+
     public ICollection<Vehiculo> Vehiculos { get; set; } = new List<Vehiculo>();
 }
 

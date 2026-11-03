@@ -133,6 +133,21 @@ class SesionNotifier extends Notifier<EstadoSesion> {
     await _cargarUsuario(sesion.accessToken);
   }
 
+  Future<void> activar({
+    required String documento,
+    required String codigo,
+    required String password,
+    String? email,
+  }) async {
+    final sesion = await ref.read(apiProvider).activarCuenta(
+          documento: documento,
+          codigo: codigo,
+          password: password,
+          email: email,
+        );
+    await _cargarUsuario(sesion.accessToken);
+  }
+
   Future<void> salir() async {
     await ref.read(apiProvider).cerrarSesion();
     state = const EstadoSesion();

@@ -394,6 +394,13 @@ export type VincularOrdenCitaRequest = {
 
 // ── Clientes ────────────────────────────────────────────────────────────────
 
+export type ActivarCuentaRequest = {
+  numeroDocumento: string
+  codigo: string
+  password: string
+  email?: string | null
+}
+
 export type AltaRapidaClienteRequest = {
   numeroDocumento: string
   nombreCompleto: string
@@ -418,6 +425,11 @@ export type ClienteResponse = {
   numeroDocumento: string | null
 }
 
+export type CodigoActivacionResponse = {
+  codigo: string
+  vence: string
+}
+
 export type CreateClienteRequest = {
   nombreCompleto: string
   razonSocial?: string | null
@@ -428,6 +440,12 @@ export type CreateClienteRequest = {
   observaciones?: string | null
   tipoDocumento?: TipoDocumentoCliente | null
   numeroDocumento?: string | null
+}
+
+export type CuentaAppClienteResponse = {
+  tieneCuenta: boolean
+  email: string | null
+  codigoVigenteHasta: string | null
 }
 
 export type UpdateClienteRequest = {

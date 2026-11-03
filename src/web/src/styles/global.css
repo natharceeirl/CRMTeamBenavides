@@ -351,6 +351,17 @@ h4 {
   border-bottom: 2px solid var(--color-divisor);
 }
 
+/* El código de activación se dicta en voz alta: grande y en dos grupos de tres. */
+.codigo-activacion {
+  margin: 8px 0 16px;
+  font-family: var(--fuente-titulos);
+  font-size: 2.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
 .tabla-simple {
   width: 100%;
   border-collapse: collapse;

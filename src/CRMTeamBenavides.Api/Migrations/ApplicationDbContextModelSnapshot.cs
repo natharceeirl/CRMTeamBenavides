@@ -211,6 +211,16 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Property<bool>("Activo")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("CodigoActivacionHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("CodigoActivacionIntentos")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CodigoActivacionVence")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid?>("CreadoPorId")
                         .HasColumnType("uuid");
 

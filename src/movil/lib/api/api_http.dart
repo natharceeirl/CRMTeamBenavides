@@ -68,6 +68,33 @@ class ApiHttp {
     }
   }
 
+  /// El cliente activa su cuenta con su DNI y el código que le dieron en el
+  /// taller. La API la deja abierta: responde con la sesión, como el login.
+  Future<Sesion> activarCuenta({
+    required String documento,
+    required String codigo,
+    required String password,
+    String? email,
+  }) async {
+    try {
+      final respuesta = await _dioSinToken.post<Map<String, dynamic>>(
+        '/api/auth/activar-cuenta',
+        data: {
+          'numeroDocumento': documento,
+          'codigo': codigo,
+          'password': password,
+          'email': email,
+        },
+      );
+
+      final sesion = Sesion.desdeJson(respuesta.data!);
+      await _guardar(sesion);
+      return sesion;
+    } on DioException catch (fallo) {
+      throw ErrorApi(_mensajeDeError(fallo), fallo.response?.statusCode);
+    }
+  }
+
   Future<void> cerrarSesion() async {
     final token = _sesion?.accessToken;
     final autorizacion = Options(headers: {'Authorization': 'Bearer $token'});

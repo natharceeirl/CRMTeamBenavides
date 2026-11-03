@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ErrorApi, solicitar } from './http'
-import type { ClienteRequest, ClienteResponse } from './tipos'
+import type { ClienteRequest, ClienteResponse, CodigoActivacionResponse, CuentaAppClienteResponse } from './tipos'
 
 export const clavesClientes = {
   todos: ['clientes'] as const,
   uno: (id: string) => ['clientes', id] as const,
   documento: (numero: string) => ['clientes', 'documento', numero] as const,
+  cuentaApp: (id: string) => ['clientes', id, 'cuenta-app'] as const,
 }
 
 /** GET /api/clientes/documento/{dni}. Devuelve `null` si no hay un cliente con ese documento. */
@@ -66,6 +67,28 @@ export function useEliminarCliente() {
     mutationFn: (id: string) => solicitar<void>(`/clientes/${id}`, { metodo: 'DELETE' }),
     onSuccess: async () => {
       await consultas.invalidateQueries({ queryKey: clavesClientes.todos })
+    },
+  })
+}
+
+/** GET /api/clientes/{id}/cuenta-app: si el cliente ya entra a la app y, si no, hasta cuándo sirve su código. */
+export function useCuentaAppCliente(id: string | undefined, habilitado = true) {
+  return useQuery({
+    queryKey: clavesClientes.cuentaApp(id ?? ''),
+    queryFn: () => solicitar<CuentaAppClienteResponse>(`/clientes/${id}/cuenta-app`),
+    enabled: Boolean(id) && habilitado,
+  })
+}
+
+/** El código se ve una sola vez: la API guarda solo su hash. Uno nuevo invalida el anterior. */
+export function useGenerarCodigoActivacion() {
+  const consultas = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) =>
+      solicitar<CodigoActivacionResponse>(`/clientes/${id}/codigo-activacion`, { metodo: 'POST' }),
+    onSuccess: async (_, id) => {
+      await consultas.invalidateQueries({ queryKey: clavesClientes.cuentaApp(id) })
     },
   })
 }

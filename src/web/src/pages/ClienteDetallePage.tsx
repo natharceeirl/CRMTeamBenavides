@@ -6,6 +6,7 @@ import { Indicadores } from '../components/Indicadores'
 import { AvisoError } from '../components/AvisoError'
 import { ModalCliente } from '../components/ModalCliente'
 import { ModalVehiculo } from '../components/ModalVehiculo'
+import { CuentaAppCliente } from '../components/CuentaAppCliente'
 import { useCliente } from '../api/clientes'
 import { useEliminarVehiculo, useVehiculos } from '../api/vehiculos'
 import { useOrdenes } from '../api/ordenes'
@@ -239,6 +240,7 @@ export function ClienteDetallePage() {
                 </tr>
               </tbody>
             </table>
+            <CuentaAppCliente clienteId={datos.id} puedeGenerar={puedeEditarCliente} />
           </aside>
         </div>
       </div>

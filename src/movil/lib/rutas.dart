@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'auth/sesion.dart';
+import 'pantallas/activar_cuenta.dart';
 import 'pantallas/agenda.dart';
 import 'pantallas/aprobaciones.dart';
 import 'pantallas/cliente_detalle.dart';
@@ -12,7 +13,7 @@ import 'pantallas/notificaciones.dart';
 import 'pantallas/orden_detalle.dart';
 
 /// Rutas de la app. El guardia vive acá: sin sesión solo se puede estar en el
-/// login, y con sesión el login redirige al inicio.
+/// login o activando la cuenta, y con sesión los dos redirigen al inicio.
 final routerProvider = Provider<GoRouter>((ref) {
   final aviso = ValueNotifier<int>(0);
   ref.listen(sesionProvider, (_, _) => aviso.value++);
@@ -30,7 +31,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         return null;
       }
 
-      final enLogin = estado.matchedLocation == '/login';
+      final enLogin = estado.matchedLocation == '/login' || estado.matchedLocation == '/activar';
       if (!sesion.autenticado) {
         return enLogin ? null : '/login';
       }
@@ -40,6 +41,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         builder: (context, estado) => const PantallaLogin(),
+      ),
+      GoRoute(
+        path: '/activar',
+        builder: (context, estado) => const PantallaActivarCuenta(),
       ),
       GoRoute(
         path: '/',

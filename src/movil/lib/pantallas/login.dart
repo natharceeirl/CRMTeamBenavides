@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../auth/sesion.dart';
 import '../tema.dart';
@@ -151,6 +152,12 @@ class _PantallaLoginState extends ConsumerState<PantallaLogin> {
                               ),
                             )
                           : const Text('Ingresar'),
+                    ),
+                    const SizedBox(height: 8),
+                    // El cliente activa su cuenta con el código que le dan en el taller.
+                    OutlinedButton(
+                      onPressed: _enviando ? null : () => context.push('/activar'),
+                      child: const Text('Soy cliente: activar mi cuenta'),
                     ),
                     const SizedBox(height: 8),
                     TextButton(

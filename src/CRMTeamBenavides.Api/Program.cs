@@ -237,6 +237,7 @@ builder.Services.AddScoped<IProveedorService, ProveedorService>();
 builder.Services.AddScoped<ICompraService, CompraService>();
 builder.Services.AddScoped<INotificacionService, NotificacionService>();
 builder.Services.AddScoped<GerenciaInicialService>();
+builder.Services.AddScoped<ActivacionCuentaService>();
 
 // ---------------------------------------------------------------------------
 // Yamaha API — infraestructura del conector
@@ -314,6 +315,7 @@ app.MapHealthChecks("/health");
 
 app.MapAuthEndpoints();
 app.MapClienteEndpoints();
+app.MapActivacionCuentaEndpoints();
 app.MapVehiculoEndpoints();
 app.MapRolEndpoints();
 app.MapPermisoEndpoints();
