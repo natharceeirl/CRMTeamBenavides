@@ -179,7 +179,7 @@ public static class DetectorNotificaciones
 
     /// <summary>
     /// Agrega la notificación del presupuesto enviado. La llama la orden al
-    /// enviarlo; devuelve falso si el cliente todavía no tiene cuenta en la app.
+    /// enviarlo; devuelve falso si el cliente todavía no tiene cuenta en el portal.
     /// </summary>
     public static async Task<bool> NotificarPresupuestoAsync(ApplicationDbContext contexto, OrdenServicio orden, CancellationToken ct)
     {
@@ -188,7 +188,7 @@ public static class DetectorNotificaciones
 
         Agregar(contexto, usuarioId.Value, TipoNotificacion.PresupuestoEnviado,
             "Presupuesto listo",
-            $"{orden.NumeroOrden} · {await UnidadAsync(contexto, orden.VehiculoId, ct)}: revísalo y respóndelo en la app.",
+            $"{orden.NumeroOrden} · {await UnidadAsync(contexto, orden.VehiculoId, ct)}: revísalo y respóndelo en el portal.",
             EntidadOrden, orden.Id);
         return true;
     }

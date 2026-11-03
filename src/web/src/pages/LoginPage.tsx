@@ -80,6 +80,9 @@ export function LoginPage() {
             Ingresar
           </Button>
         </Form>
+        <p className="login-activar">
+          ¿Eres cliente y te dieron un código en el taller? <Link to="/activar">Activa tu cuenta</Link>
+        </p>
         {/* La recuperación de contraseña vuelve cuando la API tenga su endpoint. */}
         <Link to="/privacidad" className="login-pie">
           Política de privacidad

@@ -21,7 +21,8 @@ describe('cuenta del cliente en la app', () => {
     await usuario.click(screen.getByRole('button', { name: 'Generar código de activación' }))
 
     expect(await screen.findByText('042 917')).toBeTruthy()
-    expect(screen.getByText(/toca «Activar mi cuenta» y escribe su DNI/)).toBeTruthy()
+    expect(screen.getByText(/\/activar/)).toBeTruthy()
+    expect(screen.getByText(/escribe su DNI, este código/)).toBeTruthy()
     expect(llamadas.some((llamada) => llamada.ruta === '/clientes/c1/codigo-activacion')).toBe(true)
   })
 

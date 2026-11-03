@@ -1730,7 +1730,7 @@ public class OrdenServicioService : IOrdenServicioService
 
         if (!await DetectorNotificaciones.NotificarPresupuestoAsync(_context, orden, CancellationToken.None))
         {
-            return ServiceResult<OrdenServicioResponse>.Invalid("El cliente todavía no tiene cuenta en la app: avísale por teléfono o WhatsApp.");
+            return ServiceResult<OrdenServicioResponse>.Invalid("El cliente todavía no tiene cuenta en el portal: genérale un código en su ficha o avísale por teléfono o WhatsApp.");
         }
 
         orden.FechaEnvioPresupuesto = DateTime.UtcNow;

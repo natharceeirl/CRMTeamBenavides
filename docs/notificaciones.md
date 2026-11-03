@@ -16,7 +16,7 @@ Avisos a cada usuario: una bandeja en la web y en la app (campanita) y, en la ap
 | Cita confirmada | Cliente | Su inicio (personal: agenda) |
 | Se asigna o reasigna una orden | Técnico | La orden |
 
-- Al cliente solo le llega si tiene cuenta en la app. La activación con DNI y código está planificada para el 27 y 28/10.
+- Al cliente solo le llega si tiene cuenta en el portal. La activa en la web (`/activar`) o en la app con su DNI y el código que se genera en su ficha.
 - Los textos no llevan montos ni DNI, porque se ven en la pantalla bloqueada.
 - Varias solicitudes de la misma orden o pedido se juntan en un solo aviso mientras siguen en la cola, por ejemplo «3 solicitudes en OS-000123».
 

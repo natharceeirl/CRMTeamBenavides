@@ -38,11 +38,21 @@ const ComprasPage = pantalla(() => import('./pages/ComprasPage'), 'ComprasPage')
 const NuevaCompraPage = pantalla(() => import('./pages/NuevaCompraPage'), 'NuevaCompraPage')
 const ImportacionesPage = pantalla(() => import('./pages/ImportacionesPage'), 'ImportacionesPage')
 const PrivacidadPage = pantalla(() => import('./pages/PrivacidadPage'), 'PrivacidadPage')
+const ActivarCuentaPage = pantalla(() => import('./pages/ActivarCuentaPage'), 'ActivarCuentaPage')
 
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      {/* Pública: el cliente todavía no tiene sesión cuando activa su cuenta. */}
+      <Route
+        path="/activar"
+        element={
+          <Suspense fallback={null}>
+            <ActivarCuentaPage />
+          </Suspense>
+        }
+      />
       {/* Pública: la enlazan la app y las tiendas, sin iniciar sesión. */}
       <Route
         path="/privacidad"

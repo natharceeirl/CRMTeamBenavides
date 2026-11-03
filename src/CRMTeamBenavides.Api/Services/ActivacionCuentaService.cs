@@ -10,8 +10,9 @@ using Microsoft.EntityFrameworkCore;
 namespace CRMTeamBenavides.Api.Services;
 
 /// <summary>
-/// El cliente activa su cuenta de la app con su DNI y un código que le da el personal
-/// en el taller. La cuenta queda ligada a su ficha y entra con su DNI y su contraseña.
+/// El cliente activa su cuenta del portal, en la web o en la app, con su DNI y un código
+/// que le da el personal en el taller. La cuenta queda ligada a su ficha y entra con su
+/// DNI y su contraseña.
 /// </summary>
 public class ActivacionCuentaService
 {
@@ -72,7 +73,7 @@ public class ActivacionCuentaService
         if (cliente.Usuario is { Activo: true })
         {
             return ServiceResult<CodigoActivacionResponse>.Conflict(
-                "El cliente ya tiene cuenta en la app: entra con su DNI y su contraseña.");
+                "El cliente ya tiene cuenta en el portal: entra con su DNI y su contraseña.");
         }
 
         var codigo = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");

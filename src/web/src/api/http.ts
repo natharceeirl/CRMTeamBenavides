@@ -1,4 +1,4 @@
-import type { RespuestaLogin, SolicitudLogin } from './tipos'
+import type { ActivarCuentaRequest, RespuestaLogin, SolicitudLogin } from './tipos'
 
 // Todas las llamadas salen contra el mismo origen; el proxy de Vite las manda
 // al backend (ver vite.config.ts).
@@ -299,6 +299,37 @@ export async function iniciarSesion(datos: SolicitudLogin): Promise<Sesion> {
 }
 
 /** Cierra la sesión en el servidor y limpia el almacenamiento local. */
+/**
+ * El cliente activa su cuenta del portal con su DNI y el código que le dieron en el
+ * taller. La API la deja abierta: responde con la sesión, como el login.
+ */
+export async function activarCuenta(datos: ActivarCuentaRequest): Promise<Sesion> {
+  let respuesta: Response
+
+  try {
+    respuesta = await fetch(`${RUTA_BASE}/auth/activar-cuenta`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(datos),
+    })
+  } catch {
+    throw new ErrorApi(0, 'No se pudo conectar con el servidor. Revisa tu conexión y vuelve a intentar.')
+  }
+
+  if (!respuesta.ok) {
+    const detalle = detalleDelError(leerJson(await respuesta.text()))
+    const respaldo =
+      respuesta.status === 429
+        ? 'Demasiados intentos desde esta conexión. Espera un minuto y vuelve a intentar.'
+        : 'No se pudo activar la cuenta.'
+    throw new ErrorApi(respuesta.status, detalle ?? respaldo)
+  }
+
+  const nueva = (await respuesta.json()) as Sesion
+  guardarSesion(nueva)
+  return nueva
+}
+
 export async function terminarSesion(): Promise<void> {
   try {
     if (sesion) {

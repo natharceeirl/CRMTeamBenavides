@@ -681,6 +681,11 @@ h4 {
   font-size: 32px;
 }
 
+.login-activar {
+  margin: 0;
+  font-size: 15px;
+}
+
 .login-pie {
   align-self: flex-start;
   font-size: 14px;
@@ -834,6 +839,14 @@ mark.pendiente {
 
   .formulario-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* En el teléfono: el cliente activa su cuenta y entra al portal desde ahí. */
+@media (max-width: 600px) {
+  .login-marca,
+  .login-formulario {
+    padding: 24px 16px;
   }
 }
 

@@ -11,8 +11,8 @@ type Props = {
 }
 
 /**
- * Si el cliente ya entra a la app y, si no, el código con el que la activa: lo escribe
- * en la app junto con su DNI. El código se muestra una sola vez.
+ * Si el cliente ya entra al portal y, si no, el código con el que activa su cuenta: lo
+ * escribe en la web (/activar) o en la app junto con su DNI. Se muestra una sola vez.
  */
 export function CuentaAppCliente({ clienteId, puedeGenerar }: Readonly<Props>) {
   const cuenta = useCuentaAppCliente(clienteId)
@@ -29,7 +29,7 @@ export function CuentaAppCliente({ clienteId, puedeGenerar }: Readonly<Props>) {
   return (
     <>
       <div className="seccion-titulo">
-        <h2>Cuenta en la app</h2>
+        <h2>Acceso al portal</h2>
       </div>
       <AvisoError error={cuenta.error ?? (codigo ? null : generar.error)} />
       <p>{estado}</p>
@@ -50,8 +50,9 @@ export function CuentaAppCliente({ clienteId, puedeGenerar }: Readonly<Props>) {
           <>
             <p className="codigo-activacion">{`${codigo.codigo.slice(0, 3)} ${codigo.codigo.slice(3)}`}</p>
             <p>
-              Díselo al cliente: en la app toca «Activar mi cuenta» y escribe su DNI, este código y la contraseña que
-              quiera. Sirve una sola vez, hasta el {fechaHora(codigo.vence)}.
+              Díselo al cliente: en <strong>{`${globalThis.location.origin}/activar`}</strong> escribe su DNI, este código
+              y la contraseña que quiera. Después entra al portal con su DNI. Sirve una sola vez, hasta el{' '}
+              {fechaHora(codigo.vence)}.
             </p>
             <p className="texto-secundario">No se vuelve a mostrar: si lo pierde, genera otro.</p>
           </>
