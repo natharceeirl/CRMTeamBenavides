@@ -301,7 +301,7 @@ export type UpdateFaqRequest = {
 // ── Citas ───────────────────────────────────────────────────────────────────
 
 export type ActualizarCitaRequest = {
-  vehiculoId: string
+  vehiculoId?: string | null
   fechaHoraProgramada: string
   duracionMinutos?: number | null
   motivo: string
@@ -325,9 +325,9 @@ export type CitaDetalleResponse = {
   clienteDocumento: string | null
   clienteTelefono: string | null
   clienteEmail: string | null
-  vehiculoId: string
-  vehiculoMarca: string
-  vehiculoModelo: string
+  vehiculoId: string | null
+  vehiculoMarca: string | null
+  vehiculoModelo: string | null
   vehiculoPlaca: string | null
   vehiculoAnio: number | null
   fechaHoraProgramada: string
@@ -349,9 +349,9 @@ export type CitaListResponse = {
   numeroCita: string
   clienteId: string
   clienteNombre: string
-  vehiculoId: string
+  vehiculoId: string | null
   vehiculoPlaca: string | null
-  vehiculoModelo: string
+  vehiculoModelo: string | null
   fechaHoraProgramada: string
   duracionMinutos: number
   motivo: string
@@ -363,7 +363,7 @@ export type CitaListResponse = {
 
 export type CrearCitaRequest = {
   clienteId?: string | null
-  vehiculoId: string
+  vehiculoId?: string | null
   fechaHoraProgramada: string
   duracionMinutos?: number | null
   motivo: string

@@ -147,22 +147,26 @@ public class CitaService : ICitaService
             return ServiceResult<CitaDetalleResponse>.Invalid("El cliente especificado no existe o está inactivo.");
         }
 
-        var vehiculo = await _context.Vehiculos
-            .AsNoTracking()
-            .FirstOrDefaultAsync(v => v.Id == request.VehiculoId && v.Activo, ct);
-
-        if (vehiculo is null)
+        // La unidad es opcional: sin ella, la cita queda a nombre del cliente.
+        if (request.VehiculoId.HasValue)
         {
-            return ServiceResult<CitaDetalleResponse>.Invalid("La unidad especificada no existe o está inactiva.");
-        }
+            var vehiculo = await _context.Vehiculos
+                .AsNoTracking()
+                .FirstOrDefaultAsync(v => v.Id == request.VehiculoId.Value && v.Activo, ct);
 
-        if (vehiculo.ClienteId != clienteEfectivoId.Value)
-        {
-            if (soloClienteId.HasValue)
+            if (vehiculo is null)
             {
-                return ServiceResult<CitaDetalleResponse>.Forbidden("La unidad seleccionada no pertenece al cliente autenticado.");
+                return ServiceResult<CitaDetalleResponse>.Invalid("La unidad especificada no existe o está inactiva.");
             }
-            return ServiceResult<CitaDetalleResponse>.Invalid("La unidad seleccionada no pertenece al cliente especificado.");
+
+            if (vehiculo.ClienteId != clienteEfectivoId.Value)
+            {
+                if (soloClienteId.HasValue)
+                {
+                    return ServiceResult<CitaDetalleResponse>.Forbidden("La unidad seleccionada no pertenece al cliente autenticado.");
+                }
+                return ServiceResult<CitaDetalleResponse>.Invalid("La unidad seleccionada no pertenece al cliente especificado.");
+            }
         }
 
         var fechaInicio = NormalizarUtc(request.FechaHoraProgramada);
@@ -174,8 +178,8 @@ public class CitaService : ICitaService
         var duracion = request.DuracionMinutos is > 0 ? request.DuracionMinutos.Value : 60;
         var fechaFin = fechaInicio.AddMinutes(duracion);
 
-        // Validación de conflictos de horario por unidad
-        var conflicto = await VerificarConflictosHorarioAsync(null, request.VehiculoId, fechaInicio, fechaFin, ct);
+        // Validación de conflictos de horario por unidad, o por cliente si no hay unidad
+        var conflicto = await VerificarConflictosHorarioAsync(null, request.VehiculoId, clienteEfectivoId.Value, fechaInicio, fechaFin, ct);
         if (conflicto is not null)
         {
             return ServiceResult<CitaDetalleResponse>.Conflict(conflicto);
@@ -245,13 +249,16 @@ public class CitaService : ICitaService
             return ServiceResult<CitaDetalleResponse>.Invalid($"No se puede modificar una cita con estado {cita.Estado}.");
         }
 
-        var vehiculo = await _context.Vehiculos
-            .AsNoTracking()
-            .FirstOrDefaultAsync(v => v.Id == request.VehiculoId && v.Activo, ct);
-
-        if (vehiculo is null || vehiculo.ClienteId != cita.ClienteId)
+        if (request.VehiculoId.HasValue)
         {
-            return ServiceResult<CitaDetalleResponse>.Invalid("La unidad especificada no pertenece al cliente de la cita.");
+            var vehiculo = await _context.Vehiculos
+                .AsNoTracking()
+                .FirstOrDefaultAsync(v => v.Id == request.VehiculoId.Value && v.Activo, ct);
+
+            if (vehiculo is null || vehiculo.ClienteId != cita.ClienteId)
+            {
+                return ServiceResult<CitaDetalleResponse>.Invalid("La unidad especificada no pertenece al cliente de la cita.");
+            }
         }
 
         var fechaInicio = NormalizarUtc(request.FechaHoraProgramada);
@@ -264,7 +271,7 @@ public class CitaService : ICitaService
         var duracion = request.DuracionMinutos is > 0 ? request.DuracionMinutos.Value : cita.DuracionMinutos;
         var fechaFin = fechaInicio.AddMinutes(duracion);
 
-        var conflicto = await VerificarConflictosHorarioAsync(cita.Id, request.VehiculoId, fechaInicio, fechaFin, ct);
+        var conflicto = await VerificarConflictosHorarioAsync(cita.Id, request.VehiculoId, cita.ClienteId, fechaInicio, fechaFin, ct);
         if (conflicto is not null)
         {
             return ServiceResult<CitaDetalleResponse>.Conflict(conflicto);
@@ -331,7 +338,7 @@ public class CitaService : ICitaService
         var duracion = request.NuevaDuracionMinutos is > 0 ? request.NuevaDuracionMinutos.Value : cita.DuracionMinutos;
         var fechaFin = fechaInicio.AddMinutes(duracion);
 
-        var conflicto = await VerificarConflictosHorarioAsync(cita.Id, cita.VehiculoId, fechaInicio, fechaFin, ct);
+        var conflicto = await VerificarConflictosHorarioAsync(cita.Id, cita.VehiculoId, cita.ClienteId, fechaInicio, fechaFin, ct);
         if (conflicto is not null)
         {
             return ServiceResult<CitaDetalleResponse>.Conflict(conflicto);
@@ -368,8 +375,9 @@ public class CitaService : ICitaService
 
     /// <summary>
     /// Vincula la orden que se abrió al recibir la unidad de la cita: tiene que ser de
-    /// la misma unidad y del mismo cliente. Si la cita no estaba «En taller», pasa a ese
-    /// estado, porque abrir la orden es recibir la unidad.
+    /// la misma unidad y del mismo cliente. Una cita sin unidad toma la de la orden. Si
+    /// la cita no estaba «En taller», pasa a ese estado, porque abrir la orden es recibir
+    /// la unidad.
     /// </summary>
     public async Task<ServiceResult<CitaDetalleResponse>> VincularOrdenAsync(
         Guid id,
@@ -401,10 +409,17 @@ public class CitaService : ICitaService
             return ServiceResult<CitaDetalleResponse>.Invalid("La orden de servicio no existe o está inactiva.");
         }
 
-        if (orden.VehiculoId != cita.VehiculoId || (orden.ClienteId != Guid.Empty && orden.ClienteId != cita.ClienteId))
+        if (orden.ClienteId != Guid.Empty && orden.ClienteId != cita.ClienteId)
+        {
+            return ServiceResult<CitaDetalleResponse>.Invalid("La orden debe ser del mismo cliente que la cita.");
+        }
+
+        if (cita.VehiculoId.HasValue && orden.VehiculoId != cita.VehiculoId)
         {
             return ServiceResult<CitaDetalleResponse>.Invalid("La orden debe ser de la misma unidad y del mismo cliente que la cita.");
         }
+
+        cita.VehiculoId ??= orden.VehiculoId;
 
         var estadoAnterior = cita.Estado;
         cita.OrdenServicioId = orden.Id;
@@ -583,8 +598,8 @@ public class CitaService : ICitaService
             FechaHoraProgramada: c.FechaHoraProgramada,
             ClienteNombre: c.ClienteNombre,
             ClienteDocumento: string.Empty,
-            VehiculoInfo: c.VehiculoModelo,
-            Placa: c.VehiculoPlaca ?? "SIN PLACA",
+            VehiculoInfo: c.VehiculoModelo ?? "Sin unidad",
+            Placa: c.VehiculoModelo is null ? string.Empty : c.VehiculoPlaca ?? "SIN PLACA",
             Motivo: c.Motivo,
             Estado: c.EstadoDescripcion,
             DuracionMinutos: c.DuracionMinutos,
@@ -594,18 +609,22 @@ public class CitaService : ICitaService
         return _excelService.GenerarExcelCitas(dtos);
     }
 
+    /// <summary>
+    /// Con unidad, la misma unidad no tiene dos citas que se crucen. Sin unidad, el mismo
+    /// cliente no tiene dos citas que se crucen.
+    /// </summary>
     private async Task<string?> VerificarConflictosHorarioAsync(
         Guid? citaActualId,
-        Guid vehiculoId,
+        Guid? vehiculoId,
+        Guid clienteId,
         DateTime inicio,
         DateTime fin,
         CancellationToken ct)
     {
-        // Citas activas que solapan con la ventana temporal solicitada para la misma unidad
         var citasActivasSolapadas = await _context.Citas
             .AsNoTracking()
             .Where(c => c.Activo
-                && c.VehiculoId == vehiculoId
+                && (vehiculoId.HasValue ? c.VehiculoId == vehiculoId : c.ClienteId == clienteId)
                 && (!citaActualId.HasValue || c.Id != citaActualId.Value)
                 && (c.Estado == EstadoCita.Pendiente || c.Estado == EstadoCita.Confirmada || c.Estado == EstadoCita.EnTaller))
             .ToListAsync(ct);
@@ -616,7 +635,9 @@ public class CitaService : ICitaService
 
         if (solapadas.Count > 0)
         {
-            return "La unidad seleccionada ya cuenta con una cita activa programada en ese horario.";
+            return vehiculoId.HasValue
+                ? "La unidad seleccionada ya cuenta con una cita activa programada en ese horario."
+                : "El cliente ya tiene una cita activa programada en ese horario.";
         }
 
         return null;
@@ -631,7 +652,7 @@ public class CitaService : ICitaService
             c.Cliente?.NombreCompleto ?? "Cliente no registrado",
             c.VehiculoId,
             c.Vehiculo?.Placa,
-            $"{c.Vehiculo?.Marca} {c.Vehiculo?.Modelo}".Trim(),
+            c.Vehiculo is null ? null : $"{c.Vehiculo.Marca} {c.Vehiculo.Modelo}".Trim(),
             c.FechaHoraProgramada,
             c.DuracionMinutos,
             c.Motivo,
@@ -652,8 +673,8 @@ public class CitaService : ICitaService
             c.Cliente?.Telefono,
             c.Cliente?.Email,
             c.VehiculoId,
-            c.Vehiculo?.Marca ?? string.Empty,
-            c.Vehiculo?.Modelo ?? string.Empty,
+            c.Vehiculo?.Marca,
+            c.Vehiculo?.Modelo,
             c.Vehiculo?.Placa,
             c.Vehiculo?.Anio,
             c.FechaHoraProgramada,

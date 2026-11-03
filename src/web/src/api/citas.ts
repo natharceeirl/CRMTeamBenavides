@@ -20,6 +20,10 @@ export const nombresEstadoCita: Record<EstadoCita, string> = {
   [ESTADO_CITA.noAsistio]: 'No asistió',
 }
 
+/** «FZ 2.0 · ABC-123», o «Sin unidad»: la cita se puede agendar sin elegirla. */
+export const unidadDeCita = (cita: { vehiculoModelo?: string | null; vehiculoPlaca?: string | null }) =>
+  cita.vehiculoModelo ? `${cita.vehiculoModelo} · ${cita.vehiculoPlaca ?? 'sin placa'}` : 'Sin unidad'
+
 export const esCitaFinal = (estado: EstadoCita) =>
   estado === ESTADO_CITA.completada || estado === ESTADO_CITA.cancelada || estado === ESTADO_CITA.noAsistio
 

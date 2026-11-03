@@ -170,7 +170,9 @@ public static class DetectorNotificaciones
                 case Cita cita:
                     await NotificarClienteAsync(contexto, cita.ClienteId, TipoNotificacion.CitaConfirmada,
                         "Cita confirmada",
-                        $"{HoraPeru.Texto(cita.FechaHoraProgramada)} · {await UnidadAsync(contexto, cita.VehiculoId, ct)}",
+                        cita.VehiculoId is Guid unidadId
+                            ? $"{HoraPeru.Texto(cita.FechaHoraProgramada)} · {await UnidadAsync(contexto, unidadId, ct)}"
+                            : HoraPeru.Texto(cita.FechaHoraProgramada),
                         EntidadCita, cita.Id, ct);
                     break;
             }

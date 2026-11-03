@@ -181,7 +181,7 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Property<Guid?>("OrdenServicioId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("VehiculoId")
+                    b.Property<Guid?>("VehiculoId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
@@ -2825,8 +2825,7 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.HasOne("CRMTeamBenavides.Domain.Entities.Vehiculo", "Vehiculo")
                         .WithMany()
                         .HasForeignKey("VehiculoId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Cliente");
 

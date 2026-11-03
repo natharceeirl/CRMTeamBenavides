@@ -1,5 +1,6 @@
 import dayjs, { type Dayjs } from 'dayjs'
-import { DatePicker, Form, Input, Modal, Select } from 'antd'
+import { useState } from 'react'
+import { Button, DatePicker, Form, Input, Modal, Select } from 'antd'
 import { useClientes } from '../api/clientes'
 import { useVehiculos } from '../api/vehiculos'
 import { useCrearCita } from '../api/citas'
@@ -7,6 +8,7 @@ import type { CitaDetalleResponse } from '../api/tipos'
 import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
 import { AvisoError } from './AvisoError'
+import { ModalCliente } from './ModalCliente'
 import { identificadorUnidad } from '../utils/unidades'
 import { DURACIONES_CITA, reglaFechaCita } from '../utils/agenda'
 
@@ -25,7 +27,8 @@ type Props = {
 
 type Campos = {
   clienteId: string
-  vehiculoId: string
+  /** Opcional: se puede agendar sin saber la unidad; la orden la completa. */
+  vehiculoId?: string
   fechaHora: Dayjs
   duracionMinutos: number
   motivo: string
@@ -37,6 +40,9 @@ export function ModalCita({ abierto, paraCliente = false, fechaInicial, onCerrar
   const { tienePermiso } = useSesion()
   const clientes = useClientes(!paraCliente)
   const crear = useCrearCita()
+  // El cliente que llama por primera vez se registra aquí mismo, como en la orden.
+  const puedeRegistrarCliente = !paraCliente && tienePermiso(PERMISOS.clientesCrear)
+  const [registrandoCliente, setRegistrandoCliente] = useState(false)
 
   const clienteElegido = Form.useWatch('clienteId', formulario)
   // El cliente ve sus unidades sin filtro: la API ya le devuelve solo las suyas.
@@ -55,7 +61,7 @@ export function ModalCita({ abierto, paraCliente = false, fechaInicial, onCerrar
   const enviar = async (campos: Campos) => {
     const cita = await crear.mutateAsync({
       clienteId: paraCliente ? null : campos.clienteId,
-      vehiculoId: campos.vehiculoId,
+      vehiculoId: campos.vehiculoId ?? null,
       fechaHoraProgramada: campos.fechaHora.second(0).millisecond(0).toISOString(),
       duracionMinutos: campos.duracionMinutos,
       motivo: campos.motivo.trim(),
@@ -91,7 +97,18 @@ export function ModalCita({ abierto, paraCliente = false, fechaInicial, onCerrar
       >
         <div className="formulario-grid">
           {!paraCliente && (
-            <Form.Item label="Cliente" name="clienteId" rules={[{ required: true, message: 'Elige el cliente' }]}>
+            <Form.Item
+              label="Cliente"
+              name="clienteId"
+              rules={[{ required: true, message: 'Elige el cliente' }]}
+              extra={
+                puedeRegistrarCliente && (
+                  <Button type="link" size="small" style={{ paddingInline: 0 }} onClick={() => setRegistrandoCliente(true)}>
+                    Registrar cliente nuevo
+                  </Button>
+                )
+              }
+            >
               <Select
                 showSearch={{ optionFilterProp: 'label' }}
                 loading={clientes.isPending}
@@ -103,11 +120,12 @@ export function ModalCita({ abierto, paraCliente = false, fechaInicial, onCerrar
               />
             </Form.Item>
           )}
-          <Form.Item label="Unidad" name="vehiculoId" rules={[{ required: true, message: 'Elige la unidad' }]}>
+          <Form.Item label="Unidad (opcional)" name="vehiculoId">
             <Select
+              allowClear
               disabled={!hayCliente}
               loading={hayCliente && unidades.isPending}
-              placeholder={hayCliente ? (paraCliente ? 'Tu unidad' : 'Unidad del cliente') : 'Primero el cliente'}
+              placeholder={hayCliente ? 'Sin unidad: se elige al recibirla' : 'Primero el cliente'}
               notFoundContent={paraCliente ? 'No tienes unidades registradas' : 'El cliente no tiene unidades registradas'}
               options={(unidades.data ?? [])
                 .filter((unidad) => unidad.activo)
@@ -145,6 +163,11 @@ export function ModalCita({ abierto, paraCliente = false, fechaInicial, onCerrar
           </Form.Item>
         </div>
       </Form>
+      <ModalCliente
+        abierto={registrandoCliente}
+        onCerrar={() => setRegistrandoCliente(false)}
+        onGuardado={(cliente) => formulario.setFieldsValue({ clienteId: cliente.id, vehiculoId: undefined })}
+      />
     </Modal>
   )
 }

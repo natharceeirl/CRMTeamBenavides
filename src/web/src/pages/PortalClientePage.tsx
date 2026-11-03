@@ -25,7 +25,7 @@ import {
   useOrden,
   useOrdenes,
 } from '../api/ordenes'
-import { useCitas } from '../api/citas'
+import { unidadDeCita, useCitas } from '../api/citas'
 import { nombresEstadoPedidoCliente, usePedidosLima } from '../api/pedidosLima'
 import { usePortalComprobantes, usePortalResumen, type PortalComprobante } from '../api/portal'
 import {
@@ -213,7 +213,7 @@ export function PortalClientePage() {
     {
       title: 'Unidad',
       key: 'unidad',
-      render: (_, cita) => `${cita.vehiculoModelo}${cita.vehiculoPlaca ? ` · ${cita.vehiculoPlaca}` : ''}`,
+      render: (_, cita) => unidadDeCita(cita),
     },
     { title: 'Motivo', dataIndex: 'motivo' },
     { title: 'Duración', dataIndex: 'duracionMinutos', render: (minutos: number) => textoDuracion(minutos) },

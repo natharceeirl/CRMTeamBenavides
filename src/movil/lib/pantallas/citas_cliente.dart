@@ -19,16 +19,14 @@ import 'comunes.dart';
   return (proximas: proximas, anteriores: anteriores);
 }
 
-/// Lo que falta para poder agendar, o null si está todo. El backend no controla
-/// la fecha pasada: lo hace la app.
+/// Lo que falta para poder agendar, o null si está todo. La unidad es opcional. El
+/// backend no controla la fecha pasada: lo hace la app.
 String? faltaParaAgendar({
-  required String? vehiculoId,
   required DateTime? fecha,
   required TimeOfDay? hora,
   required String motivo,
   required DateTime ahora,
 }) {
-  if (vehiculoId == null) return 'Elige la unidad.';
   if (fecha == null || hora == null) return 'Elige el día y la hora.';
   final programada = DateTime(fecha.year, fecha.month, fecha.day, hora.hour, hora.minute);
   if (programada.isBefore(ahora)) return 'La cita no puede quedar en el pasado.';
@@ -337,7 +335,6 @@ class _HojaAgendarCitaState extends ConsumerState<HojaAgendarCita> {
 
   Future<void> _agendar() async {
     final falta = faltaParaAgendar(
-      vehiculoId: _vehiculoId,
       fecha: _fecha,
       hora: _hora,
       motivo: _motivo.text,
@@ -355,7 +352,7 @@ class _HojaAgendarCitaState extends ConsumerState<HojaAgendarCita> {
     try {
       final fecha = _fecha!;
       await ref.read(apiProvider).agendarCita(
-            vehiculoId: _vehiculoId!,
+            vehiculoId: _vehiculoId,
             fechaHora: DateTime(fecha.year, fecha.month, fecha.day, _hora!.hour, _hora!.minute),
             motivo: _motivo.text.trim(),
             observaciones: _observaciones.text.trim(),
@@ -412,15 +409,16 @@ class _HojaAgendarCitaState extends ConsumerState<HojaAgendarCita> {
               final activas = lista.where((unidad) => unidad.activo).toList();
               if (activas.isEmpty) {
                 return const Text(
-                  'No tienes unidades registradas. Pide al taller que las registre.',
+                  'No tienes unidades registradas: puedes agendar igual y el taller la registra cuando llegues.',
                   style: TextStyle(color: Marca.textoSecundario),
                 );
               }
-              return DropdownButtonFormField<String>(
+              return DropdownButtonFormField<String?>(
                 initialValue: _vehiculoId,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Unidad'),
+                decoration: const InputDecoration(labelText: 'Unidad (opcional)'),
                 items: [
+                  const DropdownMenuItem<String?>(value: null, child: Text('Sin unidad')),
                   for (final unidad in activas)
                     DropdownMenuItem(
                       value: unidad.id,

@@ -3,9 +3,10 @@ using CRMTeamBenavides.Domain.Entities;
 
 namespace CRMTeamBenavides.Api.Features.Citas;
 
+/// <summary>La unidad es opcional: sin ella, la cita es del cliente y la orden la completa.</summary>
 public record CrearCitaRequest(
     Guid? ClienteId,
-    [Required] Guid VehiculoId,
+    Guid? VehiculoId,
     [Required] DateTime FechaHoraProgramada,
     int? DuracionMinutos,
     [Required] string Motivo,
@@ -17,7 +18,7 @@ public record ReprogramarCitaRequest(
     string? MotivoReprogramacion);
 
 public record ActualizarCitaRequest(
-    [Required] Guid VehiculoId,
+    Guid? VehiculoId,
     [Required] DateTime FechaHoraProgramada,
     int? DuracionMinutos,
     [Required] string Motivo,
@@ -39,9 +40,9 @@ public record CitaListResponse(
     string NumeroCita,
     Guid ClienteId,
     string ClienteNombre,
-    Guid VehiculoId,
+    Guid? VehiculoId,
     string? VehiculoPlaca,
-    string VehiculoModelo,
+    string? VehiculoModelo,
     DateTime FechaHoraProgramada,
     int DuracionMinutos,
     string Motivo,
@@ -69,9 +70,9 @@ public record CitaDetalleResponse(
     string? ClienteDocumento,
     string? ClienteTelefono,
     string? ClienteEmail,
-    Guid VehiculoId,
-    string VehiculoMarca,
-    string VehiculoModelo,
+    Guid? VehiculoId,
+    string? VehiculoMarca,
+    string? VehiculoModelo,
     string? VehiculoPlaca,
     int? VehiculoAnio,
     DateTime FechaHoraProgramada,

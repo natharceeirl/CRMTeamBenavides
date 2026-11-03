@@ -104,7 +104,7 @@ function ModalReprogramar({ cita, onCerrar }: Readonly<{ cita: CitaDetalleRespon
 }
 
 type CamposEditar = {
-  vehiculoId: string
+  vehiculoId?: string
   motivo: string
   observaciones?: string
 }
@@ -120,7 +120,7 @@ function ModalEditar({ cita, onCerrar }: Readonly<{ cita: CitaDetalleResponse; o
     await actualizar.mutateAsync({
       id: cita.id,
       datos: {
-        vehiculoId: campos.vehiculoId,
+        vehiculoId: campos.vehiculoId ?? null,
         fechaHoraProgramada: cita.fechaHoraProgramada,
         duracionMinutos: cita.duracionMinutos,
         motivo: campos.motivo.trim(),
@@ -146,10 +146,16 @@ function ModalEditar({ cita, onCerrar }: Readonly<{ cita: CitaDetalleResponse; o
         layout="vertical"
         requiredMark={false}
         onFinish={guardar}
-        initialValues={{ vehiculoId: cita.vehiculoId, motivo: cita.motivo, observaciones: cita.observaciones ?? '' }}
+        initialValues={{
+          vehiculoId: cita.vehiculoId ?? undefined,
+          motivo: cita.motivo,
+          observaciones: cita.observaciones ?? '',
+        }}
       >
-        <Form.Item label="Unidad" name="vehiculoId" rules={[{ required: true, message: 'Elige la unidad' }]}>
+        <Form.Item label="Unidad (opcional)" name="vehiculoId">
           <Select
+            allowClear
+            placeholder="Sin unidad: se elige al recibirla"
             loading={unidades.isPending}
             options={(unidades.data ?? [])
               .filter((unidad) => unidad.activo || unidad.id === cita.vehiculoId)
@@ -252,7 +258,9 @@ export function ModalDetalleCita({ citaId, onCerrar }: Readonly<Props>) {
               <tr>
                 <td>Unidad</td>
                 <td>
-                  {datos.vehiculoMarca} {datos.vehiculoModelo} · {datos.vehiculoPlaca ?? 'sin placa'}
+                  {datos.vehiculoModelo
+                    ? `${datos.vehiculoMarca ?? ''} ${datos.vehiculoModelo} · ${datos.vehiculoPlaca ?? 'sin placa'}`.trim()
+                    : 'Sin unidad'}
                 </td>
               </tr>
               <tr>

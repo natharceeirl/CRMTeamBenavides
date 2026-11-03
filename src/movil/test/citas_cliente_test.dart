@@ -44,6 +44,22 @@ void main() {
     expect(leida.fechaHoraProgramada, DateTime.utc(2026, 10, 5, 14));
   });
 
+  test('una cita sin unidad dice «Sin unidad»', () {
+    final leida = CitaApi.desdeJson({
+      'id': 'c2',
+      'numeroCita': 'CT-000005',
+      'clienteNombre': 'Luis Quispe',
+      'vehiculoId': null,
+      'vehiculoPlaca': null,
+      'vehiculoModelo': null,
+      'fechaHoraProgramada': '2026-10-05T14:00:00Z',
+      'motivo': 'Revisión',
+      'estado': 'Pendiente',
+    });
+    expect(leida.vehiculoId, isNull);
+    expect(leida.unidad, 'Sin unidad');
+  });
+
   test('separa las citas en curso de las cerradas, cada grupo en su orden', () {
     final (:proximas, :anteriores) = separarCitas([
       cita('a', DateTime.utc(2026, 10, 9, 14), EstadoCita.pendiente),
@@ -55,15 +71,14 @@ void main() {
     expect(anteriores.map((c) => c.id), ['d', 'c']);
   });
 
-  test('pide unidad, día, hora y motivo, y no deja agendar en el pasado', () {
+  test('pide día, hora y motivo, no la unidad, y no deja agendar en el pasado', () {
     final ahora = DateTime(2026, 10, 2, 10);
     final manana = DateTime(2026, 10, 3);
     const nueve = TimeOfDay(hour: 9, minute: 0);
 
-    String? falta({String? vehiculoId = 'v1', DateTime? fecha, TimeOfDay? hora = nueve, String motivo = 'Revisión'}) =>
-        faltaParaAgendar(vehiculoId: vehiculoId, fecha: fecha ?? manana, hora: hora, motivo: motivo, ahora: ahora);
+    String? falta({DateTime? fecha, TimeOfDay? hora = nueve, String motivo = 'Revisión'}) =>
+        faltaParaAgendar(fecha: fecha ?? manana, hora: hora, motivo: motivo, ahora: ahora);
 
-    expect(falta(vehiculoId: null), 'Elige la unidad.');
     expect(falta(hora: null), 'Elige el día y la hora.');
     expect(falta(fecha: DateTime(2026, 10, 2)), 'La cita no puede quedar en el pasado.');
     expect(falta(motivo: '  '), 'Cuéntanos el motivo de la cita.');
@@ -100,7 +115,10 @@ void main() {
 
     await tester.tap(find.text('Agendar cita'));
     await tester.pumpAndSettle();
-    expect(find.text('No tienes unidades registradas. Pide al taller que las registre.'), findsOneWidget);
+    expect(
+      find.text('No tienes unidades registradas: puedes agendar igual y el taller la registra cuando llegues.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('una cita pendiente se puede cancelar con motivo', (tester) async {

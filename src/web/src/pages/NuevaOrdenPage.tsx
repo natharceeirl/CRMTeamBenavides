@@ -103,11 +103,23 @@ export function NuevaOrdenPage() {
   const tecnicos = useTecnicos(puedeAsignar && tienePermiso(PERMISOS.usuariosVer))
   const abrir = useAbrirOrden()
 
+  // Desde la agenda: la orden se abre con la unidad y el motivo de la cita, y al
+  // guardarse queda vinculada a ella.
+  const [parametros] = useSearchParams()
+  const citaId = parametros.get('cita')
+  const cita = useCita(citaId)
+  const vincular = useVincularOrdenCita()
+  const datosCita = cita.data
+
   // Recepción por documento: con el cliente encontrado, la lista de unidades se
   // reduce a las suyas; si no existe, sus datos y los de su unidad se escriben
-  // aquí mismo y se guardan junto con la orden.
-  const [documento, setDocumento] = useState('')
-  const [documentoBuscado, setDocumentoBuscado] = useState<string | null>(null)
+  // aquí mismo y se guardan junto con la orden. Una cita sin unidad trae a su
+  // cliente: se busca por su documento hasta que Recepción busque otro.
+  const documentoDeCita = datosCita && !datosCita.vehiculoId ? (datosCita.clienteDocumento ?? null) : null
+  const [documentoEscrito, setDocumento] = useState<string | null>(null)
+  const [busqueda, setBusqueda] = useState<{ documento: string | null } | null>(null)
+  const documento = documentoEscrito ?? documentoDeCita ?? ''
+  const documentoBuscado = busqueda ? busqueda.documento : documentoDeCita
   const clienteBuscado = useClientePorDocumento(documentoBuscado)
   const cliente = clienteBuscado.data ?? null
   const clienteNoEncontrado = Boolean(documentoBuscado) && clienteBuscado.isSuccess && !cliente
@@ -121,7 +133,7 @@ export function NuevaOrdenPage() {
     : (vehiculos.data ?? [])
 
   const buscarCliente = (valor: string) => {
-    setDocumentoBuscado(valor.trim() || null)
+    setBusqueda({ documento: valor.trim() || null })
     setQuiereUnidadNueva(false)
     formulario.setFieldsValue({ vehiculoId: undefined })
   }
@@ -141,17 +153,10 @@ export function NuevaOrdenPage() {
     }
   }, [unicaUnidad, formulario])
 
-  // Desde la agenda: la orden se abre con la unidad y el motivo de la cita, y al
-  // guardarse queda vinculada a ella.
-  const [parametros] = useSearchParams()
-  const citaId = parametros.get('cita')
-  const cita = useCita(citaId)
-  const vincular = useVincularOrdenCita()
-  const datosCita = cita.data
   useEffect(() => {
     if (!datosCita) return
     formulario.setFieldsValue({
-      vehiculoId: datosCita.vehiculoId,
+      vehiculoId: datosCita.vehiculoId ?? undefined,
       motivoFalla: datosCita.motivo,
       observaciones: datosCita.observaciones ?? undefined,
     })

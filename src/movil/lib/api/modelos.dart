@@ -1127,12 +1127,12 @@ class CitaApi {
     required this.id,
     required this.numeroCita,
     required this.clienteNombre,
-    required this.vehiculoId,
-    required this.vehiculoModelo,
     required this.fechaHoraProgramada,
     required this.duracionMinutos,
     required this.motivo,
     required this.estado,
+    this.vehiculoId,
+    this.vehiculoModelo,
     this.vehiculoPlaca,
   });
 
@@ -1140,9 +1140,9 @@ class CitaApi {
         id: json['id'] as String,
         numeroCita: json['numeroCita'] as String? ?? '',
         clienteNombre: json['clienteNombre'] as String? ?? '',
-        vehiculoId: json['vehiculoId'] as String,
+        vehiculoId: json['vehiculoId'] as String?,
         vehiculoPlaca: json['vehiculoPlaca'] as String?,
-        vehiculoModelo: json['vehiculoModelo'] as String? ?? '',
+        vehiculoModelo: json['vehiculoModelo'] as String?,
         fechaHoraProgramada: DateTime.parse(json['fechaHoraProgramada'] as String),
         duracionMinutos: json['duracionMinutos'] as int? ?? 60,
         motivo: json['motivo'] as String? ?? '',
@@ -1152,17 +1152,20 @@ class CitaApi {
   final String id;
   final String numeroCita;
   final String clienteNombre;
-  final String vehiculoId;
+  /// La cita se puede agendar sin unidad: la orden la completa al recibirla.
+  final String? vehiculoId;
   final String? vehiculoPlaca;
-  final String vehiculoModelo;
+  final String? vehiculoModelo;
   final DateTime fechaHoraProgramada;
   final int duracionMinutos;
   final String motivo;
   final String estado;
 
   String get unidad {
+    final modelo = vehiculoModelo;
+    if (modelo == null || modelo.isEmpty) return 'Sin unidad';
     final placa = vehiculoPlaca;
-    return placa == null || placa.isEmpty ? vehiculoModelo : '$vehiculoModelo · $placa';
+    return placa == null || placa.isEmpty ? modelo : '$modelo · $placa';
   }
 }
 

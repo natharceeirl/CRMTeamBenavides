@@ -454,7 +454,7 @@ class ApiHttp {
   /// El cliente no manda su id: la API toma el del usuario y verifica que la
   /// unidad sea suya. Sin duración, el backend reserva una hora.
   Future<void> agendarCita({
-    required String vehiculoId,
+    String? vehiculoId,
     required DateTime fechaHora,
     required String motivo,
     String? observaciones,

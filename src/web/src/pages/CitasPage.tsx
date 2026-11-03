@@ -7,7 +7,7 @@ import { AvisoError } from '../components/AvisoError'
 import { EstadoCitaTag } from '../components/EstadoCitaTag'
 import { ModalCita } from '../components/ModalCita'
 import { ModalDetalleCita } from '../components/ModalDetalleCita'
-import { esCitaFinal, nombresEstadoCita, rutaCitas, useCitas, type FiltrosCitas } from '../api/citas'
+import { esCitaFinal, nombresEstadoCita, rutaCitas, unidadDeCita, useCitas, type FiltrosCitas } from '../api/citas'
 import type { EstadoCita } from '../api/tipos'
 import { useSesion } from '../auth/sesion'
 import { useClientes } from '../api/clientes'
@@ -152,9 +152,7 @@ export function CitasPage() {
                           {dayjs(cita.fechaHoraProgramada).format('HH:mm')} · {textoDuracion(cita.duracionMinutos)}
                         </span>
                         <span className="agenda-cita-cliente">{cita.clienteNombre}</span>
-                        <span className="texto-secundario">
-                          {cita.vehiculoModelo} · {cita.vehiculoPlaca ?? 'sin placa'}
-                        </span>
+                        <span className="texto-secundario">{unidadDeCita(cita)}</span>
                         <EstadoCitaTag estado={cita.estado} />
                       </button>
                     ))}

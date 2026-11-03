@@ -24,8 +24,9 @@ public class Cita : BaseEntity
     public Guid ClienteId { get; set; }
     public Cliente Cliente { get; set; } = null!;
 
-    public Guid VehiculoId { get; set; }
-    public Vehiculo Vehiculo { get; set; } = null!;
+    /// <summary>Opcional: se puede agendar sin saber la unidad; la orden la completa.</summary>
+    public Guid? VehiculoId { get; set; }
+    public Vehiculo? Vehiculo { get; set; }
 
     /// <summary>Fecha y hora pactada para la cita en UTC.</summary>
     public DateTime FechaHoraProgramada { get; set; }

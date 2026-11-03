@@ -7,6 +7,8 @@ type Props = {
   abierto: boolean
   cliente?: ClienteResponse | null
   onCerrar: () => void
+  /** Con el cliente ya guardado: la cita lo deja elegido. */
+  onGuardado?: (cliente: ClienteResponse) => void
 }
 
 type Campos = {
@@ -22,7 +24,7 @@ type Campos = {
 
 const sinVacios = (valor?: string) => (valor && valor.trim() !== '' ? valor.trim() : null)
 
-export function ModalCliente({ abierto, cliente, onCerrar }: Readonly<Props>) {
+export function ModalCliente({ abierto, cliente, onCerrar, onGuardado }: Readonly<Props>) {
   const [formulario] = Form.useForm<Campos>()
   const guardar = useGuardarCliente()
 
@@ -40,9 +42,10 @@ export function ModalCliente({ abierto, cliente, onCerrar }: Readonly<Props>) {
       observaciones: sinVacios(campos.observaciones),
     }
 
-    await guardar.mutateAsync({ id: cliente?.id, datos })
+    const guardado = await guardar.mutateAsync({ id: cliente?.id, datos })
     guardar.reset()
     onCerrar()
+    onGuardado?.(guardado)
   }
 
   return (
