@@ -14,8 +14,9 @@ import {
   useResumenDashboard,
   type Periodo,
 } from '../api/reportes'
-import type { OrdenServicioResponse } from '../api/tipos'
-import { entero, fechaHora, referenciaOrden } from '../utils/formato'
+import { useCajaActual } from '../api/caja'
+import type { EstadoCajaActualResponse, OrdenServicioResponse } from '../api/tipos'
+import { entero, fechaHora, referenciaOrden, soles } from '../utils/formato'
 import { useSesion } from '../auth/sesion'
 import { ACCESO_ORDENES, PERMISOS, cumpleAcceso } from '../auth/acceso'
 
@@ -67,6 +68,12 @@ const columnas: TableProps<OrdenServicioResponse>['columns'] = [
   },
 ]
 
+/** El efectivo de la caja abierta, como en la app: recién abierta, es el monto inicial. */
+const textoCaja = (estado: EstadoCajaActualResponse | undefined) => {
+  if (!estado) return '—'
+  return estado.tieneCajaAbierta && estado.caja ? soles(estado.caja.saldoCalculado) : 'Cerrada'
+}
+
 export function TableroPage() {
   const navigate = useNavigate()
   const [periodo, setPeriodo] = useState<Periodo>('Semana')
@@ -76,10 +83,13 @@ export function TableroPage() {
   const puedeCrearOrden = sesion.tienePermiso(PERMISOS.ordenesCrear)
   // Los montos son de Gerencia (reportes.ver_financieros); el resto ve cuántas ventas hubo.
   const veMontos = sesion.tienePermiso(PERMISOS.reportesVerFinancieros)
+  const veCaja = sesion.tienePermiso(PERMISOS.cajaConsultar)
 
   const rango = rangoDelPeriodo(periodo)
   const resumen = useResumenDashboard(rango)
   const ordenes = useOrdenes({}, veOrdenes)
+  // Aparte del resumen: si la caja falla, el resto del tablero se ve igual.
+  const caja = useCajaActual(veCaja)
 
   // El tablero muestra lo que sigue en el taller: ni entregadas ni anuladas.
   const activas = (ordenes.data ?? []).filter((orden) => !esEstadoTerminal(orden.estadoId))
@@ -123,6 +133,7 @@ export function TableroPage() {
               valor: datos?.inventario.productosConStockBajo ?? '—',
               destacado: (datos?.inventario.productosConStockBajo ?? 0) > 0,
             },
+            ...(veCaja ? [{ etiqueta: 'Caja chica', valor: textoCaja(caja.data), compacto: true }] : []),
           ]}
         />
         <section>
