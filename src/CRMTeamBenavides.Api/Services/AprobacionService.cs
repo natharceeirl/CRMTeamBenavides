@@ -225,8 +225,14 @@ public class AprobacionService : IAprobacionService
             }
         }
 
+        // Un precio rechazado vuelve al de lista: la orden, la venta o el pedido siguen con
+        // ese precio en vez de quedar bloqueados hasta que alguien lo corrija a mano.
+        var precioRestablecido = request.Estado == EstadoAprobacionGerencia.Rechazado
+            && solicitud.Tipo == "CambioPrecio"
+            && await RestablecerPrecioDeListaAsync(solicitud, ct);
+
         // Actualizar la entidad origen (OrdenServicio, Venta o PedidoLima)
-        await ActualizarEstadoEntidadVinculadaAsync(solicitud.Entidad, solicitud.EntidadId, request.Estado, request.Observaciones, usuarioId, ct);
+        await ActualizarEstadoEntidadVinculadaAsync(solicitud.Entidad, solicitud.EntidadId, request.Estado, request.Observaciones, usuarioId, ct, precioRestablecido);
 
         await _context.SaveChangesAsync(ct);
 
@@ -243,10 +249,123 @@ public class AprobacionService : IAprobacionService
                 solicitud.DetalleCambio,
                 solicitud.ValorAnterior,
                 solicitud.ValorSolicitado,
-                Observaciones = request.Observaciones?.Trim()
+                Observaciones = request.Observaciones?.Trim(),
+                PrecioRestablecido = precioRestablecido
             });
 
         return ServiceResult<SolicitudAprobacionResponse>.Success(MapToResponse(solicitud));
+    }
+
+    /// <summary>
+    /// Devuelve al precio de lista lo que pedía la solicitud rechazada y recalcula los
+    /// totales. En la orden y el pedido es el ítem de la solicitud; en la venta, cada
+    /// repuesto con otro precio. Una operación ya liquidada, cobrada o anulada no se toca.
+    /// </summary>
+    private async Task<bool> RestablecerPrecioDeListaAsync(SolicitudAprobacion solicitud, CancellationToken ct)
+    {
+        if (!Guid.TryParse(solicitud.EntidadId, out var entidadId)) return false;
+
+        var config = await _context.ConfiguracionesEmpresa.FirstOrDefaultAsync(ct);
+        var igv = config?.PorcentajeIgv ?? 18.00m;
+
+        switch (NormalizarEntidad(solicitud.Entidad))
+        {
+            case "ORDENSERVICIO":
+            {
+                if (ObtenerDetalleId(solicitud) is not Guid detalleId || solicitud.ValorAnterior is not decimal precioBase) return false;
+
+                var orden = await _context.OrdenesServicio.Include(o => o.Detalles).FirstOrDefaultAsync(o => o.Id == entidadId, ct);
+                var detalle = orden?.Detalles.FirstOrDefault(d => d.Id == detalleId && d.Activo);
+                if (orden is null || detalle is null) return false;
+
+                // La venta de la orden copió sus precios: cambiarlos ahora las desfasaría.
+                if (await _context.Ventas.AnyAsync(v => v.OrdenServicioId == orden.Id && v.Activo && v.Estado != EstadoVenta.Anulada, ct))
+                {
+                    return false;
+                }
+
+                detalle.PrecioUnitario = precioBase;
+                (detalle.SubtotalGravado, detalle.MontoIgv, detalle.Total, detalle.PorcentajeIgvAplicado) =
+                    OrdenServicioService.CalcularFinanzasLinea(detalle.Cantidad, precioBase, detalle.TipoAfectacionIgv, igv);
+                detalle.FechaModificacion = DateTime.UtcNow;
+                OrdenServicioService.RecalcularTotalesOrden(orden);
+                return true;
+            }
+
+            case "VENTA":
+            {
+                var venta = await _context.Ventas
+                    .Include(v => v.Detalles.Where(d => d.Activo))
+                        .ThenInclude(d => d.Producto)
+                    .Include(v => v.Pagos.Where(p => p.Activo))
+                    .Include(v => v.Comprobante)
+                    .FirstOrDefaultAsync(v => v.Id == entidadId && v.Activo, ct);
+                if (venta is null || venta.Estado == EstadoVenta.Anulada || venta.Pagos.Count > 0 || venta.Comprobante != null) return false;
+
+                // Las líneas que vienen de una orden llevan el precio que se resolvió en la orden.
+                var lineas = venta.Detalles
+                    .Where(d => d.Producto != null && d.DetalleServicioOrigenId == null
+                        && Math.Abs(d.PrecioUnitario - d.Producto.PrecioVenta) > 0.001m)
+                    .ToList();
+                if (lineas.Count == 0) return false;
+
+                foreach (var linea in lineas)
+                {
+                    linea.PrecioUnitario = linea.Producto!.PrecioVenta;
+                    (linea.SubtotalGravado, linea.MontoIgv, linea.Total, linea.PorcentajeIgvAplicado) =
+                        OrdenServicioService.CalcularFinanzasLinea(linea.Cantidad, linea.PrecioUnitario, linea.TipoAfectacionIgv, igv);
+                    linea.FechaModificacion = DateTime.UtcNow;
+                }
+
+                venta.SubtotalGravado = venta.Detalles.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Gravado).Sum(d => d.SubtotalGravado);
+                venta.SubtotalExonerado = venta.Detalles.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Exonerado).Sum(d => d.Total);
+                venta.SubtotalInafecto = venta.Detalles.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Inafecto).Sum(d => d.Total);
+                venta.MontoIgv = venta.Detalles.Sum(d => d.MontoIgv);
+                venta.Total = decimal.Round(venta.SubtotalGravado + venta.SubtotalExonerado + venta.SubtotalInafecto + venta.MontoIgv, 2, MidpointRounding.AwayFromZero);
+                return true;
+            }
+
+            case "PEDIDOLIMA":
+            {
+                var pedido = await _context.PedidosLima
+                    .Include(p => p.Detalles.Where(d => d.Activo))
+                        .ThenInclude(d => d.Producto)
+                    .FirstOrDefaultAsync(p => p.Id == entidadId && p.Activo, ct);
+                if (pedido is null || pedido.Estado is EstadoPedidoLima.Cancelado or EstadoPedidoLima.Entregado) return false;
+
+                var lineas = pedido.Detalles
+                    .Where(d => d.Producto != null && Math.Abs(d.PrecioUnitario - d.Producto.PrecioVenta) > 0.001m)
+                    .ToList();
+                if (lineas.Count == 0) return false;
+
+                foreach (var linea in lineas)
+                {
+                    linea.PrecioUnitario = linea.Producto!.PrecioVenta;
+                    (linea.SubtotalGravado, linea.MontoIgv, linea.Total, linea.PorcentajeIgvAplicado) =
+                        OrdenServicioService.CalcularFinanzasLinea(linea.Cantidad, linea.PrecioUnitario, linea.TipoAfectacionIgv, igv);
+                    linea.FechaModificacion = DateTime.UtcNow;
+                }
+
+                pedido.SubtotalGravado = pedido.Detalles.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Gravado).Sum(d => d.SubtotalGravado);
+                pedido.SubtotalExonerado = pedido.Detalles.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Exonerado).Sum(d => d.Total);
+                pedido.SubtotalInafecto = pedido.Detalles.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Inafecto).Sum(d => d.Total);
+                pedido.MontoIgv = pedido.Detalles.Sum(d => d.MontoIgv);
+                pedido.Total = pedido.SubtotalGravado + pedido.SubtotalExonerado + pedido.SubtotalInafecto + pedido.MontoIgv;
+                return true;
+            }
+
+            default:
+                return false;
+        }
+    }
+
+    private static string NormalizarEntidad(string entidad)
+    {
+        var entUpper = entidad.Trim().ToUpperInvariant();
+        return (entUpper == "ORDENSERVICIO" || entUpper == "ORDENESSERVICIO") ? "ORDENSERVICIO"
+            : (entUpper == "VENTA" || entUpper == "VENTAS") ? "VENTA"
+            : (entUpper == "PEDIDOLIMA" || entUpper == "PEDIDOSLIMA") ? "PEDIDOLIMA"
+            : entUpper;
     }
 
     /// <summary>Clave de una solicitud por ítem de orden o de pedido.</summary>
@@ -518,9 +637,14 @@ public class AprobacionService : IAprobacionService
         EstadoAprobacionGerencia nuevoEstado,
         string? observaciones,
         Guid? usuarioId,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool precioRestablecido = false)
     {
         if (!Guid.TryParse(entidadIdStr, out var entidadId)) return;
+
+        // Con el precio de vuelta en la lista, el rechazo ya no bloquea: si no queda
+        // otra solicitud vigente, la operación no necesita aprobación.
+        var estadoSinSolicitudes = precioRestablecido ? EstadoAprobacionGerencia.NoAplica : nuevoEstado;
 
         var entUpper = entidad.Trim().ToUpperInvariant();
         var normalizadoEnt = (entUpper == "ORDENSERVICIO" || entUpper == "ORDENESSERVICIO") ? "ORDENSERVICIO"
@@ -589,7 +713,11 @@ public class AprobacionService : IAprobacionService
                     var dId = ObtenerDetalleId(s);
                     if (dId.HasValue)
                     {
-                        return idsActivos.Contains(dId.Value);
+                        // Como en la orden: un ítem rechazado que volvió a su precio base ya no la bloquea.
+                        return idsActivos.Contains(dId.Value)
+                            && !(s.Estado == EstadoAprobacionGerencia.Rechazado
+                                 && s.ValorAnterior is decimal precioBase
+                                 && detallesActivos.Any(d => d.Id == dId.Value && Math.Abs(d.PrecioUnitario - precioBase) < 0.001m));
                     }
                     var item = ObtenerNombreItem(s);
                     if (item != null)
@@ -600,7 +728,7 @@ public class AprobacionService : IAprobacionService
                     return true;
                 }).ToList();
 
-                var estadoAgregado = CalcularEstadoAgregado(solicitudesRelevantes, nuevoEstado);
+                var estadoAgregado = CalcularEstadoAgregado(solicitudesRelevantes, estadoSinSolicitudes);
                 orden.EstadoAprobacionGerencia = estadoAgregado;
                 if (estadoAgregado == EstadoAprobacionGerencia.Aprobado || estadoAgregado == EstadoAprobacionGerencia.Rechazado)
                 {
@@ -616,7 +744,7 @@ public class AprobacionService : IAprobacionService
             var venta = await _context.Ventas.FirstOrDefaultAsync(v => v.Id == entidadId, ct);
             if (venta != null)
             {
-                var estadoAgregado = CalcularEstadoAgregado(todasSolicitudes, nuevoEstado);
+                var estadoAgregado = CalcularEstadoAgregado(SinPreciosRestablecidos(todasSolicitudes, precioRestablecido), estadoSinSolicitudes);
                 venta.EstadoAprobacionGerencia = estadoAgregado;
                 if (estadoAgregado == EstadoAprobacionGerencia.Aprobado || estadoAgregado == EstadoAprobacionGerencia.Rechazado)
                 {
@@ -660,7 +788,7 @@ public class AprobacionService : IAprobacionService
                     return true;
                 }).ToList();
 
-                var estadoAgregado = CalcularEstadoAgregado(solicitudesRelevantes, nuevoEstado);
+                var estadoAgregado = CalcularEstadoAgregado(SinPreciosRestablecidos(solicitudesRelevantes, precioRestablecido), estadoSinSolicitudes);
                 pedido.EstadoAprobacionGerencia = estadoAgregado;
                 if (estadoAgregado == EstadoAprobacionGerencia.Aprobado || estadoAgregado == EstadoAprobacionGerencia.Rechazado)
                 {
@@ -672,6 +800,15 @@ public class AprobacionService : IAprobacionService
             }
         }
     }
+
+    /// <summary>
+    /// En la venta y el pedido la solicitud de precios es una sola para toda la operación:
+    /// si sus precios volvieron a la lista, sus rechazos ya no cuentan.
+    /// </summary>
+    private static List<SolicitudAprobacion> SinPreciosRestablecidos(List<SolicitudAprobacion> solicitudes, bool precioRestablecido) =>
+        precioRestablecido
+            ? solicitudes.Where(s => !(s.Estado == EstadoAprobacionGerencia.Rechazado && s.Tipo == "CambioPrecio")).ToList()
+            : solicitudes;
 
     private static SolicitudAprobacionResponse MapToResponse(SolicitudAprobacion s)
     {

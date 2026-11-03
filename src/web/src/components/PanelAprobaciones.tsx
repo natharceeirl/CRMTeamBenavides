@@ -145,6 +145,7 @@ export function PanelAprobaciones({ orden, titulo = 'Aprobaciones' }: Readonly<P
               {respuestas.includes(PRESUPUESTO.aprobado) && (
                 <Button
                   type={esSoloCliente ? 'primary' : 'default'}
+                  disabled={preciosPorAprobar}
                   onClick={() =>
                     abrir({
                       destino: 'cliente',
@@ -171,6 +172,13 @@ export function PanelAprobaciones({ orden, titulo = 'Aprobaciones' }: Readonly<P
                 >
                   {esSoloCliente ? 'Rechazar presupuesto' : 'El cliente rechazó'}
                 </Button>
+              )}
+              {respuestas.includes(PRESUPUESTO.aprobado) && preciosPorAprobar && (
+                <span className="texto-secundario">
+                  {esSoloCliente
+                    ? 'El taller está revisando los precios: podrás aprobarlo en un momento.'
+                    : 'Se aprueba cuando Gerencia resuelva los precios.'}
+                </span>
               )}
             </div>
           )}

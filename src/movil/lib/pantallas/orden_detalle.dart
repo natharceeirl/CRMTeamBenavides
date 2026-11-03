@@ -786,7 +786,8 @@ class _Aprobaciones extends StatelessWidget {
                   if (respuestas.contains(EstadoPresupuesto.aprobado))
                     FilledButton(
                       style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
-                      onPressed: ocupado ? null : () => alResponder(EstadoPresupuesto.aprobado),
+                      // Con precios esperando a Gerencia el backend no acepta la aprobación.
+                      onPressed: ocupado || preciosPorAprobar ? null : () => alResponder(EstadoPresupuesto.aprobado),
                       child: Text(esCliente ? 'Aprobar presupuesto' : 'El cliente aprobó'),
                     ),
                   if (respuestas.contains(EstadoPresupuesto.rechazado))
@@ -796,6 +797,16 @@ class _Aprobaciones extends StatelessWidget {
                     ),
                 ],
               ),
+              if (respuestas.contains(EstadoPresupuesto.aprobado) && preciosPorAprobar)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    esCliente
+                        ? 'El taller está revisando los precios: podrás aprobarlo en un momento.'
+                        : 'Se aprueba cuando Gerencia resuelva los precios.',
+                    style: const TextStyle(color: Marca.textoSecundario),
+                  ),
+                ),
             ],
           ],
         ),

@@ -84,6 +84,9 @@ public static class DetectorNotificaciones
 
     private sealed record Evento(TipoNotificacion Tipo, object Entidad);
 
+    /// <summary>Gerencia aprobó o rechazó una solicitud: se avisa a quien la pidió.</summary>
+    private sealed record Resolucion(SolicitudAprobacion Solicitud);
+
     public static async Task AgregarAsync(ApplicationDbContext contexto, CancellationToken ct)
     {
         // El interceptor corre antes de que EF detecte los cambios por su cuenta.
@@ -99,6 +102,15 @@ public static class DetectorNotificaciones
                          && solicitud.Activo
                          && solicitud.Estado == EstadoAprobacionGerencia.Pendiente:
                     eventos.Add(new Evento(TipoNotificacion.SolicitudAprobacion, solicitud));
+                    break;
+
+                case SolicitudAprobacion resuelta
+                    when entrada.State == EntityState.Modified
+                         && resuelta.Activo
+                         && resuelta.UsuarioSolicitanteId is { } solicitante
+                         && solicitante != resuelta.UsuarioAprobadorId
+                         && SeResuelve(entrada):
+                    eventos.Add(new Evento(TipoNotificacion.SolicitudAprobacion, new Resolucion(resuelta)));
                     break;
 
                 case OrdenServicio orden:
@@ -128,6 +140,10 @@ public static class DetectorNotificaciones
                 case SolicitudAprobacion solicitud:
                     aprobadores ??= await AprobadoresAsync(contexto, ct);
                     await NotificarSolicitudAsync(contexto, solicitud, aprobadores, ct);
+                    break;
+
+                case Resolucion resolucion:
+                    await NotificarResolucionAsync(contexto, resolucion.Solicitud, ct);
                     break;
 
                 case OrdenServicio orden when evento.Tipo == TipoNotificacion.OrdenLista:
@@ -192,6 +208,15 @@ public static class DetectorNotificaciones
         if (!Equals(dato.CurrentValue, valor)) return false;
         return entrada.State == EntityState.Added
             || (entrada.State == EntityState.Modified && dato.IsModified && !Equals(dato.OriginalValue, valor));
+    }
+
+    /// <summary>La solicitud pasa de pendiente a aprobada o rechazada.</summary>
+    private static bool SeResuelve(EntityEntry entrada)
+    {
+        var estado = entrada.Property(nameof(SolicitudAprobacion.Estado));
+        return estado.IsModified
+            && Equals(estado.OriginalValue, EstadoAprobacionGerencia.Pendiente)
+            && estado.CurrentValue is EstadoAprobacionGerencia.Aprobado or EstadoAprobacionGerencia.Rechazado;
     }
 
     /// <summary>Se asigna un técnico a la orden: al abrirla con técnico o al reasignarla a otro.</summary>
@@ -265,6 +290,33 @@ public static class DetectorNotificaciones
                 EntidadAprobaciones, solicitud.Id);
             nueva.ClaveAgrupacion = clave;
         }
+    }
+
+    /// <summary>
+    /// Quien pidió el precio se entera de la respuesta. Un precio rechazado vuelve al de
+    /// lista, así que la operación sigue sin que tenga que corregirlo.
+    /// </summary>
+    private static async Task NotificarResolucionAsync(ApplicationDbContext contexto, SolicitudAprobacion solicitud, CancellationToken ct)
+    {
+        var aprobada = solicitud.Estado == EstadoAprobacionGerencia.Aprobado;
+        var esPrecio = solicitud.Tipo == "CambioPrecio";
+        var titulo = (esPrecio, aprobada) switch
+        {
+            (true, true) => "Precio aprobado",
+            (true, false) => "Precio rechazado",
+            (false, true) => "Solicitud aprobada",
+            _ => "Solicitud rechazada"
+        };
+
+        var mensaje = await ReferenciaAsync(contexto, solicitud, ct);
+        if (esPrecio && !aprobada) mensaje += ": vuelve al precio de lista";
+        if (!string.IsNullOrWhiteSpace(solicitud.ObservacionesRespuesta)) mensaje += $" · {solicitud.ObservacionesRespuesta.Trim()}";
+
+        // Lleva a la operación; sin un id válido, a la bandeja.
+        var (entidad, entidadId) = Guid.TryParse(solicitud.EntidadId, out var id)
+            ? (solicitud.Entidad, id)
+            : (EntidadAprobaciones, solicitud.Id);
+        Agregar(contexto, solicitud.UsuarioSolicitanteId!.Value, TipoNotificacion.SolicitudAprobacion, titulo, mensaje, entidad, entidadId);
     }
 
     private static bool EsAgrupable(Notificacion n, Guid usuarioId, string clave) =>

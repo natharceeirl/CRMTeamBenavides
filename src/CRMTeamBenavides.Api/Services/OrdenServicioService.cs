@@ -1881,6 +1881,14 @@ public class OrdenServicioService : IOrdenServicioService
                 "El presupuesto todavía no tiene trabajos ni repuestos para responder.");
         }
 
+        // Como al enviarlo: el cliente aprueba precios que Gerencia ya resolvió.
+        if (request.Estado == EstadoPresupuestoCliente.Aprobado
+            && orden.EstadoAprobacionGerencia is EstadoAprobacionGerencia.Pendiente or EstadoAprobacionGerencia.Rechazado)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid(
+                "Hay precios sin aprobar por Gerencia: el cliente aprueba el presupuesto cuando estén resueltos.");
+        }
+
         orden.EstadoPresupuestoCliente = request.Estado;
         orden.FechaRespuestaCliente = DateTime.UtcNow;
         if (!string.IsNullOrWhiteSpace(request.Observaciones))
@@ -1901,10 +1909,9 @@ public class OrdenServicioService : IOrdenServicioService
             Activo          = true
         });
 
-        // Aprobar el presupuesto es aprobar la orden: pasa sola a «Aprobada», salvo que
-        // Gerencia tenga la decisión pendiente o la haya rechazado.
-        var avanzaAAprobada = request.Estado == EstadoPresupuestoCliente.Aprobado
-            && orden.EstadoAprobacionGerencia is not (EstadoAprobacionGerencia.Pendiente or EstadoAprobacionGerencia.Rechazado);
+        // Aprobar el presupuesto es aprobar la orden: pasa sola a «Aprobada». Gerencia ya
+        // resolvió sus precios, porque con algo pendiente no se acepta la aprobación.
+        var avanzaAAprobada = request.Estado == EstadoPresupuestoCliente.Aprobado;
         if (avanzaAAprobada)
         {
             orden.Estado = EstadoOrdenServicio.Aprobada;
@@ -2425,7 +2432,7 @@ public class OrdenServicioService : IOrdenServicioService
         }
     }
 
-    private static void RecalcularTotalesOrden(OrdenServicio orden)
+    internal static void RecalcularTotalesOrden(OrdenServicio orden)
     {
         var detallesActivos = orden.Detalles
             .Where(d => d.Activo)
@@ -2448,7 +2455,7 @@ public class OrdenServicioService : IOrdenServicioService
             2, MidpointRounding.AwayFromZero);
     }
 
-    private static (decimal SubtotalGravado, decimal MontoIgv, decimal Total, decimal PorcentajeIgvAplicado) CalcularFinanzasLinea(
+    internal static (decimal SubtotalGravado, decimal MontoIgv, decimal Total, decimal PorcentajeIgvAplicado) CalcularFinanzasLinea(
         int cantidad, decimal precioUnitario, TipoAfectacionIgv tipoAfectacion, decimal porcentajeIgvVigente)
     {
         decimal subtotalBruto = decimal.Round(cantidad * precioUnitario, 2, MidpointRounding.AwayFromZero);

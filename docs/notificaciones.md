@@ -9,6 +9,7 @@ Avisos a cada usuario: una bandeja en la web y en la app (campanita) y, en la ap
 | Evento | Quién la recibe | Pantalla al tocarla |
 |---|---|---|
 | Nueva solicitud de aprobación | Quien tiene `ordenes.aprobar_gerencia`, menos quien la pidió | Bandeja de aprobaciones |
+| Gerencia aprueba o rechaza una solicitud | Quien la pidió, salvo que la haya resuelto esa misma persona. Un precio rechazado vuelve al de lista | La orden (en la web, también el pedido) |
 | Presupuesto enviado | Cliente | Su orden |
 | Orden pasa a «Lista» | Cliente | Su orden |
 | Pedido a Lima pasa a «Recibido» | Cliente | Su inicio |
