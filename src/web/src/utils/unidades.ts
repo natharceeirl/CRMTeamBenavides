@@ -93,3 +93,15 @@ export function identificadorUnidad(unidad: Pick<VehiculoResponse, 'placa' | 'nu
   if (unidad.numeroSerieVIN) return `Serie ${unidad.numeroSerieVIN}`
   return 'Sin placa ni serie'
 }
+
+/**
+ * Todo por lo que se encuentra una unidad al recibirla: la serie y el motor también
+ * cuando tiene placa, porque la serie es única y la moto nueva todavía no tiene placa.
+ */
+export function textoBusquedaUnidad(
+  unidad: Pick<VehiculoResponse, 'marca' | 'modelo' | 'placa' | 'numeroSerieVIN' | 'numeroMotor' | 'clienteNombre'>,
+): string {
+  return [unidad.marca, unidad.modelo, unidad.placa, unidad.numeroSerieVIN, unidad.numeroMotor, unidad.clienteNombre]
+    .filter(Boolean)
+    .join(' ')
+}

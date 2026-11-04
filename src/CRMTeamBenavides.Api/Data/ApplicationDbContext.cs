@@ -140,7 +140,10 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
                 .IsUnique()
                 .HasFilter("\"Activo\" = true AND \"Placa\" IS NOT NULL AND \"Placa\" <> ''");
 
-            entity.HasIndex(v => v.NumeroSerieVIN);
+            // Cada unidad activa tiene una serie distinta (VIN o número de serie), guardada en mayúsculas.
+            entity.HasIndex(v => v.NumeroSerieVIN)
+                .IsUnique()
+                .HasFilter("\"Activo\" = true AND \"NumeroSerieVIN\" IS NOT NULL AND \"NumeroSerieVIN\" <> ''");
             entity.HasIndex(v => v.NumeroMotor);
             entity.HasIndex(v => v.Modelo);
             entity.HasIndex(v => v.Marca);

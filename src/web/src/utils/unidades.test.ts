@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { identificadorUnidad, lecturaIngresoOrden, lecturaMedidor, nombreTipoUnidad, ordenMidePorHoras, ultimaLecturaRegistrada } from './unidades'
+import {
+  identificadorUnidad,
+  lecturaIngresoOrden,
+  lecturaMedidor,
+  nombreTipoUnidad,
+  ordenMidePorHoras,
+  textoBusquedaUnidad,
+  ultimaLecturaRegistrada,
+} from './unidades'
 import { referenciaOrden } from './formato'
 
 describe('unidades', () => {
@@ -20,6 +28,20 @@ describe('unidades', () => {
   it('usa la serie cuando la unidad no tiene placa', () => {
     expect(identificadorUnidad({ placa: '4521-7B', numeroSerieVIN: 'YAMA2231H122' })).toBe('4521-7B')
     expect(identificadorUnidad({ placa: null, numeroSerieVIN: 'YAMA2231H122' })).toBe('Serie YAMA2231H122')
+  })
+
+  it('la unidad con placa también se encuentra por su serie y su motor', () => {
+    const unidad = {
+      marca: 'Yamaha',
+      modelo: 'FZ 2.0',
+      placa: '4521-7B',
+      numeroSerieVIN: 'ME1RG0710K0001234',
+      numeroMotor: 'G3E7E0123456',
+      clienteNombre: 'Rosa Mamani',
+    }
+    expect(textoBusquedaUnidad(unidad)).toContain('ME1RG0710K0001234')
+    expect(textoBusquedaUnidad(unidad)).toContain('G3E7E0123456')
+    expect(textoBusquedaUnidad({ ...unidad, placa: null, numeroMotor: null })).toBe('Yamaha FZ 2.0 ME1RG0710K0001234 Rosa Mamani')
   })
 
   it('deduce el medidor de la orden por su lectura o por el tipo de unidad', () => {

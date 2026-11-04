@@ -476,6 +476,10 @@ public class OrdenServicioService : IOrdenServicioService
         if (placa is not null && await _context.Vehiculos.AnyAsync(v => v.Placa == placa && v.Activo))
             return (null, ServiceResult<OrdenServicioResponse>.Invalid($"Ya hay una unidad activa con la placa {placa}: búscala por su cliente."));
 
+        var serie = VehiculoService.NormalizarSerie(datos.NumeroSerieVIN);
+        if (serie is not null && await _context.Vehiculos.AnyAsync(v => v.NumeroSerieVIN == serie && v.Activo))
+            return (null, ServiceResult<OrdenServicioResponse>.Invalid($"Ya hay una unidad activa con la serie {serie}: búscala por su serie o por su cliente."));
+
         var lectura = LecturaSegunMedidor(datos.TipoMedidor, request.KilometrajeIngreso, request.HorasUsoIngreso, request.LecturaMedidorIngreso);
         if (lectura < 0)
             return (null, ServiceResult<OrdenServicioResponse>.Invalid("La lectura del medidor no puede ser negativa."));

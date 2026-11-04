@@ -35,6 +35,7 @@ import {
   identificadorUnidad,
   lecturaActualUnidad,
   midePorHoras,
+  textoBusquedaUnidad,
   textoLectura,
   ultimaLecturaRegistrada,
 } from '../utils/unidades'
@@ -453,13 +454,14 @@ export function NuevaOrdenPage() {
                   }
                 >
                   <Select
-                    showSearch={{ optionFilterProp: 'label' }}
+                    showSearch={{ optionFilterProp: 'buscar' }}
                     loading={vehiculos.isPending}
-                    placeholder={cliente ? 'Elige una unidad del cliente' : 'Busca por placa, serie, modelo o cliente'}
+                    placeholder={cliente ? 'Elige una unidad del cliente' : 'Busca por placa, serie, motor, modelo o cliente'}
                     notFoundContent={cliente ? 'El cliente no tiene unidades registradas' : undefined}
                     options={unidadesVisibles.map((vehiculo) => ({
                       value: vehiculo.id,
                       label: `${vehiculo.marca} ${vehiculo.modelo} · ${identificadorUnidad(vehiculo)} · ${vehiculo.clienteNombre}`,
+                      buscar: textoBusquedaUnidad(vehiculo),
                     }))}
                   />
                 </Form.Item>

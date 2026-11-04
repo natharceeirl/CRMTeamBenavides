@@ -90,6 +90,14 @@ public class VehiculoService : IVehiculoService
             }
         }
 
+        // Cada unidad tiene una sola serie: la identifica al entrar y al salir del taller.
+        var serieNormalizada = NormalizarSerie(request.NumeroSerieVIN);
+
+        if (serieNormalizada is not null && await SerieOcupadaAsync(serieNormalizada))
+        {
+            return ServiceResult<VehiculoResponse>.Invalid("Ya existe una unidad activa con esa serie.");
+        }
+
         var vehiculo = ConstruirVehiculo(request);
 
         _context.Vehiculos.Add(vehiculo);
@@ -143,6 +151,13 @@ public class VehiculoService : IVehiculoService
             }
         }
 
+        var serieNormalizada = NormalizarSerie(request.NumeroSerieVIN);
+
+        if (serieNormalizada is not null && await SerieOcupadaAsync(serieNormalizada, exceptoId: id))
+        {
+            return ServiceResult<VehiculoResponse>.Invalid("Ya existe otra unidad activa con esa serie.");
+        }
+
         decimal? lecturaActual = request.LecturaMedidorActual;
         int? kilometraje = request.Kilometraje;
         decimal? horasUso = request.HorasUso;
@@ -168,7 +183,7 @@ public class VehiculoService : IVehiculoService
         vehiculo.Marca                = request.Marca.Trim();
         vehiculo.Modelo               = request.Modelo.Trim();
         vehiculo.Anio                 = request.Anio;
-        vehiculo.NumeroSerieVIN       = string.IsNullOrWhiteSpace(request.NumeroSerieVIN) ? null : request.NumeroSerieVIN.Trim().ToUpperInvariant();
+        vehiculo.NumeroSerieVIN       = serieNormalizada;
         vehiculo.NumeroMotor          = string.IsNullOrWhiteSpace(request.NumeroMotor) ? null : request.NumeroMotor.Trim().ToUpperInvariant();
         vehiculo.TipoMedidor          = request.TipoMedidor;
         vehiculo.Kilometraje          = kilometraje;
@@ -205,6 +220,17 @@ public class VehiculoService : IVehiculoService
     internal static string? NormalizarPlaca(string? placa) =>
         string.IsNullOrWhiteSpace(placa) ? null : placa.Trim().ToUpperInvariant();
 
+    /// <summary>La serie (VIN o número de serie) sin espacios y en mayúsculas, o null si no hay.</summary>
+    internal static string? NormalizarSerie(string? serie) =>
+        string.IsNullOrWhiteSpace(serie) ? null : serie.Trim().ToUpperInvariant();
+
+    /// <summary>
+    /// Si otra unidad activa ya tiene esa serie. La base lo impide con un índice único;
+    /// esto da el mensaje antes de llegar al error.
+    /// </summary>
+    private Task<bool> SerieOcupadaAsync(string serieNormalizada, Guid? exceptoId = null) =>
+        _context.Vehiculos.AnyAsync(v => v.NumeroSerieVIN == serieNormalizada && v.Activo && v.Id != exceptoId);
+
     /// <summary>
     /// La unidad lista para guardar, con la placa y la serie normalizadas y la
     /// lectura en el campo de su medidor. No valida: eso lo hace quien la crea
@@ -239,7 +265,7 @@ public class VehiculoService : IVehiculoService
             Marca                = request.Marca.Trim(),
             Modelo               = request.Modelo.Trim(),
             Anio                 = request.Anio,
-            NumeroSerieVIN       = string.IsNullOrWhiteSpace(request.NumeroSerieVIN) ? null : request.NumeroSerieVIN.Trim().ToUpperInvariant(),
+            NumeroSerieVIN       = NormalizarSerie(request.NumeroSerieVIN),
             NumeroMotor          = string.IsNullOrWhiteSpace(request.NumeroMotor) ? null : request.NumeroMotor.Trim().ToUpperInvariant(),
             TipoMedidor          = request.TipoMedidor,
             Kilometraje          = kilometraje,

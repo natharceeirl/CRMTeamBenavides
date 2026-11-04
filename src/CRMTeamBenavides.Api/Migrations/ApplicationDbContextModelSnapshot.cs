@@ -2581,7 +2581,9 @@ namespace CRMTeamBenavides.Api.Migrations
 
                     b.HasIndex("NumeroMotor");
 
-                    b.HasIndex("NumeroSerieVIN");
+                    b.HasIndex("NumeroSerieVIN")
+                        .IsUnique()
+                        .HasFilter("\"Activo\" = true AND \"NumeroSerieVIN\" IS NOT NULL AND \"NumeroSerieVIN\" <> ''");
 
                     b.HasIndex("Placa")
                         .IsUnique()
