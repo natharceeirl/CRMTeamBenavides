@@ -44,9 +44,10 @@ public class InventarioService : IInventarioService
             query = query.Where(p => p.StockActual <= (p.StockMinimo ?? (p.Categoria.StockMinimoDefault ?? 4)));
         }
 
+        var parametros = await PrecioLista.ParametrosAsync(_context);
         return await query
             .OrderBy(p => p.Nombre)
-            .Select(p => MapToResponse(p))
+            .Select(p => MapToResponse(p, parametros))
             .ToListAsync();
     }
 
@@ -68,7 +69,7 @@ public class InventarioService : IInventarioService
 
         return producto is null
             ? ServiceResult<ProductoResponse>.NotFound()
-            : ServiceResult<ProductoResponse>.Success(MapToResponse(producto));
+            : ServiceResult<ProductoResponse>.Success(MapToResponse(producto, await PrecioLista.ParametrosAsync(_context)));
     }
 
     public async Task<ServiceResult<ProductoResponse>> CreateProductoAsync(CreateProductoRequest request)
@@ -122,6 +123,13 @@ public class InventarioService : IInventarioService
 
         var unidad = string.IsNullOrWhiteSpace(request.Unidad) ? "unidad" : request.Unidad.Trim();
 
+        var parametros = await PrecioLista.ParametrosAsync(_context);
+        var costo = CostoEnSolesSinIgv(request.Costo, request.MonedaCosto, request.CostoIncluyeIgv, parametros);
+        if (costo is null)
+        {
+            return ServiceResult<ProductoResponse>.Invalid(MensajeCostoSinTipoDeCambio);
+        }
+
         var producto = new Producto
         {
             CategoriaId   = request.CategoriaId,
@@ -131,7 +139,9 @@ public class InventarioService : IInventarioService
             Descripcion   = string.IsNullOrWhiteSpace(request.Descripcion) ? null : request.Descripcion.Trim(),
             Unidad        = unidad,
             PrecioVenta   = request.PrecioVenta,
-            Costo         = request.Costo,
+            MonedaPrecio  = request.MonedaPrecio,
+            PrecioIncluyeIgv = request.PrecioIncluyeIgv,
+            Costo         = costo.Value,
             StockActual   = request.StockInicial,
             StockMinimo   = request.StockMinimo,
             Marca         = string.IsNullOrWhiteSpace(request.Marca) ? null : request.Marca.Trim(),
@@ -153,7 +163,7 @@ public class InventarioService : IInventarioService
                     ProductoId    = producto.Id,
                     Tipo          = TipoMovimientoInventario.Entrada,
                     Cantidad      = request.StockInicial,
-                    CostoUnitario = request.Costo,
+                    CostoUnitario = costo.Value,
                     Motivo        = "Inventario inicial",
                     FechaCreacion = DateTime.UtcNow,
                     Activo        = true
@@ -175,7 +185,7 @@ public class InventarioService : IInventarioService
             await _context.SaveChangesAsync();
         }
 
-        return ServiceResult<ProductoResponse>.Success(MapToResponse(producto));
+        return ServiceResult<ProductoResponse>.Success(MapToResponse(producto, parametros));
     }
 
     public async Task<ServiceResult<ProductoResponse>> AltaRapidaProductoAsync(AltaRapidaProductoRequest request)
@@ -224,7 +234,7 @@ public class InventarioService : IInventarioService
         var existente = await _context.Productos.Include(p => p.Categoria).FirstOrDefaultAsync(p => p.Codigo == codigo && p.Activo);
         if (existente != null)
         {
-            return ServiceResult<ProductoResponse>.Success(MapToResponse(existente));
+            return ServiceResult<ProductoResponse>.Success(MapToResponse(existente, await PrecioLista.ParametrosAsync(_context)));
         }
 
         var createReq = new CreateProductoRequest(
@@ -238,7 +248,9 @@ public class InventarioService : IInventarioService
             StockMinimo: 2,
             Costo: 0m,
             Marca: request.Marca?.Trim(),
-            FotoUrl: null
+            FotoUrl: null,
+            MonedaPrecio: request.MonedaPrecio,
+            PrecioIncluyeIgv: request.PrecioIncluyeIgv
         );
 
         return await CreateProductoAsync(createReq);
@@ -297,6 +309,17 @@ public class InventarioService : IInventarioService
             return ServiceResult<ProductoResponse>.Invalid($"Ya existe otro producto registrado con el código '{codigoNormalizado}'.");
         }
 
+        var parametros = await PrecioLista.ParametrosAsync(_context);
+        decimal? costo = null;
+        if (request.Costo.HasValue)
+        {
+            costo = CostoEnSolesSinIgv(request.Costo.Value, request.MonedaCosto, request.CostoIncluyeIgv, parametros);
+            if (costo is null)
+            {
+                return ServiceResult<ProductoResponse>.Invalid(MensajeCostoSinTipoDeCambio);
+            }
+        }
+
         producto.CategoriaId       = request.CategoriaId;
         producto.Categoria         = categoria;
         producto.Codigo            = codigoNormalizado;
@@ -304,9 +327,12 @@ public class InventarioService : IInventarioService
         producto.Descripcion       = string.IsNullOrWhiteSpace(request.Descripcion) ? null : request.Descripcion.Trim();
         producto.Unidad            = string.IsNullOrWhiteSpace(request.Unidad) ? "unidad" : request.Unidad.Trim();
         producto.PrecioVenta       = request.PrecioVenta;
-        if (request.Costo.HasValue)
+        // Sin moneda ni «Incluye IGV» en la petición, el repuesto los conserva.
+        producto.MonedaPrecio      = request.MonedaPrecio ?? producto.MonedaPrecio;
+        producto.PrecioIncluyeIgv  = request.PrecioIncluyeIgv ?? producto.PrecioIncluyeIgv;
+        if (costo.HasValue)
         {
-            producto.Costo = request.Costo.Value;
+            producto.Costo = costo.Value;
         }
         producto.StockMinimo       = request.StockMinimo;
         if (request.Marca != null)
@@ -321,7 +347,7 @@ public class InventarioService : IInventarioService
 
         await _context.SaveChangesAsync();
 
-        return ServiceResult<ProductoResponse>.Success(MapToResponse(producto));
+        return ServiceResult<ProductoResponse>.Success(MapToResponse(producto, parametros));
     }
 
     public async Task<ServiceResult<ProductoResponse>> ActualizarFotoAsync(Guid id, string fotoUrl)
@@ -339,7 +365,7 @@ public class InventarioService : IInventarioService
         producto.FechaModificacion = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
-        return ServiceResult<ProductoResponse>.Success(MapToResponse(producto));
+        return ServiceResult<ProductoResponse>.Success(MapToResponse(producto, await PrecioLista.ParametrosAsync(_context)));
     }
 
     public async Task<ServiceResult<bool>> DeleteProductoAsync(Guid id)
@@ -406,7 +432,7 @@ public class InventarioService : IInventarioService
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            return ServiceResult<ProductoResponse>.Success(MapToResponse(producto));
+            return ServiceResult<ProductoResponse>.Success(MapToResponse(producto, await PrecioLista.ParametrosAsync(_context)));
         }
         catch
         {
@@ -467,7 +493,7 @@ public class InventarioService : IInventarioService
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            return ServiceResult<ProductoResponse>.Success(MapToResponse(producto));
+            return ServiceResult<ProductoResponse>.Success(MapToResponse(producto, await PrecioLista.ParametrosAsync(_context)));
         }
         catch
         {
@@ -540,7 +566,7 @@ public class InventarioService : IInventarioService
                     Motivo = request.Motivo.Trim()
                 });
 
-            return ServiceResult<ProductoResponse>.Success(MapToResponse(producto));
+            return ServiceResult<ProductoResponse>.Success(MapToResponse(producto, await PrecioLista.ParametrosAsync(_context)));
         }
         catch
         {
@@ -629,7 +655,25 @@ public class InventarioService : IInventarioService
             .ToListAsync();
     }
 
-    private static ProductoResponse MapToResponse(Producto p)
+    private const string MensajeCostoSinTipoDeCambio =
+        "El costo está en dólares: registra el tipo de cambio del día en Configuración.";
+
+    /// <summary>
+    /// El costo se guarda en soles y sin IGV: lo que se pagó no se mueve con el dólar, así
+    /// que se convierte una sola vez, al registrarlo. Null si está en dólares sin tipo de cambio.
+    /// </summary>
+    private static decimal? CostoEnSolesSinIgv(decimal costo, MonedaPrecio moneda, bool incluyeIgv, ParametrosPrecio parametros)
+    {
+        var enSoles = costo;
+        if (moneda == MonedaPrecio.USD)
+        {
+            if (parametros.TipoCambio is not decimal tipoCambio) return null;
+            enSoles = decimal.Round(costo * tipoCambio, 2, MidpointRounding.AwayFromZero);
+        }
+        return incluyeIgv ? PrecioLista.QuitarIgv(enSoles, parametros.PorcentajeIgv) : enSoles;
+    }
+
+    private static ProductoResponse MapToResponse(Producto p, ParametrosPrecio parametros)
     {
         int minimoEfectivo = p.ObtenerStockMinimoEfectivo();
         return new ProductoResponse(
@@ -649,6 +693,9 @@ public class InventarioService : IInventarioService
             p.Costo,
             minimoEfectivo,
             p.Marca,
-            p.FotoUrl);
+            p.FotoUrl,
+            p.MonedaPrecio,
+            p.PrecioIncluyeIgv,
+            PrecioLista.Calcular(p, parametros.TipoCambio, parametros.PorcentajeIgv)?.Referencia);
     }
 }

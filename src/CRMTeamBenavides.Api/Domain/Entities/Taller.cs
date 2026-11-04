@@ -171,6 +171,11 @@ public class DetalleServicio : BaseEntity
     public string Descripcion { get; set; } = string.Empty;
     public int Cantidad { get; set; } = 1;
     public decimal PrecioUnitario { get; set; }
+    /// <summary>
+    /// El precio unitario con IGV cuando se cobró así: el total sale de él y la base
+    /// se separa. Nulo si el precio de la línea era sin IGV.
+    /// </summary>
+    public decimal? PrecioUnitarioConIgv { get; set; }
 
     /// <summary>Costo unitario vigente al momento de agregar el ítem (inmutable).</summary>
     public decimal CostoUnitarioHistorico { get; set; }

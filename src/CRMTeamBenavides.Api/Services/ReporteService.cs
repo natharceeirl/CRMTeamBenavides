@@ -145,9 +145,15 @@ public class ReporteService : IReporteService
     // ------------------------------------------------------------------
     public async Task<List<StockBajoResponse>> GetStockBajoAsync()
     {
-        return await _context.Productos
+        // El precio va en soles al tipo de cambio de hoy: un repuesto en dólares sin tipo de cambio va en 0.
+        var parametros = await PrecioLista.ParametrosAsync(_context);
+        var productos = await _context.Productos
+            .Include(p => p.Categoria)
             .Where(p => p.Activo && p.StockActual <= (p.StockMinimo ?? (p.Categoria.StockMinimoDefault ?? 4)))
             .OrderBy(p => p.StockActual - (p.StockMinimo ?? (p.Categoria.StockMinimoDefault ?? 4))) // los más críticos primero
+            .ToListAsync();
+
+        return productos
             .Select(p => new StockBajoResponse(
                 p.Id,
                 p.Codigo,
@@ -157,8 +163,8 @@ public class ReporteService : IReporteService
                 p.StockActual,
                 p.StockMinimo ?? (p.Categoria.StockMinimoDefault ?? 4),
                 (p.StockMinimo ?? (p.Categoria.StockMinimoDefault ?? 4)) - p.StockActual, // Diferencia: cuánto falta para llegar al mínimo
-                p.PrecioVenta))
-            .ToListAsync();
+                PrecioLista.Calcular(p, parametros.TipoCambio, parametros.PorcentajeIgv)?.Referencia ?? 0m))
+            .ToList();
     }
 
     // ------------------------------------------------------------------

@@ -99,6 +99,9 @@ public class DashboardService : IDashboardService
         // 3. Inventario — consultas agregadas directas, sin filtro de fecha
         //    (el stock es estado actual, no histórico en el período)
         // ---------------------------------------------------------------
+        // El valor a precio de venta, en soles: lo que está en dólares va al tipo de cambio de
+        // hoy, o en 0 si no se registró.
+        var tipoCambio = (await PrecioLista.ParametrosAsync(_context)).TipoCambio ?? 0m;
         var inventarioStats = await _context.Productos
             .Where(p => p.Activo)
             .GroupBy(_ => 1) // agregación total en una sola consulta SQL
@@ -106,7 +109,8 @@ public class DashboardService : IDashboardService
             {
                 ConStockBajo = g.Count(p => p.StockActual <= p.StockMinimo),
                 SinStock     = g.Count(p => p.StockActual == 0),
-                ValorTotal   = g.Sum(p => (decimal)p.StockActual * p.PrecioVenta)
+                ValorTotal   = g.Sum(p => (decimal)p.StockActual
+                    * (p.MonedaPrecio == MonedaPrecio.USD ? p.PrecioVenta * tipoCambio : p.PrecioVenta))
             })
             .FirstOrDefaultAsync();
 

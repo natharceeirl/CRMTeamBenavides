@@ -780,6 +780,7 @@ public class OrdenServicioService : IOrdenServicioService
         }
 
         var porcentajeIgvVigente = await _configuracionService.ObtenerPorcentajeIgvVigenteAsync();
+        var tipoCambio = (await PrecioLista.ParametrosAsync(_context)).TipoCambio;
 
         // Determinar TipoItem
         var tipoItem = request.TipoItem ?? (request.ProductoId.HasValue
@@ -825,7 +826,15 @@ public class OrdenServicioService : IOrdenServicioService
 
                 costoHistorico = producto.Costo;
 
-                var precioBase = producto.PrecioVenta;
+                // El precio de lista en soles, con IGV si el repuesto lo incluye: el que
+                // escribe el personal se compara con él en los mismos términos.
+                var lista = PrecioLista.Calcular(producto, tipoCambio, porcentajeIgvVigente);
+                if (lista is null)
+                {
+                    return ServiceResult<DetalleServicioResponse>.Invalid(PrecioLista.MensajeSinTipoDeCambio);
+                }
+
+                var precioBase = lista.Value.Referencia;
                 var precioModificado = false;
                 if (request.PrecioUnitario.HasValue && request.PrecioUnitario.Value >= 0)
                 {
@@ -860,8 +869,9 @@ public class OrdenServicioService : IOrdenServicioService
                 };
                 _context.MovimientosInventario.Add(movimiento);
 
+                var precio = PrecioLista.DeEscrito(precioFinal, producto.PrecioIncluyeIgv, tipoAfectacion, porcentajeIgvVigente);
                 var (subtotalGravado, igvCalculado, totalCalculado, porcIgv) =
-                    CalcularFinanzasLinea(request.Cantidad, precioFinal, tipoAfectacion, porcentajeIgvVigente);
+                    CalcularFinanzasLinea(request.Cantidad, precio.SinIgv, tipoAfectacion, porcentajeIgvVigente, precio.ConIgv);
 
                 var detalle = new DetalleServicio
                 {
@@ -872,7 +882,8 @@ public class OrdenServicioService : IOrdenServicioService
                     Producto               = producto,
                     Descripcion            = descripcion,
                     Cantidad               = request.Cantidad,
-                    PrecioUnitario         = precioFinal,
+                    PrecioUnitario         = precio.SinIgv,
+                    PrecioUnitarioConIgv   = precio.ConIgv,
                     CostoUnitarioHistorico = costoHistorico,
                     TipoAfectacionIgv      = tipoAfectacion,
                     SubtotalGravado        = subtotalGravado,
@@ -1247,14 +1258,20 @@ public class OrdenServicioService : IOrdenServicioService
             return ServiceResult<DetalleServicioResponse>.Invalid("La cantidad debe ser mayor a 0.");
         }
 
+        var parametros = await PrecioLista.ParametrosAsync(_context);
         decimal precioBase = 0m;
         string nombreItem = detalle.Descripcion;
+        // Un repuesto registrado con IGV se escribe y se compara con IGV.
+        var incluyeIgv = false;
         if (detalle.TipoItem == TipoItemServicio.Repuesto && detalle.ProductoId.HasValue)
         {
             var prod = await _context.Productos.FirstOrDefaultAsync(p => p.Id == detalle.ProductoId.Value);
             if (prod != null)
             {
-                precioBase = prod.PrecioVenta;
+                incluyeIgv = prod.PrecioIncluyeIgv;
+                // Sin tipo de cambio, un repuesto en dólares se compara con el precio que ya tenía la línea.
+                precioBase = PrecioLista.Calcular(prod, parametros.TipoCambio, parametros.PorcentajeIgv)?.Referencia
+                    ?? PrecioLista.Referencia(detalle.PrecioUnitario, detalle.PrecioUnitarioConIgv);
                 nombreItem = prod.Nombre;
             }
         }
@@ -1278,7 +1295,10 @@ public class OrdenServicioService : IOrdenServicioService
             var nuevoPrecio = request.PrecioUnitario.Value;
             bool precioDifiere = Math.Abs(nuevoPrecio - precioBase) > 0.001m;
 
-            detalle.PrecioUnitario = nuevoPrecio;
+            var nuevo = PrecioLista.DeEscrito(
+                nuevoPrecio, incluyeIgv, request.TipoAfectacionIgv ?? detalle.TipoAfectacionIgv, parametros.PorcentajeIgv);
+            detalle.PrecioUnitario = nuevo.SinIgv;
+            detalle.PrecioUnitarioConIgv = nuevo.ConIgv;
 
             if (precioDifiere)
             {
@@ -1382,15 +1402,20 @@ public class OrdenServicioService : IOrdenServicioService
             detalle.Descripcion = request.Descripcion.Trim();
         }
 
-        if (request.TipoAfectacionIgv.HasValue)
+        if (request.TipoAfectacionIgv.HasValue && request.TipoAfectacionIgv.Value != detalle.TipoAfectacionIgv)
         {
+            // Una línea exonerada o inafecta no lleva IGV: el precio escrito pasa a ser la base.
+            var escrito = PrecioLista.Referencia(detalle.PrecioUnitario, detalle.PrecioUnitarioConIgv);
+            var segunAfectacion = PrecioLista.DeEscrito(
+                escrito, incluyeIgv || detalle.PrecioUnitarioConIgv.HasValue, request.TipoAfectacionIgv.Value, parametros.PorcentajeIgv);
+            detalle.PrecioUnitario = segunAfectacion.SinIgv;
+            detalle.PrecioUnitarioConIgv = segunAfectacion.ConIgv;
             detalle.TipoAfectacionIgv = request.TipoAfectacionIgv.Value;
         }
 
-        var config = await _context.ConfiguracionesEmpresa.FirstOrDefaultAsync();
-        var igvVigente = config?.PorcentajeIgv ?? 18.00m;
+        var igvVigente = parametros.PorcentajeIgv;
         var (subtotalGravado, igvCalc, totalCalc, porcIgv) =
-            CalcularFinanzasLinea(detalle.Cantidad, detalle.PrecioUnitario, detalle.TipoAfectacionIgv, igvVigente);
+            CalcularFinanzasLinea(detalle.Cantidad, detalle.PrecioUnitario, detalle.TipoAfectacionIgv, igvVigente, detalle.PrecioUnitarioConIgv);
 
         detalle.SubtotalGravado = subtotalGravado;
         detalle.MontoIgv = igvCalc;
@@ -2265,9 +2290,13 @@ public class OrdenServicioService : IOrdenServicioService
         var prodIds = repuestos.Select(r => r.ProductoId!.Value).Distinct().ToList();
         var servIds = servicios.Select(s => s.ServicioId!.Value).Distinct().ToList();
 
-        var prodPrecios = await _context.Productos
-            .Where(p => prodIds.Contains(p.Id))
-            .ToDictionaryAsync(p => p.Id, p => p.PrecioVenta);
+        // El precio de lista de hoy, en los términos en que se escribe la línea (con IGV si
+        // el repuesto lo incluye). Uno en dólares sin tipo de cambio no se puede comparar.
+        var parametros = await PrecioLista.ParametrosAsync(_context);
+        var prodPrecios = (await _context.Productos.Where(p => prodIds.Contains(p.Id)).ToListAsync())
+            .Select(p => (p.Id, Lista: PrecioLista.Calcular(p, parametros.TipoCambio, parametros.PorcentajeIgv)))
+            .Where(x => x.Lista.HasValue)
+            .ToDictionary(x => x.Id, x => x.Lista!.Value.Referencia);
 
         var servPrecios = await _context.Servicios
             .Where(s => servIds.Contains(s.Id))
@@ -2285,7 +2314,8 @@ public class OrdenServicioService : IOrdenServicioService
         var itemsConPrecioModificado = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var r in repuestos)
         {
-            if (prodPrecios.TryGetValue(r.ProductoId!.Value, out var basePrice) && Math.Abs(r.PrecioUnitario - basePrice) > 0.001m)
+            if (prodPrecios.TryGetValue(r.ProductoId!.Value, out var basePrice)
+                && Math.Abs(PrecioLista.Referencia(r.PrecioUnitario, r.PrecioUnitarioConIgv) - basePrice) > 0.001m)
             {
                 detallesConPrecioModificado.Add(r.Id);
                 if (prodNombres.TryGetValue(r.ProductoId!.Value, out var nombre))
@@ -2455,9 +2485,21 @@ public class OrdenServicioService : IOrdenServicioService
             2, MidpointRounding.AwayFromZero);
     }
 
+    /// <param name="precioUnitarioConIgv">
+    /// El precio con IGV cuando se cobra así: el total sale de él y la base se separa, para
+    /// que S/ 10,00 cobre S/ 10,00 y no S/ 9,99 por redondear la base primero.
+    /// </param>
     internal static (decimal SubtotalGravado, decimal MontoIgv, decimal Total, decimal PorcentajeIgvAplicado) CalcularFinanzasLinea(
-        int cantidad, decimal precioUnitario, TipoAfectacionIgv tipoAfectacion, decimal porcentajeIgvVigente)
+        int cantidad, decimal precioUnitario, TipoAfectacionIgv tipoAfectacion, decimal porcentajeIgvVigente,
+        decimal? precioUnitarioConIgv = null)
     {
+        if (precioUnitarioConIgv is decimal conIgv && tipoAfectacion == TipoAfectacionIgv.Gravado)
+        {
+            var totalConIgv = decimal.Round(cantidad * conIgv, 2, MidpointRounding.AwayFromZero);
+            var baseImponible = PrecioLista.QuitarIgv(totalConIgv, porcentajeIgvVigente);
+            return (baseImponible, totalConIgv - baseImponible, totalConIgv, porcentajeIgvVigente);
+        }
+
         decimal subtotalBruto = decimal.Round(cantidad * precioUnitario, 2, MidpointRounding.AwayFromZero);
 
         if (tipoAfectacion == TipoAfectacionIgv.Gravado)
@@ -2481,7 +2523,7 @@ public class OrdenServicioService : IOrdenServicioService
             d.Descripcion,
             d.Cantidad,
             d.PrecioUnitario,
-            d.Cantidad * d.PrecioUnitario,
+            d.PrecioUnitarioConIgv.HasValue ? d.SubtotalGravado : d.Cantidad * d.PrecioUnitario,
             d.TipoItem == TipoItemServicio.Repuesto || d.ProductoId.HasValue,
             d.ServicioId,
             d.Servicio?.Nombre,
@@ -2493,7 +2535,8 @@ public class OrdenServicioService : IOrdenServicioService
             d.SubtotalGravado,
             d.PorcentajeIgvAplicado,
             d.MontoIgv,
-            d.Total);
+            d.Total,
+            d.PrecioUnitarioConIgv);
     }
 
     private static string DeterminarTipoMedidor(Vehiculo? vehiculo)

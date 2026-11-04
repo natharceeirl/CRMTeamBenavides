@@ -85,6 +85,11 @@ public class DetallePedidoLima : BaseEntity
 
     /// <summary>Precio unitario pactado con el cliente al registrar el pedido.</summary>
     public decimal PrecioUnitario { get; set; }
+    /// <summary>
+    /// El precio unitario con IGV cuando se cobró así: el total sale de él y la base
+    /// se separa. Nulo si el precio de la línea era sin IGV.
+    /// </summary>
+    public decimal? PrecioUnitarioConIgv { get; set; }
 
     /// <summary>Costo unitario histórico de adquisición al momento de crear el pedido.</summary>
     public decimal CostoUnitarioHistorico { get; set; }

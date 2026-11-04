@@ -86,7 +86,8 @@ public record DetalleVentaResponse(
     decimal SubtotalGravado = 0m,
     decimal PorcentajeIgvAplicado = 18m,
     decimal MontoIgv = 0m,
-    decimal Total = 0m);
+    decimal Total = 0m,
+    decimal? PrecioUnitarioConIgv = null);
 
 public record ComprobanteResponse(
     Guid Id,

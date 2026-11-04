@@ -213,6 +213,58 @@ public class RechazoPrecioTests : IDisposable
     }
 
     [Fact]
+    public async Task Un_precio_con_IGV_rechazado_vuelve_al_de_lista_con_IGV_y_cobra_exacto()
+    {
+        await _identity.SembrarRolesAsync();
+        var tecnico = await _identity.CrearUsuarioAsync("tecnico@teambenavides.pe", RolesDefinidos.Tecnico);
+        var gerencia = await _identity.CrearUsuarioAsync("gerencia@teambenavides.pe", RolesDefinidos.GerenciaAdmin);
+        var (ordenId, solicitudId) = await _identity.ConAsync(async sp =>
+        {
+            var contexto = sp.GetRequiredService<ApplicationDbContext>();
+            var (cliente, vehiculo, producto) = await DatosBaseAsync(contexto);
+            producto.PrecioIncluyeIgv = true; // S/ 50,00 con IGV
+
+            var orden = new OrdenServicio
+            {
+                NumeroOrden = "OS-000902", ClienteId = cliente.Id, VehiculoId = vehiculo.Id, TecnicoAsignadoId = tecnico.Id,
+                Estado = EstadoOrdenServicio.Diagnostico, EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente, Activo = true
+            };
+            // El técnico pidió S/ 40,00 con IGV.
+            var pedido = CRMTeamBenavides.Api.Services.PrecioLista.DeEscrito(40m, true, TipoAfectacionIgv.Gravado, 18m);
+            var (subtotal, igv, total, porcentaje) = OrdenServicioService.CalcularFinanzasLinea(1, pedido.SinIgv, TipoAfectacionIgv.Gravado, 18m, pedido.ConIgv);
+            var detalle = new DetalleServicio
+            {
+                OrdenServicioId = orden.Id, TipoItem = TipoItemServicio.Repuesto, ProductoId = producto.Id, Descripcion = producto.Nombre,
+                Cantidad = 1, PrecioUnitario = pedido.SinIgv, PrecioUnitarioConIgv = pedido.ConIgv, TipoAfectacionIgv = TipoAfectacionIgv.Gravado,
+                SubtotalGravado = subtotal, MontoIgv = igv, Total = total, PorcentajeIgvAplicado = porcentaje, Activo = true
+            };
+            orden.Detalles.Add(detalle);
+            OrdenServicioService.RecalcularTotalesOrden(orden);
+            var solicitud = new SolicitudAprobacion
+            {
+                Tipo = "CambioPrecio", Entidad = "OrdenServicio", EntidadId = orden.Id.ToString(), UsuarioSolicitanteId = tecnico.Id,
+                Estado = EstadoAprobacionGerencia.Pendiente, DetalleCambio = "Precio con IGV", DetalleId = detalle.Id,
+                ClaveObjetivo = AprobacionService.ClaveDeDetalle(detalle.Id), ValorAnterior = 50m, ValorSolicitado = 40m, Activo = true
+            };
+            contexto.AddRange(orden, solicitud);
+            await contexto.SaveChangesAsync();
+            return (orden.Id, solicitud.Id);
+        });
+
+        var resultado = await _identity.ConAsync(sp => sp.GetRequiredService<AprobacionService>().ResolverSolicitudAsync(
+            solicitudId, new Features.Aprobaciones.ResolverSolicitudAprobacionRequest(EstadoAprobacionGerencia.Rechazado, null), gerencia.Id));
+
+        Assert.True(resultado.IsSuccess, resultado.Error);
+        var orden = await LeerOrdenAsync(ordenId);
+        var linea = Assert.Single(orden.Detalles);
+        Assert.Equal(50m, linea.PrecioUnitarioConIgv);
+        Assert.Equal(42.37m, linea.PrecioUnitario);
+        Assert.Equal(50m, linea.Total);
+        Assert.Equal(50m, orden.Total);
+        Assert.Equal(EstadoAprobacionGerencia.NoAplica, orden.EstadoAprobacionGerencia);
+    }
+
+    [Fact]
     public async Task El_cliente_no_aprueba_el_presupuesto_mientras_Gerencia_no_resuelva_y_si_despues()
     {
         var escenario = await OrdenConPrecioPedidoAsync();

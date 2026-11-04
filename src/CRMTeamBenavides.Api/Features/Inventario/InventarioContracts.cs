@@ -1,5 +1,11 @@
+using CRMTeamBenavides.Domain.Entities;
+
 namespace CRMTeamBenavides.Api.Features.Inventario;
 
+/// <summary>
+/// El precio de venta queda en su moneda y con IGV si así se registra (por defecto). El
+/// costo se convierte al registrarlo: se guarda en soles y sin IGV.
+/// </summary>
 public record CreateProductoRequest(
     Guid CategoriaId,
     string Codigo,
@@ -11,7 +17,11 @@ public record CreateProductoRequest(
     int? StockMinimo = null,
     decimal Costo = 0m,
     string? Marca = null,
-    string? FotoUrl = null);
+    string? FotoUrl = null,
+    MonedaPrecio MonedaPrecio = MonedaPrecio.PEN,
+    bool PrecioIncluyeIgv = true,
+    MonedaPrecio MonedaCosto = MonedaPrecio.PEN,
+    bool CostoIncluyeIgv = false);
 
 public record AltaRapidaProductoRequest(
     string Nombre,
@@ -19,7 +29,9 @@ public record AltaRapidaProductoRequest(
     string? Codigo = null,
     string? Marca = null,
     Guid? CategoriaId = null,
-    int StockInicial = 0);
+    int StockInicial = 0,
+    MonedaPrecio MonedaPrecio = MonedaPrecio.PEN,
+    bool PrecioIncluyeIgv = true);
 
 
 public record UpdateProductoRequest(
@@ -32,7 +44,11 @@ public record UpdateProductoRequest(
     int? StockMinimo = null,
     decimal? Costo = null,
     string? Marca = null,
-    string? FotoUrl = null);
+    string? FotoUrl = null,
+    MonedaPrecio? MonedaPrecio = null,
+    bool? PrecioIncluyeIgv = null,
+    MonedaPrecio MonedaCosto = Domain.Entities.MonedaPrecio.PEN,
+    bool CostoIncluyeIgv = false);
 
 public record ProductoResponse(
     Guid Id,
@@ -51,7 +67,12 @@ public record ProductoResponse(
     decimal Costo = 0m,
     int StockMinimoEfectivo = 4,
     string? Marca = null,
-    string? FotoUrl = null);
+    string? FotoUrl = null,
+    MonedaPrecio MonedaPrecio = MonedaPrecio.PEN,
+    bool PrecioIncluyeIgv = false,
+    // El precio de lista en soles con el tipo de cambio de hoy, en los términos del repuesto
+    // (con IGV si lo incluye). Nulo si está en dólares y no hay tipo de cambio.
+    decimal? PrecioListaSoles = null);
 
 public record RegistrarEntradaRequest(
     int Cantidad,

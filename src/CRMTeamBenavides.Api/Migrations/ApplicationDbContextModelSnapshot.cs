@@ -751,6 +751,10 @@ namespace CRMTeamBenavides.Api.Migrations
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 
+                    b.Property<decimal?>("PrecioUnitarioConIgv")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
                     b.Property<Guid>("ProductoId")
                         .HasColumnType("uuid");
 
@@ -818,6 +822,10 @@ namespace CRMTeamBenavides.Api.Migrations
                         .HasColumnType("numeric(5,2)");
 
                     b.Property<decimal>("PrecioUnitario")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal?>("PrecioUnitarioConIgv")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 
@@ -892,6 +900,10 @@ namespace CRMTeamBenavides.Api.Migrations
                         .HasColumnType("numeric(5,2)");
 
                     b.Property<decimal>("PrecioUnitario")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal?>("PrecioUnitarioConIgv")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 
@@ -2054,9 +2066,15 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Property<Guid?>("ModificadoPorId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("MonedaPrecio")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Nombre")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<bool>("PrecioIncluyeIgv")
+                        .HasColumnType("boolean");
 
                     b.Property<decimal>("PrecioVenta")
                         .HasPrecision(12, 2)

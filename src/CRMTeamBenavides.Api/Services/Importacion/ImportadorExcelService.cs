@@ -262,6 +262,8 @@ public class ImportadorExcelService : IImportadorExcelService
                     Marca = fr.Marca,
                     Costo = fr.Costo,
                     PrecioVenta = fr.PrecioVenta,
+                    MonedaPrecio = fr.MonedaPrecio,
+                    PrecioIncluyeIgv = fr.PrecioIncluyeIgv,
                     StockActual = fr.StockActual,
                     StockMinimo = fr.StockMinimo,
                     FechaCreacion = ahora,
@@ -568,7 +570,8 @@ public class ImportadorExcelService : IImportadorExcelService
             string[] colsClientes = ["TipoDocumento", "NumeroDocumento", "NombreCompleto", "Telefono", "Email", "Direccion"];
             string[] colsUnidades = ["DocumentoPropietario", "TipoUnidad", "Placa", "NumeroSerieVIN", "NumeroMotor", "Marca", "Modelo", "Anio", "TipoMedidor", "LecturaMedidor"];
             string[] colsRepuestosObligatorias = ["Codigo", "Nombre", "Categoria", "UnidadMedida", "Costo", "PrecioVenta", "StockActual", "StockMinimo"];
-            string[] colsRepuestosOpcionales = ["Marca"];
+            // Moneda e IncluyeIgv del precio de venta: sin ellas, en soles y con IGV.
+            string[] colsRepuestosOpcionales = ["Marca", "Moneda", "IncluyeIgv"];
             string[] colsCatalogo = ["Codigo", "Nombre"];
 
             var mapaColsClientes = ValidarYMapearCabeceras(wsClientes!, HojaClientes, colsClientes, null, permitirColumnasExtra: false, errores);
@@ -1130,6 +1133,41 @@ public class ImportadorExcelService : IImportadorExcelService
                         }
                     }
 
+                    // Moneda e IncluyeIgv opcionales: el precio de venta en soles y con IGV si no se indican.
+                    var monedaPrecio = MonedaPrecio.PEN;
+                    if (mapaColsRepuestos.TryGetValue("Moneda", out int colMoneda))
+                    {
+                        var rawMoneda = LeerTexto(row, colMoneda);
+                        if (!string.IsNullOrWhiteSpace(rawMoneda))
+                        {
+                            if (InterpretarMoneda(rawMoneda) is MonedaPrecio moneda)
+                            {
+                                monedaPrecio = moneda;
+                            }
+                            else
+                            {
+                                errores.Add(new ErrorFilaImportacionDto(HojaRepuestos, r, "Moneda", rawMoneda, "La Moneda debe ser PEN (soles) o USD (dólares)."));
+                            }
+                        }
+                    }
+
+                    var precioIncluyeIgv = true;
+                    if (mapaColsRepuestos.TryGetValue("IncluyeIgv", out int colIncluyeIgv))
+                    {
+                        var rawIncluyeIgv = LeerTexto(row, colIncluyeIgv);
+                        if (!string.IsNullOrWhiteSpace(rawIncluyeIgv))
+                        {
+                            if (InterpretarSiNo(rawIncluyeIgv) is bool incluye)
+                            {
+                                precioIncluyeIgv = incluye;
+                            }
+                            else
+                            {
+                                errores.Add(new ErrorFilaImportacionDto(HojaRepuestos, r, "IncluyeIgv", rawIncluyeIgv, "IncluyeIgv debe ser Sí o No."));
+                            }
+                        }
+                    }
+
                     if (errores.Count > erroresAntes)
                     {
                         filasConErrorRepuestos++;
@@ -1150,7 +1188,9 @@ public class ImportadorExcelService : IImportadorExcelService
                             precioVenta,
                             stockActual,
                             stockMinimo,
-                            string.IsNullOrWhiteSpace(rawMarca) ? null : rawMarca.Trim()
+                            string.IsNullOrWhiteSpace(rawMarca) ? null : rawMarca.Trim(),
+                            monedaPrecio,
+                            precioIncluyeIgv
                         ));
                     }
                 }
@@ -1401,7 +1441,7 @@ public class ImportadorExcelService : IImportadorExcelService
     private static void GenerarHojaRepuestos(XLWorkbook workbook)
     {
         var ws = workbook.Worksheets.Add(HojaRepuestos);
-        string[] headers = ["Codigo", "Nombre", "Categoria", "UnidadMedida", "Costo", "PrecioVenta", "StockActual", "StockMinimo"];
+        string[] headers = ["Codigo", "Nombre", "Categoria", "UnidadMedida", "Costo", "PrecioVenta", "StockActual", "StockMinimo", "Moneda", "IncluyeIgv"];
         EstilizarCabeceras(ws, headers);
 
         ws.Column(1).Style.NumberFormat.Format = "@";
@@ -1419,6 +1459,8 @@ public class ImportadorExcelService : IImportadorExcelService
         ws.Cell(2, 6).Value = 48.00;
         ws.Cell(2, 7).Value = 24;
         ws.Cell(2, 8).Value = 6;
+        ws.Cell(2, 9).Value = "PEN";
+        ws.Cell(2, 10).Value = "Sí";
 
         // Fila ejemplo 2
         ws.Cell(3, 1).Value = "5GH-13440-80";
@@ -1429,6 +1471,8 @@ public class ImportadorExcelService : IImportadorExcelService
         ws.Cell(3, 6).Value = 42.00;
         ws.Cell(3, 7).Value = 10;
         ws.Cell(3, 8).Value = 4;
+        ws.Cell(3, 9).Value = "PEN";
+        ws.Cell(3, 10).Value = "Sí";
 
         ws.Columns().AdjustToContents();
     }
@@ -1552,6 +1596,24 @@ public class ImportadorExcelService : IImportadorExcelService
         }
         return true;
     }
+
+    /// <summary>PEN, Soles o S/; USD, Dólares o US$. Null si no se reconoce.</summary>
+    private static MonedaPrecio? InterpretarMoneda(string texto) =>
+        NormalizarClaveTexto(texto).Replace("$", string.Empty).Replace("/", string.Empty).Replace(".", string.Empty) switch
+        {
+            "PEN" or "SOLES" or "SOL" or "S" => MonedaPrecio.PEN,
+            "USD" or "DOLARES" or "DOLAR" or "US" => MonedaPrecio.USD,
+            _ => null
+        };
+
+    /// <summary>Sí, Si, S, true o 1; No, N, false o 0. Null si no se reconoce.</summary>
+    private static bool? InterpretarSiNo(string texto) =>
+        NormalizarClaveTexto(texto) switch
+        {
+            "SI" or "S" or "TRUE" or "1" or "X" => true,
+            "NO" or "N" or "FALSE" or "0" => false,
+            _ => null
+        };
 
     private static string LeerTexto(IXLRow row, int col)
     {
@@ -1841,7 +1903,9 @@ public class ImportadorExcelService : IImportadorExcelService
         decimal PrecioVenta,
         int StockActual,
         int? StockMinimo,
-        string? Marca
+        string? Marca,
+        MonedaPrecio MonedaPrecio,
+        bool PrecioIncluyeIgv
     );
 
     private sealed record FilaCatalogoValidada(

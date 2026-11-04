@@ -265,8 +265,8 @@ public class AprobacionService : IAprobacionService
     {
         if (!Guid.TryParse(solicitud.EntidadId, out var entidadId)) return false;
 
-        var config = await _context.ConfiguracionesEmpresa.FirstOrDefaultAsync(ct);
-        var igv = config?.PorcentajeIgv ?? 18.00m;
+        var parametros = await PrecioLista.ParametrosAsync(_context, ct);
+        var igv = parametros.PorcentajeIgv;
 
         switch (NormalizarEntidad(solicitud.Entidad))
         {
@@ -284,9 +284,12 @@ public class AprobacionService : IAprobacionService
                     return false;
                 }
 
-                detalle.PrecioUnitario = precioBase;
+                // El valor anterior está en los términos de la línea: con IGV si se cobraba así.
+                var precio = PrecioLista.DeEscrito(precioBase, detalle.PrecioUnitarioConIgv.HasValue, detalle.TipoAfectacionIgv, igv);
+                detalle.PrecioUnitario = precio.SinIgv;
+                detalle.PrecioUnitarioConIgv = precio.ConIgv;
                 (detalle.SubtotalGravado, detalle.MontoIgv, detalle.Total, detalle.PorcentajeIgvAplicado) =
-                    OrdenServicioService.CalcularFinanzasLinea(detalle.Cantidad, precioBase, detalle.TipoAfectacionIgv, igv);
+                    OrdenServicioService.CalcularFinanzasLinea(detalle.Cantidad, precio.SinIgv, detalle.TipoAfectacionIgv, igv, precio.ConIgv);
                 detalle.FechaModificacion = DateTime.UtcNow;
                 OrdenServicioService.RecalcularTotalesOrden(orden);
                 return true;
@@ -304,16 +307,20 @@ public class AprobacionService : IAprobacionService
 
                 // Las líneas que vienen de una orden llevan el precio que se resolvió en la orden.
                 var lineas = venta.Detalles
-                    .Where(d => d.Producto != null && d.DetalleServicioOrigenId == null
-                        && Math.Abs(d.PrecioUnitario - d.Producto.PrecioVenta) > 0.001m)
+                    .Where(d => d.Producto != null && d.DetalleServicioOrigenId == null)
+                    .Select(d => (Linea: d, Lista: PrecioLista.Calcular(d.Producto!, parametros.TipoCambio, igv)))
+                    .Where(x => x.Lista.HasValue
+                        && Math.Abs(PrecioLista.Referencia(x.Linea.PrecioUnitario, x.Linea.PrecioUnitarioConIgv) - x.Lista.Value.Referencia) > 0.001m)
                     .ToList();
                 if (lineas.Count == 0) return false;
 
-                foreach (var linea in lineas)
+                foreach (var (linea, lista) in lineas)
                 {
-                    linea.PrecioUnitario = linea.Producto!.PrecioVenta;
+                    var precio = PrecioLista.DeEscrito(lista!.Value.Referencia, linea.Producto!.PrecioIncluyeIgv, linea.TipoAfectacionIgv, igv);
+                    linea.PrecioUnitario = precio.SinIgv;
+                    linea.PrecioUnitarioConIgv = precio.ConIgv;
                     (linea.SubtotalGravado, linea.MontoIgv, linea.Total, linea.PorcentajeIgvAplicado) =
-                        OrdenServicioService.CalcularFinanzasLinea(linea.Cantidad, linea.PrecioUnitario, linea.TipoAfectacionIgv, igv);
+                        OrdenServicioService.CalcularFinanzasLinea(linea.Cantidad, precio.SinIgv, linea.TipoAfectacionIgv, igv, precio.ConIgv);
                     linea.FechaModificacion = DateTime.UtcNow;
                 }
 
@@ -334,15 +341,20 @@ public class AprobacionService : IAprobacionService
                 if (pedido is null || pedido.Estado is EstadoPedidoLima.Cancelado or EstadoPedidoLima.Entregado) return false;
 
                 var lineas = pedido.Detalles
-                    .Where(d => d.Producto != null && Math.Abs(d.PrecioUnitario - d.Producto.PrecioVenta) > 0.001m)
+                    .Where(d => d.Producto != null)
+                    .Select(d => (Linea: d, Lista: PrecioLista.Calcular(d.Producto!, parametros.TipoCambio, igv)))
+                    .Where(x => x.Lista.HasValue
+                        && Math.Abs(PrecioLista.Referencia(x.Linea.PrecioUnitario, x.Linea.PrecioUnitarioConIgv) - x.Lista.Value.Referencia) > 0.001m)
                     .ToList();
                 if (lineas.Count == 0) return false;
 
-                foreach (var linea in lineas)
+                foreach (var (linea, lista) in lineas)
                 {
-                    linea.PrecioUnitario = linea.Producto!.PrecioVenta;
+                    var precio = PrecioLista.DeEscrito(lista!.Value.Referencia, linea.Producto!.PrecioIncluyeIgv, linea.TipoAfectacionIgv, igv);
+                    linea.PrecioUnitario = precio.SinIgv;
+                    linea.PrecioUnitarioConIgv = precio.ConIgv;
                     (linea.SubtotalGravado, linea.MontoIgv, linea.Total, linea.PorcentajeIgvAplicado) =
-                        OrdenServicioService.CalcularFinanzasLinea(linea.Cantidad, linea.PrecioUnitario, linea.TipoAfectacionIgv, igv);
+                        OrdenServicioService.CalcularFinanzasLinea(linea.Cantidad, precio.SinIgv, linea.TipoAfectacionIgv, igv, precio.ConIgv);
                     linea.FechaModificacion = DateTime.UtcNow;
                 }
 
@@ -717,7 +729,8 @@ public class AprobacionService : IAprobacionService
                         return idsActivos.Contains(dId.Value)
                             && !(s.Estado == EstadoAprobacionGerencia.Rechazado
                                  && s.ValorAnterior is decimal precioBase
-                                 && detallesActivos.Any(d => d.Id == dId.Value && Math.Abs(d.PrecioUnitario - precioBase) < 0.001m));
+                                 && detallesActivos.Any(d => d.Id == dId.Value
+                                     && Math.Abs(PrecioLista.Referencia(d.PrecioUnitario, d.PrecioUnitarioConIgv) - precioBase) < 0.001m));
                     }
                     var item = ObtenerNombreItem(s);
                     if (item != null)

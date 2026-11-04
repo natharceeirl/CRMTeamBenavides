@@ -10,6 +10,13 @@ public class CategoriaProducto : BaseEntity
     public ICollection<Producto> Productos { get; set; } = new List<Producto>();
 }
 
+/// <summary>Moneda en que se registró el precio de venta del repuesto.</summary>
+public enum MonedaPrecio
+{
+    PEN,
+    USD
+}
+
 public class Producto : BaseEntity
 {
     public Guid CategoriaId { get; set; }
@@ -22,10 +29,19 @@ public class Producto : BaseEntity
     public string? Marca { get; set; }
     public string? FotoUrl { get; set; }
 
-    /// <summary>Precio de venta al público sin IGV o con afectación correspondiente.</summary>
+    /// <summary>
+    /// Precio de venta tal como se registró: en <see cref="MonedaPrecio"/> y con IGV si
+    /// <see cref="PrecioIncluyeIgv"/>. En soles y al tipo de cambio del día lo traduce
+    /// <c>PrecioLista</c>; nadie debe usarlo directo como monto en soles.
+    /// </summary>
     public decimal PrecioVenta { get; set; }
 
-    /// <summary>Costo de adquisición o reposición del producto/repuesto.</summary>
+    public MonedaPrecio MonedaPrecio { get; set; } = MonedaPrecio.PEN;
+
+    /// <summary>Si el precio ya incluye IGV: se cobra tal cual y la base se separa de él.</summary>
+    public bool PrecioIncluyeIgv { get; set; }
+
+    /// <summary>Costo de adquisición o reposición, siempre en soles y sin IGV.</summary>
     public decimal Costo { get; set; }
 
     public int StockActual { get; set; }

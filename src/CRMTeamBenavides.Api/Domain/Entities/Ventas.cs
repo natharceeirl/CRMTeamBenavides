@@ -104,6 +104,11 @@ public class DetalleVenta : BaseEntity
 
     public int Cantidad { get; set; }
     public decimal PrecioUnitario { get; set; }
+    /// <summary>
+    /// El precio unitario con IGV cuando se cobró así: el total sale de él y la base
+    /// se separa. Nulo si el precio de la línea era sin IGV.
+    /// </summary>
+    public decimal? PrecioUnitarioConIgv { get; set; }
     public decimal CostoUnitarioHistorico { get; set; }
     public TipoAfectacionIgv TipoAfectacionIgv { get; set; } = TipoAfectacionIgv.Gravado;
     public decimal SubtotalGravado { get; set; }

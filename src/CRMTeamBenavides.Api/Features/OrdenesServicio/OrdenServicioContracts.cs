@@ -123,7 +123,8 @@ public record DetalleServicioResponse(
     decimal SubtotalGravado = 0m,
     decimal PorcentajeIgvAplicado = 18.00m,
     decimal MontoIgv = 0m,
-    decimal Total = 0m);
+    decimal Total = 0m,
+    decimal? PrecioUnitarioConIgv = null);
 
 public record HistorialEstadoOrdenResponse(
     Guid Id,

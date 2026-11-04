@@ -156,6 +156,7 @@ public class VentaService : IVentaService
 
         var config = await _context.ConfiguracionesEmpresa.FirstOrDefaultAsync();
         var porcentajeIgv = config?.PorcentajeIgv ?? 18.00m;
+        var parametros = new ParametrosPrecio(porcentajeIgv, config?.TipoCambioVigente is > 0 ? config.TipoCambioVigente : null);
 
         // -------------------------------------------------------------------
         // CASO A: VENTA VINCULADA A ORDEN DE SERVICIO (Liquidación de taller)
@@ -241,6 +242,7 @@ public class VentaService : IVentaService
                         DetalleServicioOrigenId = det.Id,
                         Cantidad                = det.Cantidad,
                         PrecioUnitario          = det.PrecioUnitario,
+                        PrecioUnitarioConIgv    = det.PrecioUnitarioConIgv,
                         CostoUnitarioHistorico  = det.CostoUnitarioHistorico,
                         TipoAfectacionIgv       = det.TipoAfectacionIgv,
                         SubtotalGravado         = det.SubtotalGravado,
@@ -276,8 +278,13 @@ public class VentaService : IVentaService
                         return ServiceResult<VentaDetalleResponse>.Invalid($"El producto indicado ({item.ProductoId}) no existe o está inactivo.");
                     }
 
-                    var precioBase = prod.PrecioVenta;
-                    var precioUnitario = item.PrecioUnitario ?? precioBase;
+                    var calculo = PrecioDeRepuesto(prod, item.Cantidad, item.PrecioUnitario, TipoAfectacionIgv.Gravado, parametros);
+                    if (calculo is null)
+                    {
+                        return ServiceResult<VentaDetalleResponse>.Invalid(PrecioLista.MensajeSinTipoDeCambio);
+                    }
+                    var precioBase = calculo.Lista;
+                    var precioUnitario = calculo.Escrito;
 
                     if (Math.Abs(precioUnitario - precioBase) > 0.001m || (item.Descuento.HasValue && item.Descuento.Value > 0))
                     {
@@ -292,10 +299,6 @@ public class VentaService : IVentaService
                         });
                     }
 
-                    var subtotalGravado = item.Cantidad * precioUnitario;
-                    var igvCalculado = Math.Round(subtotalGravado * (porcentajeIgv / 100m), 2, MidpointRounding.AwayFromZero);
-                    var totalCalculado = subtotalGravado + igvCalculado;
-
                     var detVenta = new DetalleVenta
                     {
                         VentaId                = ventaOs.Id,
@@ -304,13 +307,14 @@ public class VentaService : IVentaService
                         Producto               = prod,
                         TipoItem               = TipoItemServicio.Repuesto,
                         Cantidad               = item.Cantidad,
-                        PrecioUnitario         = precioUnitario,
+                        PrecioUnitario         = calculo.Precio.SinIgv,
+                        PrecioUnitarioConIgv   = calculo.Precio.ConIgv,
                         CostoUnitarioHistorico = prod.Costo,
                         TipoAfectacionIgv      = TipoAfectacionIgv.Gravado,
-                        SubtotalGravado        = subtotalGravado,
-                        PorcentajeIgvAplicado  = porcentajeIgv,
-                        MontoIgv               = igvCalculado,
-                        Total                  = totalCalculado,
+                        SubtotalGravado        = calculo.SubtotalGravado,
+                        PorcentajeIgvAplicado  = calculo.PorcentajeIgv,
+                        MontoIgv               = calculo.MontoIgv,
+                        Total                  = calculo.Total,
                         FechaCreacion          = DateTime.UtcNow,
                         Activo                 = true
                     };
@@ -429,8 +433,14 @@ public class VentaService : IVentaService
             {
                 var prod = productos[item.ProductoId];
 
-                var precioBase = prod.PrecioVenta;
-                var precioUnitario = item.PrecioUnitario ?? precioBase;
+                var afectacion = item.TipoAfectacionIgv ?? TipoAfectacionIgv.Gravado;
+                var calculo = PrecioDeRepuesto(prod, item.Cantidad, item.PrecioUnitario, afectacion, parametros);
+                if (calculo is null)
+                {
+                    return ServiceResult<VentaDetalleResponse>.Invalid(PrecioLista.MensajeSinTipoDeCambio);
+                }
+                var precioBase = calculo.Lista;
+                var precioUnitario = calculo.Escrito;
 
                 if (Math.Abs(precioUnitario - precioBase) > 0.001m || (item.Descuento.HasValue && item.Descuento.Value > 0))
                 {
@@ -445,14 +455,6 @@ public class VentaService : IVentaService
                     });
                 }
 
-                var afectacion = item.TipoAfectacionIgv ?? TipoAfectacionIgv.Gravado;
-                var subtotalItem = item.Cantidad * precioUnitario;
-                var subtotalGravado = afectacion == TipoAfectacionIgv.Gravado ? subtotalItem : 0m;
-                var igvCalculado = afectacion == TipoAfectacionIgv.Gravado
-                    ? Math.Round(subtotalGravado * (porcentajeIgv / 100m), 2, MidpointRounding.AwayFromZero)
-                    : 0m;
-                var totalCalculado = subtotalItem + igvCalculado;
-
                 var detalle = new DetalleVenta
                 {
                     VentaId                = cotizacion.Id,
@@ -461,13 +463,14 @@ public class VentaService : IVentaService
                     Producto               = prod,
                     TipoItem               = TipoItemServicio.Repuesto,
                     Cantidad               = item.Cantidad,
-                    PrecioUnitario         = precioUnitario,
+                    PrecioUnitario         = calculo.Precio.SinIgv,
+                    PrecioUnitarioConIgv   = calculo.Precio.ConIgv,
                     CostoUnitarioHistorico = prod.Costo,
                     TipoAfectacionIgv      = afectacion,
-                    SubtotalGravado        = subtotalGravado,
-                    PorcentajeIgvAplicado  = afectacion == TipoAfectacionIgv.Gravado ? porcentajeIgv : 0m,
-                    MontoIgv               = igvCalculado,
-                    Total                  = totalCalculado,
+                    SubtotalGravado        = calculo.SubtotalGravado,
+                    PorcentajeIgvAplicado  = calculo.PorcentajeIgv,
+                    MontoIgv               = calculo.MontoIgv,
+                    Total                  = calculo.Total,
                     FechaCreacion          = DateTime.UtcNow,
                     Activo                 = true
                 };
@@ -574,8 +577,14 @@ public class VentaService : IVentaService
             {
                 var prod = productos[item.ProductoId];
 
-                var precioBase = prod.PrecioVenta;
-                var precioUnitario = item.PrecioUnitario ?? precioBase;
+                var afectacion = item.TipoAfectacionIgv ?? TipoAfectacionIgv.Gravado;
+                var calculo = PrecioDeRepuesto(prod, item.Cantidad, item.PrecioUnitario, afectacion, parametros);
+                if (calculo is null)
+                {
+                    return ServiceResult<VentaDetalleResponse>.Invalid(PrecioLista.MensajeSinTipoDeCambio);
+                }
+                var precioBase = calculo.Lista;
+                var precioUnitario = calculo.Escrito;
 
                 if (Math.Abs(precioUnitario - precioBase) > 0.001m || (item.Descuento.HasValue && item.Descuento.Value > 0))
                 {
@@ -593,14 +602,6 @@ public class VentaService : IVentaService
                 prod.StockActual -= item.Cantidad;
                 prod.FechaModificacion = DateTime.UtcNow;
 
-                var afectacion = item.TipoAfectacionIgv ?? TipoAfectacionIgv.Gravado;
-                var subtotalItem = item.Cantidad * precioUnitario;
-                var subtotalGravado = afectacion == TipoAfectacionIgv.Gravado ? subtotalItem : 0m;
-                var igvCalculado = afectacion == TipoAfectacionIgv.Gravado
-                    ? Math.Round(subtotalGravado * (porcentajeIgv / 100m), 2, MidpointRounding.AwayFromZero)
-                    : 0m;
-                var totalCalculado = subtotalItem + igvCalculado;
-
                 var detalle = new DetalleVenta
                 {
                     VentaId                = venta.Id,
@@ -609,13 +610,14 @@ public class VentaService : IVentaService
                     Producto               = prod,
                     TipoItem               = TipoItemServicio.Repuesto,
                     Cantidad               = item.Cantidad,
-                    PrecioUnitario         = precioUnitario,
+                    PrecioUnitario         = calculo.Precio.SinIgv,
+                    PrecioUnitarioConIgv   = calculo.Precio.ConIgv,
                     CostoUnitarioHistorico = prod.Costo,
                     TipoAfectacionIgv      = afectacion,
-                    SubtotalGravado        = subtotalGravado,
-                    PorcentajeIgvAplicado  = afectacion == TipoAfectacionIgv.Gravado ? porcentajeIgv : 0m,
-                    MontoIgv               = igvCalculado,
-                    Total                  = totalCalculado,
+                    SubtotalGravado        = calculo.SubtotalGravado,
+                    PorcentajeIgvAplicado  = calculo.PorcentajeIgv,
+                    MontoIgv               = calculo.MontoIgv,
+                    Total                  = calculo.Total,
                     FechaCreacion          = DateTime.UtcNow,
                     Activo                 = true
                 };
@@ -750,8 +752,7 @@ public class VentaService : IVentaService
             return ServiceResult<VentaDetalleResponse>.Invalid("No se puede modificar una venta que ya cuenta con comprobante emitido.");
         }
 
-        var config = await _context.ConfiguracionesEmpresa.FirstOrDefaultAsync();
-        var porcentajeIgv = config?.PorcentajeIgv ?? 18.00m;
+        var parametros = await PrecioLista.ParametrosAsync(_context);
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
@@ -854,8 +855,15 @@ public class VentaService : IVentaService
             foreach (var item in request.Detalles)
             {
                 var prod = productos[item.ProductoId];
-                var precioBase = prod.PrecioVenta;
-                var precioUnitario = item.PrecioUnitario ?? precioBase;
+                var afectacion = item.TipoAfectacionIgv ?? TipoAfectacionIgv.Gravado;
+                var calculo = PrecioDeRepuesto(prod, item.Cantidad, item.PrecioUnitario, afectacion, parametros);
+                if (calculo is null)
+                {
+                    await transaction.RollbackAsync();
+                    return ServiceResult<VentaDetalleResponse>.Invalid(PrecioLista.MensajeSinTipoDeCambio);
+                }
+                var precioBase = calculo.Lista;
+                var precioUnitario = calculo.Escrito;
 
                 bool precioModificado = Math.Abs(precioUnitario - precioBase) > 0.001m;
                 bool tieneDescuento = item.Descuento.HasValue && item.Descuento.Value > 0;
@@ -866,18 +874,10 @@ public class VentaService : IVentaService
                     detallesCambio.Add(new AprobacionService.CambioPrecioLinea(prod.Nombre, precioBase, precioUnitario, item.Descuento ?? 0m));
                 }
 
-                var afectacion = item.TipoAfectacionIgv ?? TipoAfectacionIgv.Gravado;
-                var subtotalItem = item.Cantidad * precioUnitario;
-                var subtotalGravado = afectacion == TipoAfectacionIgv.Gravado ? subtotalItem : 0m;
-                var igvCalculado = afectacion == TipoAfectacionIgv.Gravado
-                    ? decimal.Round(subtotalItem * (porcentajeIgv / 100m), 2, MidpointRounding.AwayFromZero)
-                    : 0m;
-                var totalLinea = decimal.Round(subtotalItem + igvCalculado, 2, MidpointRounding.AwayFromZero);
-
-                subtotalGravadoTotal += subtotalGravado;
-                if (afectacion == TipoAfectacionIgv.Exonerado) subtotalExoneradoTotal += subtotalItem;
-                if (afectacion == TipoAfectacionIgv.Inafecto) subtotalInafectoTotal += subtotalItem;
-                montoIgvTotal += igvCalculado;
+                subtotalGravadoTotal += calculo.SubtotalGravado;
+                if (afectacion == TipoAfectacionIgv.Exonerado) subtotalExoneradoTotal += calculo.Total;
+                if (afectacion == TipoAfectacionIgv.Inafecto) subtotalInafectoTotal += calculo.Total;
+                montoIgvTotal += calculo.MontoIgv;
 
                 var nuevoDetalle = new DetalleVenta
                 {
@@ -886,13 +886,14 @@ public class VentaService : IVentaService
                     Producto = prod,
                     TipoItem = TipoItemServicio.Repuesto,
                     Cantidad = item.Cantidad,
-                    PrecioUnitario = precioUnitario,
+                    PrecioUnitario = calculo.Precio.SinIgv,
+                    PrecioUnitarioConIgv = calculo.Precio.ConIgv,
                     CostoUnitarioHistorico = prod.Costo,
                     TipoAfectacionIgv = afectacion,
-                    SubtotalGravado = subtotalGravado,
-                    PorcentajeIgvAplicado = afectacion == TipoAfectacionIgv.Gravado ? porcentajeIgv : 0m,
-                    MontoIgv = igvCalculado,
-                    Total = totalLinea,
+                    SubtotalGravado = calculo.SubtotalGravado,
+                    PorcentajeIgvAplicado = calculo.PorcentajeIgv,
+                    MontoIgv = calculo.MontoIgv,
+                    Total = calculo.Total,
                     Activo = true,
                     FechaCreacion = DateTime.UtcNow
                 };
@@ -1514,6 +1515,28 @@ public class VentaService : IVentaService
         return ServiceResult<VentaDetalleResponse>.Success(MapToDetalleResponse(venta));
     }
 
+    /// <summary>
+    /// Un repuesto en una línea de venta: <see cref="Lista"/> es el precio de lista de hoy y
+    /// <see cref="Escrito"/> el que se cobra, los dos con IGV si el repuesto lo incluye.
+    /// </summary>
+    private sealed record PrecioDeLinea(
+        decimal Lista, decimal Escrito, PrecioDeLista Precio,
+        decimal SubtotalGravado, decimal MontoIgv, decimal Total, decimal PorcentajeIgv);
+
+    /// <summary>Null si el repuesto está en dólares y no hay tipo de cambio.</summary>
+    private static PrecioDeLinea? PrecioDeRepuesto(
+        Producto prod, int cantidad, decimal? escrito, TipoAfectacionIgv afectacion, ParametrosPrecio parametros)
+    {
+        var lista = PrecioLista.Calcular(prod, parametros.TipoCambio, parametros.PorcentajeIgv);
+        if (lista is null) return null;
+
+        var precioEscrito = escrito ?? lista.Value.Referencia;
+        var precio = PrecioLista.DeEscrito(precioEscrito, prod.PrecioIncluyeIgv, afectacion, parametros.PorcentajeIgv);
+        var (subtotalGravado, montoIgv, total, porcentaje) = OrdenServicioService.CalcularFinanzasLinea(
+            cantidad, precio.SinIgv, afectacion, parametros.PorcentajeIgv, precio.ConIgv);
+        return new PrecioDeLinea(lista.Value.Referencia, precioEscrito, precio, subtotalGravado, montoIgv, total, porcentaje);
+    }
+
     private static VentaDetalleResponse MapToDetalleResponse(Venta v)
     {
         var totalPagado = v.Pagos.Where(p => p.Activo).Sum(p => p.Monto);
@@ -1542,7 +1565,7 @@ public class VentaService : IVentaService
                     d.Producto?.Nombre ?? (d.Servicio?.Nombre ?? "Ítem"),
                     d.Cantidad,
                     d.PrecioUnitario,
-                    d.Cantidad * d.PrecioUnitario,
+                    d.PrecioUnitarioConIgv.HasValue ? d.SubtotalGravado : d.Cantidad * d.PrecioUnitario,
                     (int)d.TipoItem,
                     d.TipoItem.ToString(),
                     d.ServicioId,
@@ -1552,7 +1575,8 @@ public class VentaService : IVentaService
                     d.SubtotalGravado,
                     d.PorcentajeIgvAplicado,
                     d.MontoIgv,
-                    d.Total))
+                    d.Total,
+                    d.PrecioUnitarioConIgv))
                 .ToList(),
             v.Activo,
             v.Comprobante != null ? MapToComprobanteResponse(v.Comprobante) : null,

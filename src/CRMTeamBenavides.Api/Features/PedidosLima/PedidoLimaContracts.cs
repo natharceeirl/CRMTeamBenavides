@@ -50,7 +50,8 @@ public record DetallePedidoLimaResponse(
     decimal SubtotalGravado,
     decimal PorcentajeIgvAplicado,
     decimal MontoIgv,
-    decimal Total);
+    decimal Total,
+    decimal? PrecioUnitarioConIgv = null);
 
 public record HistorialEstadoPedidoLimaResponse(
     Guid Id,

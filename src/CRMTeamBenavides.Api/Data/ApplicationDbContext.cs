@@ -310,6 +310,7 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
         modelBuilder.Entity<DetalleServicio>(entity =>
         {
             entity.Property(d => d.PrecioUnitario).HasPrecision(12, 2);
+            entity.Property(d => d.PrecioUnitarioConIgv).HasPrecision(12, 2);
             entity.Property(d => d.CostoUnitarioHistorico).HasPrecision(12, 2);
             entity.Property(d => d.SubtotalGravado).HasPrecision(12, 2);
             entity.Property(d => d.PorcentajeIgvAplicado).HasPrecision(5, 2);
@@ -388,6 +389,7 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
         modelBuilder.Entity<DetalleVenta>(entity =>
         {
             entity.Property(d => d.PrecioUnitario).HasPrecision(12, 2);
+            entity.Property(d => d.PrecioUnitarioConIgv).HasPrecision(12, 2);
             entity.Property(d => d.CostoUnitarioHistorico).HasPrecision(12, 2);
             entity.Property(d => d.SubtotalGravado).HasPrecision(12, 2);
             entity.Property(d => d.PorcentajeIgvAplicado).HasPrecision(5, 2);
@@ -542,6 +544,7 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
             entity.ToTable("DetallesPedidoLima");
 
             entity.Property(d => d.PrecioUnitario).HasPrecision(12, 2);
+            entity.Property(d => d.PrecioUnitarioConIgv).HasPrecision(12, 2);
             entity.Property(d => d.CostoUnitarioHistorico).HasPrecision(12, 2);
             entity.Property(d => d.SubtotalGravado).HasPrecision(12, 2);
             entity.Property(d => d.PorcentajeIgvAplicado).HasPrecision(5, 2);
