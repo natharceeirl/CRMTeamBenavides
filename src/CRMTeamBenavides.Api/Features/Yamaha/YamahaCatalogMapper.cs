@@ -218,10 +218,13 @@ public static partial class YamahaCatalogMapper
     /// <summary>
     /// Traduce el enum <see cref="TipoAtencion"/> del CRM a los códigos de servicio de Yamaha v3.
     /// Códigos admitidos: MP (Mantenimiento Preventivo), R (Reparación), G (Garantía), SG (Servicio Gratuito).
+    /// El mantenimiento completo cuenta como preventivo. Con varios tipos se traduce el
+    /// principal de la orden (ver <c>TiposAtencionOrden</c>).
     /// </summary>
     public static ResultadoMapeo<string> TraducirTipoAtencion(TipoAtencion tipo) => tipo switch
     {
         TipoAtencion.MantenimientoPreventivo => ResultadoMapeo<string>.Exitoso("MP"),
+        TipoAtencion.MantenimientoCompleto => ResultadoMapeo<string>.Exitoso("MP"),
         TipoAtencion.MantenimientoCorrectivo => ResultadoMapeo<string>.Exitoso("R"),
         TipoAtencion.ReclamoGarantia => ResultadoMapeo<string>.Exitoso("G"),
         TipoAtencion.Gratuito => ResultadoMapeo<string>.Exitoso("SG"),

@@ -20,6 +20,7 @@ import { fechaCorta } from '../utils/formato'
 import {
   MODALIDADES_ATENCION,
   TIPOS_ATENCION,
+  reglaTiposAtencion,
   TIPOS_FALLA,
   motivoEntregaInvalida,
   nombresEstado,
@@ -70,7 +71,7 @@ type Campos = {
   clienteNuevo: CamposClienteNuevo
   unidadNueva: CamposUnidadNueva
   tecnicoAsignadoId?: string
-  tipoAtencion: TipoAtencion
+  tiposAtencion: TipoAtencion[]
   modalidadAtencion: ModalidadAtencion
   tipoFalla?: TipoFalla
   motivoFalla?: string
@@ -198,7 +199,9 @@ export function NuevaOrdenPage() {
     const lectura = campos.lecturaIngreso
     const base = {
       tecnicoAsignadoId: campos.tecnicoAsignadoId ?? null,
-      tipoAtencion: campos.tipoAtencion,
+      // El tipo principal lo decide la API con la lista; se manda también para la app antigua.
+      tipoAtencion: campos.tiposAtencion[0],
+      tiposAtencion: campos.tiposAtencion,
       modalidadAtencion: campos.modalidadAtencion,
       tipoFalla: campos.tipoFalla ?? null,
       motivoFalla: sinVacios(campos.motivoFalla),
@@ -289,7 +292,7 @@ export function NuevaOrdenPage() {
           onFinish={enviar}
           scrollToFirstError
           initialValues={{
-            tipoAtencion: 0,
+            tiposAtencion: [0],
             modalidadAtencion: 0,
             clienteNuevo: { tipoDocumento: TIPO_DOCUMENTO_CLIENTE.dni },
             unidadNueva: unidadNuevaInicial,
@@ -506,8 +509,13 @@ export function NuevaOrdenPage() {
           <section className="bloque">
             <h2>Recepción</h2>
             <div className="formulario-grid">
-              <Form.Item label="Tipo de atención" name="tipoAtencion">
-                <Select options={TIPOS_ATENCION} />
+              <Form.Item
+                label="Tipo de atención"
+                name="tiposAtencion"
+                rules={[reglaTiposAtencion]}
+                extra="Se puede elegir más de uno."
+              >
+                <Select mode="multiple" options={TIPOS_ATENCION} placeholder="Elige el tipo de atención" />
               </Form.Item>
               <Form.Item label="Modalidad" name="modalidadAtencion">
                 <Select options={MODALIDADES_ATENCION} />

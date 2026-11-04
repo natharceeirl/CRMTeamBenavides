@@ -795,8 +795,8 @@ export type PlataformaDispositivo = 0 | 1
 /** Gravado = 0 · Exonerado = 1 · Inafecto = 2 */
 export type TipoAfectacionIgv = 0 | 1 | 2
 
-/** MantenimientoPreventivo = 0 · MantenimientoCorrectivo = 1 · ReclamoGarantia = 2 · Gratuito = 3 */
-export type TipoAtencion = 0 | 1 | 2 | 3
+/** MantenimientoPreventivo = 0 · MantenimientoCorrectivo = 1 · ReclamoGarantia = 2 · Gratuito = 3 · MantenimientoCompleto = 4 */
+export type TipoAtencion = 0 | 1 | 2 | 3 | 4
 
 /** Factura = 0 · Boleta = 1 · Ticket = 2 · NotaVenta = 3 · ReciboHonorarios = 4 · Otro = 5 */
 export type TipoComprobanteCompra = 0 | 1 | 2 | 3 | 4 | 5
@@ -1046,6 +1046,7 @@ export type ActualizarOrdenServicioRequest = {
   tipoAtencion?: TipoAtencion | null
   modalidadAtencion?: ModalidadAtencion | null
   tipoFalla?: TipoFalla | null
+  tiposAtencion?: TipoAtencion[] | null
   kilometrajeIngreso?: number | null
   horasUsoIngreso?: number | null
   lecturaMedidorIngreso?: number | null
@@ -1077,6 +1078,7 @@ export type AperturaOrdenServicioRequest = {
   clienteId?: string | null
   clienteNuevo?: ClienteNuevoRequest | null
   unidadNueva?: UnidadNuevaRequest | null
+  tiposAtencion?: TipoAtencion[] | null
 }
 
 export type AprobacionGerenciaRequest = {
@@ -1171,6 +1173,7 @@ export type FormatoAtencionOrdenDto = {
   tipoAtencion: string
   modalidadAtencion: string
   tipoFalla: string | null
+  tiposAtencion: string[] | null
 }
 
 export type FormatoAtencionResponse = {
@@ -1295,6 +1298,7 @@ export type OrdenServicioDetalleResponse = {
   estadoPago: string
   pagos: PagoResponse[] | null
   fechaEnvioPresupuesto: string | null
+  tiposAtencionIds: number[] | null
 }
 
 export type OrdenServicioResponse = {
@@ -1351,6 +1355,7 @@ export type OrdenServicioResponse = {
   saldo: number
   estadoPago: string
   fechaEnvioPresupuesto: string | null
+  tiposAtencionIds: number[] | null
 }
 
 export type RegistrarDiagnosticoRequest = {

@@ -253,6 +253,7 @@ class OrdenServicioApi {
     this.motivoFalla,
     this.solucion,
     this.tipoAtencionId,
+    this.tiposAtencionIds = const [],
     this.tipoFallaId,
     this.kilometrajeIngreso,
     this.horasUsoIngreso,
@@ -298,6 +299,9 @@ class OrdenServicioApi {
         motivoFalla: json['motivoFalla'] as String?,
         solucion: json['solucion'] as String?,
         tipoAtencionId: json['tipoAtencionId'] as int?,
+        tiposAtencionIds: [
+          for (final tipo in json['tiposAtencionIds'] as List<dynamic>? ?? const []) tipo as int,
+        ],
         tipoFallaId: json['tipoFallaId'] as int?,
         kilometrajeIngreso: json['kilometrajeIngreso'] as int?,
         horasUsoIngreso: (json['horasUsoIngreso'] as num?)?.toDouble(),
@@ -345,9 +349,21 @@ class OrdenServicioApi {
   final DateTime? fechaCierre;
   final String? motivoFalla;
   final String? solucion;
+  /// El tipo principal; la orden puede llevar varios en [tiposAtencionIds].
   final int? tipoAtencionId;
+  final List<int> tiposAtencionIds;
   final int? tipoFallaId;
   final int? kilometrajeIngreso;
+
+  /// «Mantenimiento completo + Mantenimiento correctivo». Una orden anterior a la
+  /// lista trae solo su tipo principal.
+  String? get textoTiposAtencion {
+    final tipos = tiposAtencionIds.isNotEmpty
+        ? tiposAtencionIds
+        : [?tipoAtencionId];
+    if (tipos.isEmpty) return null;
+    return tipos.map((tipo) => nombresTipoAtencion[tipo] ?? 'Otro').join(' + ');
+  }
   final double? horasUsoIngreso;
   final double? lecturaMedidorIngreso;
   final double? subtotalGravado;

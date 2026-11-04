@@ -22,7 +22,9 @@ public record AperturaOrdenServicioRequest(
     decimal? LecturaMedidorIngreso = null,
     Guid? ClienteId = null,
     ClienteNuevoRequest? ClienteNuevo = null,
-    UnidadNuevaRequest? UnidadNueva = null);
+    UnidadNuevaRequest? UnidadNueva = null,
+    // Varios tipos de atención; sin la lista, la orden lleva solo TipoAtencion.
+    List<TipoAtencion>? TiposAtencion = null);
 
 /// <summary>Cliente que se registra al abrir su primera orden.</summary>
 public record ClienteNuevoRequest(
@@ -61,6 +63,7 @@ public record ActualizarOrdenServicioRequest(
     TipoAtencion? TipoAtencion = null,
     ModalidadAtencion? ModalidadAtencion = null,
     TipoFalla? TipoFalla = null,
+    List<TipoAtencion>? TiposAtencion = null,
     int? KilometrajeIngreso = null,
     decimal? HorasUsoIngreso = null,
     decimal? LecturaMedidorIngreso = null,
@@ -191,7 +194,8 @@ public record OrdenServicioResponse(
     decimal TotalPagado = 0m,
     decimal Saldo = 0m,
     string EstadoPago = "Pendiente",
-    DateTime? FechaEnvioPresupuesto = null);
+    DateTime? FechaEnvioPresupuesto = null,
+    List<int>? TiposAtencionIds = null);
 
 public record OrdenServicioDetalleResponse(
     Guid Id,
@@ -257,4 +261,5 @@ public record OrdenServicioDetalleResponse(
     decimal Saldo = 0m,
     string EstadoPago = "Pendiente",
     List<PagoResponse>? Pagos = null,
-    DateTime? FechaEnvioPresupuesto = null);
+    DateTime? FechaEnvioPresupuesto = null,
+    List<int>? TiposAtencionIds = null);

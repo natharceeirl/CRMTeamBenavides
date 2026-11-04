@@ -20,7 +20,9 @@ public record FormatoAtencionOrdenDto(
     DateTime? FechaSalida,
     string TipoAtencion,
     string ModalidadAtencion,
-    string? TipoFalla);
+    string? TipoFalla,
+    // Los nombres de los enums, como TipoAtencion: «MantenimientoCompleto», «Gratuito»…
+    List<string>? TiposAtencion = null);
 
 public record FormatoAtencionClienteDto(
     Guid Id,

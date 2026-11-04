@@ -28,6 +28,7 @@ import {
   fechaIngresoOrden,
   estadosVedadosAlTecnico,
   etiquetaDe,
+  tiposAtencionDe,
   motivoBloqueoAprobacion,
   nombresEstado,
   motivoItemsBloqueados,
@@ -274,7 +275,11 @@ export function OrdenDetallePage() {
           <div className="etiquetas-orden">
             <EstadoOrdenApiTag estadoId={datos.estadoId} />
             <Tag style={{ marginInlineEnd: 0 }}>{datos.tecnicoNombre ?? 'Sin técnico'}</Tag>
-            <Tag style={{ marginInlineEnd: 0 }}>{etiquetaDe(TIPOS_ATENCION, datos.tipoAtencionId)}</Tag>
+            {tiposAtencionDe(datos).map((tipo) => (
+              <Tag key={tipo} style={{ marginInlineEnd: 0 }}>
+                {etiquetaDe(TIPOS_ATENCION, tipo)}
+              </Tag>
+            ))}
           </div>
         </div>
         <div className="acciones">

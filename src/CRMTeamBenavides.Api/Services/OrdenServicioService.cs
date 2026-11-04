@@ -205,6 +205,13 @@ public class OrdenServicioService : IOrdenServicioService
             }
         }
 
+        var tiposAtencion = TiposAtencionOrden.Pedidos(request.TiposAtencion, request.TipoAtencion);
+        var errorTipos = TiposAtencionOrden.Validar(tiposAtencion);
+        if (errorTipos is not null)
+        {
+            return ServiceResult<OrdenServicioResponse>.Invalid(errorTipos);
+        }
+
         var ahora = DateTime.UtcNow;
 
         var motivoEntrega = MotivoEntregaInvalida(request.FechaEstimadaEntrega, ahora);
@@ -330,7 +337,8 @@ public class OrdenServicioService : IOrdenServicioService
                 Observaciones          = request.Observaciones?.Trim(),
                 MotivoFalla            = request.MotivoFalla?.Trim() ?? request.Observaciones?.Trim(),
                 FechaEstimadaEntrega   = request.FechaEstimadaEntrega,
-                TipoAtencion           = request.TipoAtencion,
+                TipoAtencion           = tiposAtencion[0],
+                TiposAtencion          = tiposAtencion,
                 ModalidadAtencion      = request.ModalidadAtencion,
                 TipoFalla              = request.TipoFalla,
                 KilometrajeIngreso     = request.KilometrajeIngreso ?? vehiculoOrden.Kilometraje,
@@ -680,7 +688,16 @@ public class OrdenServicioService : IOrdenServicioService
         if (request.Solucion is not null) orden.Solucion = request.Solucion.Trim();
         if (request.Observaciones is not null) orden.Observaciones = request.Observaciones.Trim();
         if (request.FechaEstimadaEntrega.HasValue) orden.FechaEstimadaEntrega = request.FechaEstimadaEntrega.Value;
-        if (request.TipoAtencion.HasValue) orden.TipoAtencion = request.TipoAtencion.Value;
+        if (request.TiposAtencion is { Count: > 0 } || request.TipoAtencion.HasValue)
+        {
+            var tipos = TiposAtencionOrden.Pedidos(request.TiposAtencion, request.TipoAtencion ?? orden.TipoAtencion);
+            var errorTipos = TiposAtencionOrden.Validar(tipos);
+            if (errorTipos is not null)
+            {
+                return ServiceResult<OrdenServicioResponse>.Invalid(errorTipos);
+            }
+            TiposAtencionOrden.Asignar(orden, tipos);
+        }
         if (request.ModalidadAtencion.HasValue) orden.ModalidadAtencion = request.ModalidadAtencion.Value;
         if (request.TipoFalla.HasValue) orden.TipoFalla = request.TipoFalla.Value;
         if (request.KilometrajeIngreso.HasValue) orden.KilometrajeIngreso = request.KilometrajeIngreso.Value;
@@ -2623,7 +2640,8 @@ public class OrdenServicioService : IOrdenServicioService
             totalPagado,
             saldo,
             estadoPago,
-            orden.FechaEnvioPresupuesto);
+            orden.FechaEnvioPresupuesto,
+            TiposAtencionOrden.DeLaOrden(orden).Select(tipo => (int)tipo).ToList());
     }
 
     private static OrdenServicioDetalleResponse MapToDetalleResponse(OrdenServicio orden)
@@ -2756,7 +2774,8 @@ public class OrdenServicioService : IOrdenServicioService
             saldo,
             estadoPago,
              pagos,
-            orden.FechaEnvioPresupuesto);
+            orden.FechaEnvioPresupuesto,
+            TiposAtencionOrden.DeLaOrden(orden).Select(tipo => (int)tipo).ToList());
     }
 
     public async Task<ServiceResult<FormatoAtencionResponse>> GenerarFormatoAtencionAsync(
@@ -2854,7 +2873,8 @@ public class OrdenServicioService : IOrdenServicioService
             orden.FechaSalida,
             orden.TipoAtencion.ToString(),
             orden.ModalidadAtencion.ToString(),
-            orden.TipoFalla?.ToString());
+            orden.TipoFalla?.ToString(),
+            TiposAtencionOrden.DeLaOrden(orden).Select(tipo => tipo.ToString()).ToList());
 
         var trabajoDto = new FormatoAtencionTrabajoDto(
             orden.MotivoFalla,

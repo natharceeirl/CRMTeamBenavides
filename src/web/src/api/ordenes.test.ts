@@ -2,6 +2,9 @@ import dayjs from 'dayjs'
 import { describe, expect, it } from 'vitest'
 import {
   ESTADO,
+  TIPOS_ATENCION,
+  etiquetaDe,
+  tiposAtencionDe,
   GERENCIA,
   PRESUPUESTO,
   esEstadoTerminal,
@@ -167,5 +170,16 @@ describe('etiquetaPresupuesto', () => {
     expect(esperaRespuestaDelCliente({ estadoId: ESTADO.diagnostico, estadoPresupuestoClienteId: PRESUPUESTO.pendiente, total: 120 })).toBe(true)
     expect(esperaRespuestaDelCliente({ estadoId: ESTADO.diagnostico, estadoPresupuestoClienteId: PRESUPUESTO.pendiente, total: 0 })).toBe(false)
     expect(esperaRespuestaDelCliente({ estadoId: ESTADO.abierta, estadoPresupuestoClienteId: PRESUPUESTO.pendiente, total: 120 })).toBe(false)
+  })
+})
+
+describe('tipos de atención', () => {
+  it('la orden con varios tipos los muestra todos; una anterior, su tipo único', () => {
+    expect(tiposAtencionDe({ tiposAtencionIds: [4, 1], tipoAtencionId: 4 }).map((tipo) => etiquetaDe(TIPOS_ATENCION, tipo))).toEqual([
+      'Mantenimiento completo',
+      'Mantenimiento correctivo',
+    ])
+    expect(tiposAtencionDe({ tiposAtencionIds: null, tipoAtencionId: 2 })).toEqual([2])
+    expect(tiposAtencionDe({ tiposAtencionIds: [], tipoAtencionId: null })).toEqual([])
   })
 })

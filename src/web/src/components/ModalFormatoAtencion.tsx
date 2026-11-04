@@ -7,7 +7,7 @@ import { EtiquetaEstado } from './EtiquetaEstado'
 import { entero, fechaHora, importe, nombreDeEnum, soles } from '../utils/formato'
 import { nombresEstado } from '../api/ordenes'
 import { abrirDocumento } from '../utils/impresion'
-import { htmlFormatoAtencion } from '../utils/formatoAtencion'
+import { htmlFormatoAtencion, nombresTiposAtencion } from '../utils/formatoAtencion'
 
 type Props = {
   abierto: boolean
@@ -135,7 +135,7 @@ export function ModalFormatoAtencion({ abierto, ordenServicioId, onCerrar }: Rea
                 </tr>
                 {fila('Ingreso', fechaHora(datos.orden.fechaIngreso))}
                 {fila('Entrega estimada', datos.orden.fechaEstimadaEntrega ? fechaHora(datos.orden.fechaEstimadaEntrega) : null)}
-                {fila('Tipo de atención', `${nombreDeEnum(datos.orden.tipoAtencion)} · ${nombreDeEnum(datos.orden.modalidadAtencion)}`)}
+                {fila('Tipo de atención', `${nombresTiposAtencion(datos.orden)} · ${nombreDeEnum(datos.orden.modalidadAtencion)}`)}
                 {fila('Técnico', datos.trabajo.tecnicoResponsable ?? 'Sin asignar')}
                 {fila('Falla reportada', datos.trabajo.motivoFalla)}
                 {fila('Diagnóstico', datos.trabajo.diagnostico)}

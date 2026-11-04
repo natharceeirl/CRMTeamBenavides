@@ -111,6 +111,7 @@ const nombresTipoAtencion = <int, String>{
   1: 'Mantenimiento correctivo',
   2: 'Reclamo de garantía',
   3: 'Gratuito',
+  4: 'Mantenimiento completo',
 };
 
 /// Enum TipoFalla del backend.

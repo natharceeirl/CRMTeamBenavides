@@ -642,7 +642,7 @@ class _FichaOrden extends StatelessWidget {
                       ? null
                       : '${entero(datos.vehiculoKilometraje!)} km'),
             ),
-            _Dato('Atención', nombresTipoAtencion[orden.tipoAtencionId]),
+            _Dato('Atención', orden.textoTiposAtencion),
             _Dato('Falla', orden.motivoFalla),
             _Dato('Tipo de falla', nombresTipoFalla[orden.tipoFallaId]),
             _Dato('Observaciones', orden.observaciones),

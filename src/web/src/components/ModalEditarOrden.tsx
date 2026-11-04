@@ -3,6 +3,8 @@ import { DatePicker, Form, Input, InputNumber, Modal, Select } from 'antd'
 import {
   MODALIDADES_ATENCION,
   TIPOS_ATENCION,
+  reglaTiposAtencion,
+  tiposAtencionDe,
   TIPOS_FALLA,
   fechaIngresoOrden,
   motivoEntregaInvalida,
@@ -20,7 +22,7 @@ type Props = {
 }
 
 type Campos = {
-  tipoAtencion?: TipoAtencion
+  tiposAtencion?: TipoAtencion[]
   modalidadAtencion?: ModalidadAtencion
   tipoFalla?: TipoFalla
   motivoFalla?: string
@@ -59,7 +61,8 @@ export function ModalEditarOrden({ abierto, orden, onCerrar }: Readonly<Props>) 
     await actualizar.mutateAsync({
       id: orden.id,
       datos: {
-        tipoAtencion: campos.tipoAtencion,
+        tipoAtencion: campos.tiposAtencion?.[0],
+        tiposAtencion: campos.tiposAtencion,
         modalidadAtencion: campos.modalidadAtencion,
         tipoFalla: campos.tipoFalla ?? null,
         motivoFalla: campos.motivoFalla?.trim() ?? '',
@@ -91,7 +94,7 @@ export function ModalEditarOrden({ abierto, orden, onCerrar }: Readonly<Props>) 
         requiredMark={false}
         onFinish={enviar}
         initialValues={{
-          tipoAtencion: orden.tipoAtencionId ?? 0,
+          tiposAtencion: tiposAtencionDe(orden) as TipoAtencion[],
           modalidadAtencion: orden.modalidadAtencionId ?? 0,
           tipoFalla: orden.tipoFallaId ?? undefined,
           motivoFalla: orden.motivoFalla ?? '',
@@ -101,8 +104,8 @@ export function ModalEditarOrden({ abierto, orden, onCerrar }: Readonly<Props>) 
         }}
       >
         <div className="formulario-grid">
-          <Form.Item label="Tipo de atención" name="tipoAtencion">
-            <Select options={TIPOS_ATENCION} />
+          <Form.Item label="Tipo de atención" name="tiposAtencion" rules={[reglaTiposAtencion]}>
+            <Select mode="multiple" options={TIPOS_ATENCION} placeholder="Elige el tipo de atención" />
           </Form.Item>
           <Form.Item label="Modalidad" name="modalidadAtencion">
             <Select options={MODALIDADES_ATENCION} />

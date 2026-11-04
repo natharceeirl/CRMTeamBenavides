@@ -16,7 +16,9 @@ public enum TipoAtencion
     MantenimientoPreventivo,
     MantenimientoCorrectivo,
     ReclamoGarantia,
-    Gratuito
+    Gratuito,
+    /// <summary>Mantenimiento completo. Para Yamaha cuenta como preventivo («MP»).</summary>
+    MantenimientoCompleto
 }
 
 public enum ModalidadAtencion
@@ -98,8 +100,10 @@ public class OrdenServicio : BaseEntity
     public string? Solucion { get; set; }
     public string? Observaciones { get; set; }
 
-    // Clasificación del servicio
+    // Clasificación del servicio. Una orden puede llevar varios tipos de atención; el
+    // principal (TipoAtencion) sale de la lista y es el que usan Yamaha y los reportes.
     public TipoAtencion TipoAtencion { get; set; } = TipoAtencion.MantenimientoPreventivo;
+    public List<TipoAtencion> TiposAtencion { get; set; } = [];
     public ModalidadAtencion ModalidadAtencion { get; set; } = ModalidadAtencion.EnTaller;
     public TipoFalla? TipoFalla { get; set; }
 

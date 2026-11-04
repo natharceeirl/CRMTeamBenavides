@@ -128,7 +128,7 @@ public static class FormatoAtencionHtmlBuilder
             sb.AppendLine($"        <div class=\"data-row\"><span class=\"data-label\">Estimada Entrega:</span><span class=\"data-val\">{data.Orden.FechaEstimadaEntrega.Value:dd/MM/yyyy}</span></div>");
         if (data.Orden.FechaSalida.HasValue)
             sb.AppendLine($"        <div class=\"data-row\"><span class=\"data-label\">Fecha de Salida:</span><span class=\"data-val\">{data.Orden.FechaSalida.Value:dd/MM/yyyy HH:mm}</span></div>");
-        sb.AppendLine($"        <div class=\"data-row\"><span class=\"data-label\">Tipo Atención:</span><span class=\"data-val\">{WebUtility.HtmlEncode(data.Orden.TipoAtencion)} ({WebUtility.HtmlEncode(data.Orden.ModalidadAtencion)})</span></div>");
+        sb.AppendLine($"        <div class=\"data-row\"><span class=\"data-label\">Tipo Atención:</span><span class=\"data-val\">{WebUtility.HtmlEncode(NombresTiposAtencion(data.Orden))} ({WebUtility.HtmlEncode(data.Orden.ModalidadAtencion)})</span></div>");
         sb.AppendLine("      </div>");
 
         sb.AppendLine("      <div class=\"card\">");
@@ -228,5 +228,15 @@ public static class FormatoAtencionHtmlBuilder
         sb.AppendLine("</html>");
 
         return sb.ToString();
+    }
+
+    /// <summary>«Mantenimiento completo + Mantenimiento correctivo»; una orden anterior trae solo su tipo.</summary>
+    private static string NombresTiposAtencion(FormatoAtencionOrdenDto orden)
+    {
+        var nombres = orden.TiposAtencion is { Count: > 0 } ? orden.TiposAtencion : [orden.TipoAtencion];
+        return string.Join(" + ", nombres.Select(nombre =>
+            Enum.TryParse<CRMTeamBenavides.Domain.Entities.TipoAtencion>(nombre, out var tipo)
+                ? CRMTeamBenavides.Api.Services.TiposAtencionOrden.Nombre(tipo)
+                : nombre));
     }
 }

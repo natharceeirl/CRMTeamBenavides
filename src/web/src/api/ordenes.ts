@@ -87,13 +87,29 @@ export function motivoItemsBloqueados(orden: { estadoId: number; ventaId?: strin
   return null
 }
 
-/** Enums TipoAtencion, ModalidadAtencion y TipoFalla del backend, en el mismo orden. */
+/** Enums TipoAtencion, ModalidadAtencion y TipoFalla del backend. */
 export const TIPOS_ATENCION = [
+  { value: 4, label: 'Mantenimiento completo' },
   { value: 0, label: 'Mantenimiento preventivo' },
   { value: 1, label: 'Mantenimiento correctivo' },
   { value: 2, label: 'Reclamo de garantía' },
   { value: 3, label: 'Gratuito' },
 ]
+
+/**
+ * Los tipos de atención de la orden. La API los manda en orden de prioridad; una orden
+ * anterior a la lista trae solo su tipo principal.
+ */
+export const tiposAtencionDe = (orden: { tiposAtencionIds?: number[] | null; tipoAtencionId?: number | null }) =>
+  orden.tiposAtencionIds?.length ? orden.tiposAtencionIds : orden.tipoAtencionId == null ? [] : [orden.tipoAtencionId]
+
+/** Para el formulario: como mínimo un tipo de atención. */
+export const reglaTiposAtencion = {
+  required: true,
+  type: 'array' as const,
+  min: 1,
+  message: 'Elige al menos un tipo de atención',
+}
 
 export const MODALIDADES_ATENCION = [
   { value: 0, label: 'En taller' },

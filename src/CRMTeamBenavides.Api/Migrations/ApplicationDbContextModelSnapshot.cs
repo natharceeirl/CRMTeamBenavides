@@ -1704,6 +1704,10 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Property<int?>("TipoFalla")
                         .HasColumnType("integer");
 
+                    b.PrimitiveCollection<int[]>("TiposAtencion")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
                     b.Property<decimal>("Total")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");

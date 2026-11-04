@@ -4,6 +4,10 @@ import { documentoImprimible, filaDato, lineaTotal } from './documento'
 import { escaparHtml } from './impresion'
 import { entero, fechaHoraConAnio, importe, nombreDeEnum, soles } from './formato'
 
+/** «Mantenimiento completo + Mantenimiento correctivo»; una orden anterior trae solo su tipo. */
+export const nombresTiposAtencion = (orden: { tipoAtencion: string; tiposAtencion?: string[] | null }) =>
+  (orden.tiposAtencion?.length ? orden.tiposAtencion : [orden.tipoAtencion]).map(nombreDeEnum).join(' + ')
+
 /**
  * Hoja imprimible del formato de atención de una orden, con recuadros para la
  * firma del cliente y del taller. Se arma con los datos de
@@ -88,7 +92,7 @@ export function htmlFormatoAtencion(datos: FormatoAtencionResponse): string {
         ${filaDato('Ingreso', fechaHoraConAnio(orden.fechaIngreso))}
         ${filaDato('Entrega estimada', orden.fechaEstimadaEntrega ? fechaHoraConAnio(orden.fechaEstimadaEntrega) : null)}
         ${filaDato('Salida', orden.fechaSalida ? fechaHoraConAnio(orden.fechaSalida) : null)}
-        ${filaDato('Tipo de atención', `${nombreDeEnum(orden.tipoAtencion)} · ${nombreDeEnum(orden.modalidadAtencion)}`)}
+        ${filaDato('Tipo de atención', `${nombresTiposAtencion(orden)} · ${nombreDeEnum(orden.modalidadAtencion)}`)}
         ${filaDato('Tipo de falla', orden.tipoFalla ? nombreDeEnum(orden.tipoFalla) : null)}
       </tbody></table>
     </div>

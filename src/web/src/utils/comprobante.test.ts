@@ -119,9 +119,10 @@ describe('hoja del formato de atención', () => {
         fechaIngreso: '2026-09-30T17:40:00Z',
         fechaEstimadaEntrega: null,
         fechaSalida: null,
-        tipoAtencion: 'MantenimientoPreventivo',
+        tipoAtencion: 'MantenimientoCompleto',
         modalidadAtencion: 'EnTaller',
         tipoFalla: null,
+        tiposAtencion: ['MantenimientoCompleto', 'MantenimientoCorrectivo'],
       },
       cliente: { id: 'c1', nombreCompleto: 'Luis <Quispe>', razonSocial: null, tipoDocumento: 'DNI', numeroDocumento: '40123456', telefono: null, email: null, direccion: null },
       unidad: {
@@ -155,7 +156,8 @@ describe('hoja del formato de atención', () => {
     })
 
     expect(html).toContain('<title>Orden de servicio OS-000024</title>')
-    expect(html).toContain('Mantenimiento preventivo · En taller')
+    // Con varios tipos de atención se leen todos.
+    expect(html).toContain('Mantenimiento completo + Mantenimiento correctivo · En taller')
     expect(html).toContain('Moto acuática · Yamaha VX (2022)')
     expect(html).toContain('86 h')
     expect(html).toContain('Saldo pendiente')

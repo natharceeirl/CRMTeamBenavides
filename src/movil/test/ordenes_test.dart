@@ -181,4 +181,18 @@ void main() {
       expect(fechaHora(null), '—');
     });
   });
+
+  group('tipos de atención', () {
+    test('una orden con varios tipos los muestra todos', () {
+      final detalle = OrdenServicioDetalleApi.desdeJson(
+        {...ordenDePrueba(), 'tipoAtencionId': 4, 'tiposAtencionIds': [4, 1]},
+      );
+      expect(detalle.orden.textoTiposAtencion, 'Mantenimiento completo + Mantenimiento correctivo');
+    });
+
+    test('una orden anterior a la lista muestra su tipo único', () {
+      final detalle = OrdenServicioDetalleApi.desdeJson({...ordenDePrueba(), 'tipoAtencionId': 2});
+      expect(detalle.orden.textoTiposAtencion, 'Reclamo de garantía');
+    });
+  });
 }
