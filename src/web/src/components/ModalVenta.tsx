@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { Button, Form, InputNumber, Modal, Radio, Select, Space } from 'antd'
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons'
-import { useClientes } from '../api/clientes'
 import { useProductos } from '../api/inventario'
 import { useCrearVenta } from '../api/ventas'
 import type { VentaDetalleResponse } from '../api/tipos'
 import { AvisoError } from './AvisoError'
+import { CampoCliente } from './CampoCliente'
 import { precioDistintoAlDeLista } from './AvisoPrecioGerencia'
 import { ModalAltaRapidaRepuesto } from './ModalesAltaRapida'
 import { useSesion } from '../auth/sesion'
@@ -34,7 +34,6 @@ type Campos = {
 
 export function ModalVenta({ abierto, onCerrar, onCreada }: Readonly<Props>) {
   const [formulario] = Form.useForm<Campos>()
-  const clientes = useClientes()
   const productos = useProductos()
   const crear = useCrearVenta()
   const { tienePermiso } = useSesion()
@@ -97,17 +96,7 @@ export function ModalVenta({ abierto, onCerrar, onCreada }: Readonly<Props>) {
         onFinish={enviar}
         initialValues={{ esCotizacion: true, detalles: [{}] }}
       >
-        <Form.Item label="Cliente" name="clienteId" rules={[{ required: true, message: 'Elige el cliente' }]}>
-          <Select
-            showSearch={{ optionFilterProp: 'label' }}
-            loading={clientes.isPending}
-            placeholder="Buscar cliente"
-            options={(clientes.data ?? []).map((cliente) => ({
-              value: cliente.id,
-              label: cliente.nombreCompleto,
-            }))}
-          />
-        </Form.Item>
+        <CampoCliente />
 
         <Form.Item label="Tipo" name="esCotizacion">
           <Radio.Group

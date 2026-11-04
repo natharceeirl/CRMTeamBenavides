@@ -2,11 +2,11 @@ import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 import { Button, DatePicker, Form, Input, InputNumber, Modal, Select, Space } from 'antd'
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons'
-import { useClientes } from '../api/clientes'
 import { useProductos } from '../api/inventario'
 import { useCrearPedidoLima } from '../api/pedidosLima'
 import type { PedidoLimaResponse } from '../api/tipos'
 import { AvisoError } from './AvisoError'
+import { CampoCliente } from './CampoCliente'
 import { soles } from '../utils/formato'
 import { precioListaSoles, textoPrecioLista, totalDeLinea } from '../utils/precios'
 
@@ -35,7 +35,6 @@ const textoOpcional = (valor: string | undefined) => valor?.trim() || null
 
 export function ModalPedidoLima({ abierto, onCerrar, onCreado }: Readonly<Props>) {
   const [formulario] = Form.useForm<Campos>()
-  const clientes = useClientes()
   const productos = useProductos()
   const crear = useCrearPedidoLima()
 
@@ -90,17 +89,7 @@ export function ModalPedidoLima({ abierto, onCerrar, onCreado }: Readonly<Props>
         onFinish={enviar}
         initialValues={{ detalles: [{}] }}
       >
-        <Form.Item label="Cliente" name="clienteId" rules={[{ required: true, message: 'Elige el cliente' }]}>
-          <Select
-            showSearch={{ optionFilterProp: 'label' }}
-            loading={clientes.isPending}
-            placeholder="Buscar cliente"
-            options={(clientes.data ?? []).map((cliente) => ({
-              value: cliente.id,
-              label: cliente.nombreCompleto,
-            }))}
-          />
-        </Form.Item>
+        <CampoCliente />
 
         <Form.List name="detalles">
           {(campos, { add, remove }) => (

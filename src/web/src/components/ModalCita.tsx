@@ -1,14 +1,12 @@
 import dayjs, { type Dayjs } from 'dayjs'
-import { useState } from 'react'
-import { Button, DatePicker, Form, Input, Modal, Select } from 'antd'
-import { useClientes } from '../api/clientes'
+import { DatePicker, Form, Input, Modal, Select } from 'antd'
 import { useVehiculos } from '../api/vehiculos'
 import { useCrearCita } from '../api/citas'
 import type { CitaDetalleResponse } from '../api/tipos'
 import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
 import { AvisoError } from './AvisoError'
-import { ModalCliente } from './ModalCliente'
+import { CampoCliente } from './CampoCliente'
 import { identificadorUnidad } from '../utils/unidades'
 import { DURACIONES_CITA, reglaFechaCita } from '../utils/agenda'
 
@@ -38,11 +36,7 @@ type Campos = {
 export function ModalCita({ abierto, paraCliente = false, fechaInicial, onCerrar, onCreada }: Readonly<Props>) {
   const [formulario] = Form.useForm<Campos>()
   const { tienePermiso } = useSesion()
-  const clientes = useClientes(!paraCliente)
   const crear = useCrearCita()
-  // El cliente que llama por primera vez se registra aquí mismo, como en la orden.
-  const puedeRegistrarCliente = !paraCliente && tienePermiso(PERMISOS.clientesCrear)
-  const [registrandoCliente, setRegistrandoCliente] = useState(false)
 
   const clienteElegido = Form.useWatch('clienteId', formulario)
   // El cliente ve sus unidades sin filtro: la API ya le devuelve solo las suyas.
@@ -96,30 +90,8 @@ export function ModalCita({ abierto, paraCliente = false, fechaInicial, onCerrar
         }}
       >
         <div className="formulario-grid">
-          {!paraCliente && (
-            <Form.Item
-              label="Cliente"
-              name="clienteId"
-              rules={[{ required: true, message: 'Elige el cliente' }]}
-              extra={
-                puedeRegistrarCliente && (
-                  <Button type="link" size="small" style={{ paddingInline: 0 }} onClick={() => setRegistrandoCliente(true)}>
-                    Registrar cliente nuevo
-                  </Button>
-                )
-              }
-            >
-              <Select
-                showSearch={{ optionFilterProp: 'label' }}
-                loading={clientes.isPending}
-                placeholder="Buscar cliente"
-                options={(clientes.data ?? []).map((cliente) => ({
-                  value: cliente.id,
-                  label: cliente.nombreCompleto,
-                }))}
-              />
-            </Form.Item>
-          )}
+          {/* El cliente que llama por primera vez se registra aquí mismo, como en la orden. */}
+          {!paraCliente && <CampoCliente alRegistrar={() => formulario.setFieldValue('vehiculoId', undefined)} />}
           <Form.Item label="Unidad (opcional)" name="vehiculoId">
             <Select
               allowClear
@@ -163,11 +135,6 @@ export function ModalCita({ abierto, paraCliente = false, fechaInicial, onCerrar
           </Form.Item>
         </div>
       </Form>
-      <ModalCliente
-        abierto={registrandoCliente}
-        onCerrar={() => setRegistrandoCliente(false)}
-        onGuardado={(cliente) => formulario.setFieldsValue({ clienteId: cliente.id, vehiculoId: undefined })}
-      />
     </Modal>
   )
 }

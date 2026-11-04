@@ -1,8 +1,8 @@
 import { Form, Input, InputNumber, Modal, Select } from 'antd'
-import { useClientes } from '../api/clientes'
 import { useGuardarVehiculo } from '../api/vehiculos'
 import type { TipoMedidor, TipoUnidad, VehiculoRequest, VehiculoResponse } from '../api/tipos'
 import { AvisoError } from './AvisoError'
+import { CampoCliente } from './CampoCliente'
 
 type Props = {
   abierto: boolean
@@ -33,7 +33,6 @@ const sinVacios = (valor?: string) => (valor && valor.trim() !== '' ? valor.trim
 export function ModalVehiculo({ abierto, vehiculo, clienteFijo, onCerrar }: Readonly<Props>) {
   const [formulario] = Form.useForm<Campos>()
   const guardar = useGuardarVehiculo()
-  const { data: clientes } = useClientes()
 
   const enviar = async (campos: Campos) => {
     const medidor =
@@ -100,19 +99,7 @@ export function ModalVehiculo({ abierto, vehiculo, clienteFijo, onCerrar }: Read
           observaciones: vehiculo?.observaciones ?? '',
         }}
       >
-        {!clienteFijo && (
-          <Form.Item
-            label="Propietario"
-            name="clienteId"
-            rules={[{ required: true, message: 'Elige el cliente propietario' }]}
-          >
-            <Select
-              showSearch={{ optionFilterProp: 'label' }}
-              placeholder="Buscar cliente"
-              options={(clientes ?? []).map((cliente) => ({ value: cliente.id, label: cliente.nombreCompleto }))}
-            />
-          </Form.Item>
-        )}
+        {!clienteFijo && <CampoCliente etiqueta="Propietario" mensaje="Elige el cliente propietario" />}
         <Form.Item label="Tipo de unidad" name="tipoUnidad">
           <Select
             options={[
