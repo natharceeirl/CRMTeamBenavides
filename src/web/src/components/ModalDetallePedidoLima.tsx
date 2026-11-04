@@ -33,6 +33,7 @@ import { HistorialEstados } from './HistorialEstados'
 import { EstadoPedidoLimaTag } from './EstadoPedidoLimaTag'
 import { colores } from '../theme/tokens'
 import { fechaCorta, fechaHora, importe, soles } from '../utils/formato'
+import { precioDeLinea, precioListaSoles } from '../utils/precios'
 
 type Props = {
   pedidoId: string | null
@@ -133,7 +134,9 @@ function ModalEditarLineaPedido({
   const productos = useProductos()
   const actualizar = useActualizarDetallePedidoLima()
   const precioUnitario = Form.useWatch('precioUnitario', formulario)
-  const deLista = (productos.data ?? []).find((producto) => producto.id === detalle.productoId)?.precioVenta
+  // En soles y con IGV si el repuesto lo incluye: así se escribe el precio de la línea.
+  const deLista = precioListaSoles((productos.data ?? []).find((producto) => producto.id === detalle.productoId)) ?? undefined
+  const conIgv = detalle.precioUnitarioConIgv != null
 
   const cerrar = () => {
     actualizar.reset()
@@ -169,14 +172,14 @@ function ModalEditarLineaPedido({
         layout="vertical"
         requiredMark={false}
         onFinish={guardar}
-        initialValues={{ cantidad: detalle.cantidad, precioUnitario: detalle.precioUnitario }}
+        initialValues={{ cantidad: detalle.cantidad, precioUnitario: precioDeLinea(detalle) }}
       >
         <div className="formulario-grid">
           <Form.Item label="Cantidad" name="cantidad" rules={[{ required: true, message: 'Indica la cantidad' }]}>
             <InputNumber min={1} precision={0} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item
-            label="Precio unitario (PEN, sin IGV)"
+            label={conIgv ? 'Precio unitario (S/, con IGV)' : 'Precio unitario (S/, sin IGV)'}
             name="precioUnitario"
             rules={[{ required: true, message: 'Indica el precio' }]}
           >

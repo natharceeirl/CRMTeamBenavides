@@ -27,6 +27,7 @@ import {
 } from '../api/tipos'
 import { colores } from '../theme/tokens'
 import { entero, fechaHora, soles } from '../utils/formato'
+import { MONEDA_PRECIO, textoPrecioLista, textoPrecioRegistrado } from '../utils/precios'
 import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
 
@@ -122,10 +123,18 @@ export function RepuestosPage() {
       : []),
     {
       title: 'Precio',
-      dataIndex: 'precioVenta',
+      key: 'precio',
       align: 'right',
       className: 'num',
-      render: (precio: number) => soles(precio),
+      // Como se registró; en dólares, también lo que se cobra hoy en soles.
+      render: (_, producto) => (
+        <>
+          <div>{textoPrecioRegistrado(producto)}</div>
+          {producto.monedaPrecio === MONEDA_PRECIO.usd && (
+            <div className="texto-secundario">{textoPrecioLista(producto)}</div>
+          )}
+        </>
+      ),
     },
     { title: 'Estado', key: 'estado', render: (_, producto) => <EstadoStock producto={producto} /> },
     {

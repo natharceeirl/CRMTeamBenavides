@@ -8,6 +8,7 @@ import { useCrearPedidoLima } from '../api/pedidosLima'
 import type { PedidoLimaResponse } from '../api/tipos'
 import { AvisoError } from './AvisoError'
 import { soles } from '../utils/formato'
+import { precioListaSoles, textoPrecioLista, totalDeLinea } from '../utils/precios'
 
 type Props = {
   abierto: boolean
@@ -43,7 +44,8 @@ export function ModalPedidoLima({ abierto, onCerrar, onCreado }: Readonly<Props>
   // Solo informativo: el precio de catálogo y el IGV los pone el backend.
   const totalEstimado = lineas.reduce((suma, linea) => {
     const producto = (productos.data ?? []).find((item) => item.id === linea?.productoId)
-    return suma + (producto ? producto.precioVenta * (linea?.cantidad ?? 0) : 0)
+    const precio = precioListaSoles(producto)
+    return suma + (producto && precio != null ? totalDeLinea(precio, linea?.cantidad ?? 0, producto.precioIncluyeIgv) : 0)
   }, 0)
 
   const cerrar = () => {
@@ -116,7 +118,7 @@ export function ModalPedidoLima({ abierto, onCerrar, onCreado }: Readonly<Props>
                       placeholder="Repuesto"
                       options={(productos.data ?? []).map((producto) => ({
                         value: producto.id,
-                        label: `${producto.codigo} · ${producto.nombre} · ${soles(producto.precioVenta)}`,
+                        label: `${producto.codigo} · ${producto.nombre} · ${textoPrecioLista(producto)}`,
                       }))}
                     />
                   </Form.Item>
@@ -166,7 +168,7 @@ export function ModalPedidoLima({ abierto, onCerrar, onCreado }: Readonly<Props>
 
         <div className="totales">
           <div>
-            <div className="etiqueta">Subtotal estimado, sin IGV</div>
+            <div className="etiqueta">Total estimado, con IGV</div>
             <div className="valor total">{soles(totalEstimado)}</div>
           </div>
         </div>

@@ -42,6 +42,7 @@ const venta = (extra: Partial<VentaDetalleResponse> = {}): VentaDetalleResponse 
       porcentajeIgvAplicado: 18,
       montoIgv: 7.56,
       total: 49.56,
+      precioUnitarioConIgv: null,
     },
   ],
   comprobante: {

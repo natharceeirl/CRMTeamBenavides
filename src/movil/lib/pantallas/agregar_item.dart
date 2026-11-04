@@ -56,9 +56,10 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
 
   double? get _precioManual => double.tryParse(_precio.text.replaceAll(',', '.'));
 
-  /// Precio de lista del repuesto o servicio elegido.
+  /// Precio de lista del repuesto o servicio elegido. El del repuesto va en soles y
+  /// con IGV si lo incluye, igual que se escribe.
   double? get _precioCatalogo => switch (_tipo) {
-        TipoItem.repuesto => _producto?.precioVenta,
+        TipoItem.repuesto => _producto?.precioListaSoles,
         TipoItem.servicio => _servicio?.precioSugerido,
         _ => null,
       };
@@ -271,14 +272,14 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
           alElegir: (producto) => setState(() {
             _producto = producto;
             _cantidad = 1;
-            _ponerPrecioDeLista(producto.precioVenta);
+            _ponerPrecioDeLista(producto.precioListaSoles ?? 0);
           }),
           disponible: (producto) => !producto.agotado,
           titulo: (producto) => producto.nombre,
           detalle: (producto) => producto.agotado
               ? '${producto.codigo} · sin stock'
               : '${producto.codigo} · stock ${producto.stockActual} ${producto.unidad}',
-          precio: (producto) => producto.precioVenta,
+          precio: (producto) => producto.precioListaSoles ?? 0,
         );
       case TipoItem.servicio:
         return _ListaCatalogo<ServicioApi>(

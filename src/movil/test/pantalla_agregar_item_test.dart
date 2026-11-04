@@ -18,6 +18,8 @@ ProductoApi _producto(String id, String codigo, String nombre, {required int sto
       nombre: nombre,
       unidad: 'und',
       precioVenta: 45,
+      // Como lo manda la API: el precio de lista en soles, en los términos del repuesto.
+      precioListaSoles: 45,
       stockActual: stock,
       stockMinimo: 4,
       esBajoStock: stock < 4,

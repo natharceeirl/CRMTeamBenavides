@@ -30,7 +30,8 @@ class HojaEditarItem extends ConsumerStatefulWidget {
 }
 
 class _HojaEditarItemState extends ConsumerState<HojaEditarItem> {
-  late final _precio = TextEditingController(text: widget.detalle.precioUnitario.toStringAsFixed(2));
+  // Se edita en los términos en que se cobró: con IGV si la línea lo incluye.
+  late final _precio = TextEditingController(text: widget.detalle.precioEscrito.toStringAsFixed(2));
   late int _cantidad = widget.detalle.cantidad;
   bool _guardando = false;
   String? _error;
@@ -49,7 +50,7 @@ class _HojaEditarItemState extends ConsumerState<HojaEditarItem> {
     if (detalle.productoId != null) {
       final productos = ref.watch(productosProvider).value ?? const <ProductoApi>[];
       for (final producto in productos) {
-        if (producto.id == detalle.productoId) return producto.precioVenta;
+        if (producto.id == detalle.productoId) return producto.precioListaSoles ?? detalle.precioEscrito;
       }
     }
     if (detalle.servicioId != null) {
@@ -58,7 +59,7 @@ class _HojaEditarItemState extends ConsumerState<HojaEditarItem> {
         if (servicio.id == detalle.servicioId) return servicio.precioSugerido;
       }
     }
-    return detalle.precioUnitario;
+    return detalle.precioEscrito;
   }
 
   bool _distinto(double? a, double b) => a != null && (a - b).abs() > 0.005;
@@ -80,7 +81,7 @@ class _HojaEditarItemState extends ConsumerState<HojaEditarItem> {
 
   Future<void> _guardar() {
     final precio = _precioEscrito;
-    final cambioPrecio = _distinto(precio, widget.detalle.precioUnitario);
+    final cambioPrecio = _distinto(precio, widget.detalle.precioEscrito);
     final cambioCantidad = _cantidad != widget.detalle.cantidad;
     if (!cambioPrecio && !cambioCantidad) {
       Navigator.of(context).pop(false);

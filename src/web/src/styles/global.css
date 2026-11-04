@@ -537,6 +537,20 @@ h4 {
   column-gap: 32px;
 }
 
+/* Moneda, monto e «Incluye IGV» en una fila; en el teléfono, uno debajo del otro. */
+.campos-precio {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr) auto;
+  column-gap: 12px;
+  align-items: start;
+}
+
+@media (max-width: 600px) {
+  .campos-precio {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .ancho-completo {
   grid-column: 1 / -1;
 }

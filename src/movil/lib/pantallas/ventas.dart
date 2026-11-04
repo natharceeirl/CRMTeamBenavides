@@ -491,7 +491,7 @@ class _FilaLinea extends StatelessWidget {
       subtitle: Text(
         [
           if (linea.productoCodigo.isNotEmpty) linea.productoCodigo,
-          '${linea.cantidad} × ${soles(linea.precioUnitario)}',
+          '${linea.cantidad} × ${soles(linea.precioEscrito)}',
         ].join(' · '),
         style: const TextStyle(color: Marca.textoSecundario, fontSize: 12),
       ),

@@ -355,7 +355,7 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                       title: Text(detalle.descripcion),
                       subtitle: Text(
                         '${detalle.tipoItemNombre ?? (detalle.esRepuesto ? 'Repuesto' : 'Mano de obra')} · '
-                        '${detalle.cantidad} x ${soles(detalle.precioUnitario)}'
+                        '${detalle.cantidad} x ${soles(detalle.precioEscrito)}'
                         '${detalle.tipoAfectacionIgvNombre != null ? ' (${detalle.tipoAfectacionIgvNombre})' : ''}',
                         style: const TextStyle(color: Marca.textoSecundario),
                       ),

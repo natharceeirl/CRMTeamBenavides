@@ -5,6 +5,7 @@ import { useActualizarDetalle } from '../api/ordenes'
 import { TIPO_ITEM_SERVICIO, type ActualizarDetalleRequest, type DetalleServicioResponse } from '../api/tipos'
 import { AvisoError } from './AvisoError'
 import { AvisoPrecioGerencia } from './AvisoPrecioGerencia'
+import { precioDeLinea, precioListaSoles } from '../utils/precios'
 
 type Campos = {
   descripcion: string
@@ -35,12 +36,16 @@ export function ModalEditarItemOrden({
   const productos = useProductos()
   const servicios = useServicios(true, esServicio)
 
+  const producto = esRepuesto ? (productos.data ?? []).find((item) => item.id === detalle.productoId) : undefined
   const precioDeLista = esRepuesto
-    ? (productos.data ?? []).find((producto) => producto.id === detalle.productoId)?.precioVenta
+    ? (precioListaSoles(producto) ?? undefined)
     : esServicio
       ? (servicios.data ?? []).find((servicio) => servicio.id === detalle.servicioId)?.precioSugerido
       : undefined
   const precioUnitario = Form.useWatch('precioUnitario', formulario)
+  // Se edita en los términos en que se cobró: con IGV si la línea lo incluye.
+  const precioEscrito = precioDeLinea(detalle)
+  const conIgv = detalle.precioUnitarioConIgv != null
   // Mano de obra y terceros se describen a mano; repuestos y servicios llevan su nombre de catálogo.
   const descripcionEditable = !esRepuesto && !esServicio
 
@@ -52,7 +57,7 @@ export function ModalEditarItemOrden({
   const enviar = async (campos: Campos) => {
     const datos: ActualizarDetalleRequest = {}
     if (campos.cantidad !== detalle.cantidad) datos.cantidad = campos.cantidad
-    if (Math.abs(campos.precioUnitario - detalle.precioUnitario) > 0.005) datos.precioUnitario = campos.precioUnitario
+    if (Math.abs(campos.precioUnitario - precioEscrito) > 0.005) datos.precioUnitario = campos.precioUnitario
     if (descripcionEditable && campos.descripcion.trim() !== detalle.descripcion) {
       datos.descripcion = campos.descripcion.trim()
     }
@@ -83,7 +88,7 @@ export function ModalEditarItemOrden({
         initialValues={{
           descripcion: detalle.descripcion,
           cantidad: detalle.cantidad,
-          precioUnitario: detalle.precioUnitario,
+          precioUnitario: precioEscrito,
         }}
       >
         {descripcionEditable ? (
@@ -102,7 +107,7 @@ export function ModalEditarItemOrden({
             <InputNumber min={1} precision={0} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item
-            label="Precio unitario (PEN, sin IGV)"
+            label={conIgv ? 'Precio unitario (S/, con IGV)' : 'Precio unitario (S/, sin IGV)'}
             name="precioUnitario"
             rules={[{ required: true, message: 'Indica el precio' }]}
           >

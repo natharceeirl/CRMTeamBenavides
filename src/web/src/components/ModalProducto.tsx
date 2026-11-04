@@ -6,11 +6,12 @@ import {
   useGuardarProducto,
   useMarcasProductos,
 } from '../api/inventario'
-import type { ProductoResponse } from '../api/tipos'
+import type { MonedaPrecio, ProductoResponse } from '../api/tipos'
 import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
 import { AvisoError } from './AvisoError'
-import { ConversorDolares } from './ConversorDolares'
+import { CamposPrecio } from './CamposPrecio'
+import { MONEDA_PRECIO } from '../utils/precios'
 
 type Props = {
   abierto: boolean
@@ -25,7 +26,11 @@ type Campos = {
   descripcion?: string
   unidad?: string
   precioVenta: number
+  monedaPrecio: MonedaPrecio
+  precioIncluyeIgv: boolean
   costo?: number
+  monedaCosto: MonedaPrecio
+  costoIncluyeIgv: boolean
   stockInicial?: number
   stockMinimo?: number | null
   marca?: string
@@ -69,7 +74,11 @@ export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) 
       descripcion: sinVacios(campos.descripcion),
       unidad: sinVacios(campos.unidad),
       precioVenta: campos.precioVenta,
+      monedaPrecio: campos.monedaPrecio,
+      precioIncluyeIgv: campos.precioIncluyeIgv,
       costo: campos.costo ?? 0,
+      monedaCosto: campos.monedaCosto,
+      costoIncluyeIgv: campos.costoIncluyeIgv,
       stockMinimo: campos.stockMinimo != null && !Number.isNaN(campos.stockMinimo) ? campos.stockMinimo : null,
       marca: sinVacios(campos.marca),
       fotoUrl: sinVacios(campos.fotoUrl),
@@ -109,7 +118,13 @@ export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) 
           descripcion: producto?.descripcion ?? '',
           unidad: producto?.unidad ?? 'unidad',
           precioVenta: producto?.precioVenta ?? 0,
+          // Un repuesto nuevo va con IGV incluido: así maneja sus precios el taller.
+          monedaPrecio: producto?.monedaPrecio ?? MONEDA_PRECIO.pen,
+          precioIncluyeIgv: producto?.precioIncluyeIgv ?? true,
+          // El costo se guarda en soles y sin IGV: así se muestra al editar.
           costo: producto?.costo ?? 0,
+          monedaCosto: MONEDA_PRECIO.pen,
+          costoIncluyeIgv: false,
           stockInicial: 0,
           stockMinimo: producto?.stockMinimo ?? undefined,
           marca: producto?.marca ?? '',
@@ -178,23 +193,20 @@ export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) 
         <Form.Item label="Unidad" name="unidad">
           <Input placeholder="unidad, litro, juego…" />
         </Form.Item>
-        <Form.Item
-          label="Precio de venta"
-          name="precioVenta"
-          rules={[{ required: true, message: 'Ingresa el precio de venta' }]}
-        >
-          <InputNumber min={0} precision={2} style={{ width: '100%' }} />
-        </Form.Item>
-        <Form.Item label="¿El precio está en dólares?">
-          <ConversorDolares onAplicar={(montoPen) => formulario.setFieldsValue({ precioVenta: montoPen })} />
-        </Form.Item>
-        <Form.Item
-          label="Costo"
-          name="costo"
-          rules={[{ required: true, message: 'Ingresa el costo' }]}
-        >
-          <InputNumber min={0} precision={2} style={{ width: '100%' }} />
-        </Form.Item>
+        <CamposPrecio
+          etiqueta="Precio de venta"
+          nombreMonto="precioVenta"
+          nombreMoneda="monedaPrecio"
+          nombreIncluyeIgv="precioIncluyeIgv"
+          ayudaDolares="Se cobra en soles al tipo de cambio del día."
+        />
+        <CamposPrecio
+          etiqueta="Costo"
+          nombreMonto="costo"
+          nombreMoneda="monedaCosto"
+          nombreIncluyeIgv="costoIncluyeIgv"
+          ayudaDolares="Se guarda en soles al tipo de cambio de hoy."
+        />
         {!editando && (
           <Form.Item label="Stock inicial" name="stockInicial">
             <InputNumber min={0} style={{ width: '100%' }} />

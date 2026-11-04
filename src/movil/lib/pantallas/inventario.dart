@@ -183,7 +183,7 @@ class _FilaProducto extends StatelessWidget {
                 EtiquetaStock(producto: producto),
                 const SizedBox(width: 8),
                 Text(
-                  soles(producto.precioVenta),
+                  producto.textoPrecio,
                   style: const TextStyle(
                     color: Marca.textoSecundario,
                     fontSize: 12,
@@ -290,7 +290,7 @@ class _HojaProducto extends ConsumerWidget {
               EtiquetaStock(producto: producto),
               const Spacer(),
               Text(
-                soles(producto.precioVenta),
+                producto.textoPrecio,
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ],

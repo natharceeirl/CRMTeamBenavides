@@ -1,9 +1,16 @@
 import { AutoComplete, Form, Input, InputNumber, Modal, Select } from 'antd'
 import { useAltaRapidaProducto, useMarcasProductos } from '../api/inventario'
 import { useAltaRapidaServicio } from '../api/servicios'
-import { TIPO_AFECTACION_IGV, type ProductoResponse, type ServicioResponse, type TipoAfectacionIgv } from '../api/tipos'
+import {
+  TIPO_AFECTACION_IGV,
+  type MonedaPrecio,
+  type ProductoResponse,
+  type ServicioResponse,
+  type TipoAfectacionIgv,
+} from '../api/tipos'
 import { AvisoError } from './AvisoError'
-import { ConversorDolares } from './ConversorDolares'
+import { CamposPrecio } from './CamposPrecio'
+import { MONEDA_PRECIO } from '../utils/precios'
 
 const sinVacios = (valor?: string) => (valor?.trim() ? valor.trim() : null)
 
@@ -12,6 +19,8 @@ type CamposRepuesto = {
   codigo?: string
   marca?: string
   precioVenta: number
+  monedaPrecio: MonedaPrecio
+  precioIncluyeIgv: boolean
   stockInicial?: number
 }
 
@@ -47,6 +56,8 @@ export function ModalAltaRapidaRepuesto({
       codigo: sinVacios(campos.codigo)?.toUpperCase() ?? null,
       marca: sinVacios(campos.marca),
       precioVenta: campos.precioVenta,
+      monedaPrecio: campos.monedaPrecio,
+      precioIncluyeIgv: campos.precioIncluyeIgv,
       categoriaId: null,
       stockInicial: sinStockInicial ? 0 : (campos.stockInicial ?? 0),
     })
@@ -71,7 +82,7 @@ export function ModalAltaRapidaRepuesto({
         layout="vertical"
         requiredMark={false}
         onFinish={enviar}
-        initialValues={{ stockInicial: 0 }}
+        initialValues={{ stockInicial: 0, monedaPrecio: MONEDA_PRECIO.pen, precioIncluyeIgv: true }}
       >
         <Form.Item
           label="Nombre"
@@ -90,22 +101,19 @@ export function ModalAltaRapidaRepuesto({
               filterOption={(texto, opcion) => (opcion?.value ?? '').toLowerCase().includes(texto.toLowerCase())}
             />
           </Form.Item>
-          <Form.Item
-            label="Precio de venta (sin IGV)"
-            name="precioVenta"
-            rules={[{ required: true, message: 'Ingresa el precio' }]}
-          >
-            <InputNumber min={0} precision={2} style={{ width: '100%' }} />
-          </Form.Item>
           {!sinStockInicial && (
             <Form.Item label="Stock inicial" name="stockInicial">
               <InputNumber min={0} precision={0} style={{ width: '100%' }} />
             </Form.Item>
           )}
         </div>
-        <Form.Item label="¿El precio está en dólares?">
-          <ConversorDolares onAplicar={(montoPen) => formulario.setFieldsValue({ precioVenta: montoPen })} />
-        </Form.Item>
+        <CamposPrecio
+          etiqueta="Precio de venta"
+          nombreMonto="precioVenta"
+          nombreMoneda="monedaPrecio"
+          nombreIncluyeIgv="precioIncluyeIgv"
+          ayudaDolares="Se cobra en soles al tipo de cambio del día."
+        />
       </Form>
     </Modal>
   )

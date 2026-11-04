@@ -6,6 +6,7 @@ import type { DetalleVentaResponse, VentaDetalleResponse } from '../api/tipos'
 import { AvisoError } from './AvisoError'
 import { precioDistintoAlDeLista } from './AvisoPrecioGerencia'
 import { soles } from '../utils/formato'
+import { precioDeLinea, precioListaSoles } from '../utils/precios'
 
 type Linea = { detalleId: string; productoId: string; cantidad: number; precioUnitario: number }
 type Campos = { lineas: Linea[] }
@@ -41,8 +42,9 @@ export function ModalEditarCotizacion({
   const actualizar = useActualizarVenta()
   const lineas = Form.useWatch('lineas', formulario) ?? []
 
+  // En soles y con IGV si el repuesto lo incluye: así se escribe el precio de la línea.
   const precioDeLista = (productoId: string) =>
-    (productos.data ?? []).find((producto) => producto.id === productoId)?.precioVenta
+    precioListaSoles((productos.data ?? []).find((producto) => producto.id === productoId)) ?? undefined
   const fueraDeLista = lineas.filter((linea) =>
     precioDistintoAlDeLista(linea?.precioUnitario, precioDeLista(linea?.productoId)),
   ).length
@@ -96,7 +98,7 @@ export function ModalEditarCotizacion({
       ),
     },
     {
-      title: 'P. unit. (sin IGV)',
+      title: 'P. unit.',
       key: 'precio',
       width: 160,
       render: (_, detalle) => (
@@ -136,7 +138,8 @@ export function ModalEditarCotizacion({
             detalleId: detalle.id,
             productoId: detalle.productoId ?? '',
             cantidad: detalle.cantidad,
-            precioUnitario: detalle.precioUnitario,
+            // Se edita en los términos en que se cobró: con IGV si la línea lo incluye.
+            precioUnitario: precioDeLinea(detalle),
           })),
         }}
       >

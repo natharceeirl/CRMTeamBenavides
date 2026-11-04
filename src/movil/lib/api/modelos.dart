@@ -451,6 +451,7 @@ class DetalleServicioApi {
     this.subtotalGravado,
     this.montoIgv,
     this.total,
+    this.precioUnitarioConIgv,
   });
 
   factory DetalleServicioApi.desdeJson(Map<String, dynamic> json) => DetalleServicioApi(
@@ -470,14 +471,21 @@ class DetalleServicioApi {
         subtotalGravado: (json['subtotalGravado'] as num?)?.toDouble(),
         montoIgv: (json['montoIgv'] as num?)?.toDouble(),
         total: (json['total'] as num?)?.toDouble(),
+        precioUnitarioConIgv: (json['precioUnitarioConIgv'] as num?)?.toDouble(),
       );
 
   final String id;
   final String descripcion;
   final int cantidad;
+
+  /// Sin IGV: la base. Si la línea se cobró con IGV, el precio escrito es [precioUnitarioConIgv].
   final double precioUnitario;
+  final double? precioUnitarioConIgv;
   final double subtotal;
   final bool esRepuesto;
+
+  /// El precio como se escribió y se edita: con IGV si se cobró así.
+  double get precioEscrito => precioUnitarioConIgv ?? precioUnitario;
 
   /// Del catálogo: con ellos se busca el precio de lista al corregir el ítem.
   final String? productoId;
@@ -721,6 +729,9 @@ class ProductoApi {
     required this.categoriaNombre,
     required this.activo,
     this.descripcion,
+    this.monedaPrecio = MonedaPrecio.pen,
+    this.precioIncluyeIgv = false,
+    this.precioListaSoles,
   });
 
   factory ProductoApi.desdeJson(Map<String, dynamic> json) => ProductoApi(
@@ -737,6 +748,9 @@ class ProductoApi {
         categoriaId: json['categoriaId'] as String? ?? '',
         categoriaNombre: json['categoriaNombre'] as String? ?? '',
         activo: json['activo'] as bool? ?? true,
+        monedaPrecio: json['monedaPrecio'] as int? ?? MonedaPrecio.pen,
+        precioIncluyeIgv: json['precioIncluyeIgv'] as bool? ?? false,
+        precioListaSoles: (json['precioListaSoles'] as num?)?.toDouble(),
       );
 
   final String id;
@@ -744,7 +758,15 @@ class ProductoApi {
   final String nombre;
   final String? descripcion;
   final String unidad;
+
+  /// Como se registró: en [monedaPrecio] y con IGV si [precioIncluyeIgv].
   final double precioVenta;
+  final int monedaPrecio;
+  final bool precioIncluyeIgv;
+
+  /// En soles al tipo de cambio de hoy y con IGV si lo incluye: así se escribe en una
+  /// línea. Null si está en dólares y no se registró el tipo de cambio.
+  final double? precioListaSoles;
   final int stockActual;
   final int stockMinimo;
 
@@ -755,6 +777,20 @@ class ProductoApi {
   final bool activo;
 
   bool get agotado => stockActual <= 0;
+
+  /// «US$ 25,00» o «S/ 35,00», como se registró, con «+ IGV» si no lo incluye.
+  String get textoPrecio {
+    final monto = monedaPrecio == MonedaPrecio.usd
+        ? 'US\$ ${precioVenta.toStringAsFixed(2)}'
+        : 'S/ ${precioVenta.toStringAsFixed(2)}';
+    return precioIncluyeIgv ? monto : '$monto + IGV';
+  }
+}
+
+/// La moneda en que se registró el precio de un repuesto (enum MonedaPrecio de la API).
+abstract final class MonedaPrecio {
+  static const pen = 0;
+  static const usd = 1;
 }
 
 class MovimientoInventarioApi {
@@ -867,6 +903,7 @@ class DetalleVentaApi {
     required this.precioUnitario,
     required this.subtotal,
     this.total,
+    this.precioUnitarioConIgv,
   });
 
   factory DetalleVentaApi.desdeJson(Map<String, dynamic> json) => DetalleVentaApi(
@@ -878,6 +915,7 @@ class DetalleVentaApi {
         precioUnitario: (json['precioUnitario'] as num? ?? 0).toDouble(),
         subtotal: (json['subtotal'] as num? ?? 0).toDouble(),
         total: (json['total'] as num?)?.toDouble(),
+        precioUnitarioConIgv: (json['precioUnitarioConIgv'] as num?)?.toDouble(),
       );
 
   final String id;
@@ -885,6 +923,10 @@ class DetalleVentaApi {
   final String productoNombre;
   final int cantidad;
   final double precioUnitario;
+  final double? precioUnitarioConIgv;
+
+  /// El precio como se escribió: con IGV si se cobró así.
+  double get precioEscrito => precioUnitarioConIgv ?? precioUnitario;
   final double subtotal;
 
   /// Con IGV. Las ventas anteriores al IGV no lo traen.

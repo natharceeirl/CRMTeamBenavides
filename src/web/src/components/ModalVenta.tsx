@@ -11,6 +11,7 @@ import { ModalAltaRapidaRepuesto } from './ModalesAltaRapida'
 import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
 import { soles } from '../utils/formato'
+import { precioListaSoles, textoPrecioLista, totalDeLinea } from '../utils/precios'
 
 type Props = {
   abierto: boolean
@@ -41,13 +42,14 @@ export function ModalVenta({ abierto, onCerrar, onCreada }: Readonly<Props>) {
   const [altaRepuesto, setAltaRepuesto] = useState(false)
 
   const lineas = Form.useWatch('detalles', formulario) ?? []
-  const precioDeLista = (productoId?: string) =>
-    (productos.data ?? []).find((item) => item.id === productoId)?.precioVenta
+  const productoDe = (productoId?: string) => (productos.data ?? []).find((item) => item.id === productoId)
+  // En soles y con IGV si el repuesto lo incluye: así se escribe el precio de la línea.
+  const precioDeLista = (productoId?: string) => precioListaSoles(productoDe(productoId)) ?? undefined
 
   // Solo informativo: el precio de verdad y el IGV los pone el backend.
   const totalEstimado = lineas.reduce((suma, linea) => {
     const precio = linea?.precioUnitario ?? precioDeLista(linea?.productoId) ?? 0
-    return suma + precio * (linea?.cantidad ?? 0)
+    return suma + totalDeLinea(precio, linea?.cantidad ?? 0, Boolean(productoDe(linea?.productoId)?.precioIncluyeIgv))
   }, 0)
   const lineasFueraDeLista = lineas.filter((linea) =>
     precioDistintoAlDeLista(linea?.precioUnitario, precioDeLista(linea?.productoId)),
@@ -140,7 +142,7 @@ export function ModalVenta({ abierto, onCerrar, onCreada }: Readonly<Props>) {
                       }
                       options={(productos.data ?? []).map((producto) => ({
                         value: producto.id,
-                        label: `${producto.codigo} · ${producto.nombre} · ${soles(producto.precioVenta)} · stock ${producto.stockActual}`,
+                        label: `${producto.codigo} · ${producto.nombre} · ${textoPrecioLista(producto)} · stock ${producto.stockActual}`,
                       }))}
                     />
                   </Form.Item>
@@ -181,7 +183,7 @@ export function ModalVenta({ abierto, onCerrar, onCreada }: Readonly<Props>) {
 
         <div className="totales" style={{ marginTop: 16 }}>
           <div>
-            <div className="etiqueta">Subtotal estimado, sin IGV</div>
+            <div className="etiqueta">Total estimado, con IGV</div>
             <div className="valor total">{soles(totalEstimado)}</div>
           </div>
         </div>
@@ -195,7 +197,7 @@ export function ModalVenta({ abierto, onCerrar, onCreada }: Readonly<Props>) {
           // Ocupa la primera línea vacía o agrega una nueva con el repuesto registrado.
           const actuales: Linea[] = formulario.getFieldValue('detalles') ?? []
           const vacia = actuales.findIndex((linea) => !linea?.productoId)
-          const nueva = { productoId: repuesto.id, cantidad: 1, precioUnitario: repuesto.precioVenta }
+          const nueva = { productoId: repuesto.id, cantidad: 1, precioUnitario: precioListaSoles(repuesto) ?? undefined }
           formulario.setFieldValue(
             'detalles',
             vacia === -1 ? [...actuales, nueva] : actuales.map((linea, indice) => (indice === vacia ? nueva : linea)),

@@ -9,6 +9,7 @@ import { ModalAltaRapidaRepuesto, ModalAltaRapidaServicio } from './ModalesAltaR
 import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
 import { soles } from '../utils/formato'
+import { precioListaSoles, textoPrecioLista } from '../utils/precios'
 import {
   TIPO_AFECTACION_IGV,
   TIPO_ITEM_SERVICIO,
@@ -66,11 +67,13 @@ export function ModalItemOrden({
   const servicioElegido = (servicios.data ?? []).find((s) => s.id === servicioId)
   const precioDeLista =
     tipoItem === TIPO_ITEM_SERVICIO.repuesto
-      ? productoElegido?.precioVenta
+      ? (precioListaSoles(productoElegido) ?? undefined)
       : tipoItem === TIPO_ITEM_SERVICIO.servicio
         ? servicioElegido?.precioSugerido
         : undefined
   const conPrecioDeLista = tipoItem === TIPO_ITEM_SERVICIO.repuesto || tipoItem === TIPO_ITEM_SERVICIO.servicio
+  // Un repuesto registrado con IGV se escribe con IGV, igual que su precio de lista.
+  const precioConIgv = tipoItem === TIPO_ITEM_SERVICIO.repuesto && Boolean(productoElegido?.precioIncluyeIgv)
 
   const cerrar = () => {
     agregar.reset()
@@ -168,7 +171,7 @@ export function ModalItemOrden({
                 onChange={(pId) => {
                   const p = (productos.data ?? []).find((item) => item.id === pId)
                   if (p) {
-                    formulario.setFieldsValue({ precioUnitario: p.precioVenta })
+                    formulario.setFieldsValue({ precioUnitario: precioListaSoles(p) ?? undefined })
                   }
                 }}
                 options={(productos.data ?? []).map((producto) => ({
@@ -179,7 +182,7 @@ export function ModalItemOrden({
             </Form.Item>
             {productoElegido && (
               <p className="texto-secundario" style={{ marginTop: -8, marginBottom: 12 }}>
-                Precio catálogo: {soles(productoElegido.precioVenta)} · Stock disponible: {productoElegido.stockActual}{' '}
+                Precio de lista: {textoPrecioLista(productoElegido)} · Stock disponible: {productoElegido.stockActual}{' '}
                 {productoElegido.unidad}
               </p>
             )}
@@ -254,7 +257,7 @@ export function ModalItemOrden({
         </Form.Item>
 
         {(conPrecioDeLista || puedeModificarPrecios) && (
-          <Form.Item label="Precio unitario (PEN, sin IGV)" name="precioUnitario">
+          <Form.Item label={precioConIgv ? 'Precio unitario (S/, con IGV)' : 'Precio unitario (S/, sin IGV)'} name="precioUnitario">
             <InputNumber min={0} step={0.5} style={{ width: '100%' }} placeholder="Opcional: toma el precio de lista si se deja vacío" />
           </Form.Item>
         )}
@@ -280,7 +283,7 @@ export function ModalItemOrden({
         onCerrar={() => setAltaRepuesto(false)}
         onRegistrado={(repuesto) => {
           setAltaRepuesto(false)
-          formulario.setFieldsValue({ productoId: repuesto.id, precioUnitario: repuesto.precioVenta })
+          formulario.setFieldsValue({ productoId: repuesto.id, precioUnitario: precioListaSoles(repuesto) ?? undefined })
         }}
       />
       <ModalAltaRapidaServicio

@@ -786,6 +786,9 @@ export type ModalidadAtencion = 0 | 1
 /** PEN = 0 · USD = 1 */
 export type MonedaCompra = 0 | 1
 
+/** PEN = 0 · USD = 1 */
+export type MonedaPrecio = 0 | 1
+
 /** Android = 0 · IOS = 1 */
 export type PlataformaDispositivo = 0 | 1
 
@@ -904,6 +907,8 @@ export type AltaRapidaProductoRequest = {
   marca?: string | null
   categoriaId?: string | null
   stockInicial?: number
+  monedaPrecio?: MonedaPrecio
+  precioIncluyeIgv?: boolean
 }
 
 export type CreateProductoRequest = {
@@ -918,6 +923,10 @@ export type CreateProductoRequest = {
   costo?: number
   marca?: string | null
   fotoUrl?: string | null
+  monedaPrecio?: MonedaPrecio
+  precioIncluyeIgv?: boolean
+  monedaCosto?: MonedaPrecio
+  costoIncluyeIgv?: boolean
 }
 
 export type MovimientoInventarioResponse = {
@@ -953,6 +962,9 @@ export type ProductoResponse = {
   stockMinimoEfectivo: number
   marca: string | null
   fotoUrl: string | null
+  monedaPrecio: MonedaPrecio
+  precioIncluyeIgv: boolean
+  precioListaSoles: number | null
 }
 
 export type RegistrarAjusteRequest = {
@@ -983,6 +995,10 @@ export type UpdateProductoRequest = {
   costo?: number | null
   marca?: string | null
   fotoUrl?: string | null
+  monedaPrecio?: MonedaPrecio | null
+  precioIncluyeIgv?: boolean | null
+  monedaCosto?: MonedaPrecio
+  costoIncluyeIgv?: boolean
 }
 
 // ── Notificaciones ──────────────────────────────────────────────────────────
@@ -1107,6 +1123,7 @@ export type DetalleServicioResponse = {
   porcentajeIgvAplicado: number
   montoIgv: number
   total: number
+  precioUnitarioConIgv: number | null
 }
 
 export type FormatoAtencionClienteDto = {
@@ -1426,6 +1443,7 @@ export type DetallePedidoLimaResponse = {
   porcentajeIgvAplicado: number
   montoIgv: number
   total: number
+  precioUnitarioConIgv: number | null
 }
 
 export type HistorialEstadoPedidoLimaResponse = {
@@ -1855,6 +1873,7 @@ export type DetalleVentaResponse = {
   porcentajeIgvAplicado: number
   montoIgv: number
   total: number
+  precioUnitarioConIgv: number | null
 }
 
 export type MetodoPagoResponse = {

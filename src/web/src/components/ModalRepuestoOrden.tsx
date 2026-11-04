@@ -2,7 +2,7 @@ import { Form, InputNumber, Modal, Select } from 'antd'
 import { useProductos } from '../api/inventario'
 import { useAgregarDetalle } from '../api/ordenes'
 import { AvisoError } from './AvisoError'
-import { soles } from '../utils/formato'
+import { textoPrecioLista } from '../utils/precios'
 
 type Props = {
   abierto: boolean
@@ -82,7 +82,7 @@ export function ModalRepuestoOrden({ abierto, ordenId, onCerrar }: Readonly<Prop
         </Form.Item>
         {elegido && (
           <p className="texto-secundario">
-            Precio {soles(elegido.precioVenta)} · stock disponible {elegido.stockActual} {elegido.unidad}
+            Precio {textoPrecioLista(elegido)} · stock disponible {elegido.stockActual} {elegido.unidad}
           </p>
         )}
         <Form.Item
