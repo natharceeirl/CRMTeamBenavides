@@ -327,37 +327,18 @@ public class ReporteService : IReporteService
     // ------------------------------------------------------------------
     // EXPORTACIÓN EXCEL: Ventas
     // ------------------------------------------------------------------
-    public async Task<byte[]> ExportarVentasExcelAsync(
-        DateTime? fechaDesde,
-        DateTime? fechaHasta,
-        EstadoVenta? estado,
-        Guid? clienteId,
-        bool incluirFinanciero)
+    public async Task<byte[]> ExportarVentasExcelAsync(FiltrosVentas filtros, bool incluirFinanciero)
     {
         var query = _context.Ventas
             .Include(v => v.Cliente)
+            .Include(v => v.OrdenServicio)
             .Include(v => v.Pagos.Where(p => p.Activo))
             .Include(v => v.Comprobante)
             .Include(v => v.Detalles.Where(d => d.Activo))
             .Where(v => v.Activo);
 
-        if (fechaDesde.HasValue)
-        {
-            var desde = DateTime.SpecifyKind(fechaDesde.Value.Date, DateTimeKind.Utc);
-            query = query.Where(v => v.Fecha >= desde);
-        }
-
-        if (fechaHasta.HasValue)
-        {
-            var hastaExclusivo = DateTime.SpecifyKind(fechaHasta.Value.Date.AddDays(1), DateTimeKind.Utc);
-            query = query.Where(v => v.Fecha < hastaExclusivo);
-        }
-
-        if (estado.HasValue)
-            query = query.Where(v => v.Estado == estado.Value);
-
-        if (clienteId.HasValue)
-            query = query.Where(v => v.ClienteId == clienteId.Value);
+        // Los mismos filtros que la lista de ventas, con los días del taller.
+        query = filtros.Aplicar(query);
 
         var ventas = await query.OrderByDescending(v => v.Fecha).ToListAsync();
 

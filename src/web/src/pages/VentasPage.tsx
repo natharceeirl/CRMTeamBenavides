@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import dayjs from 'dayjs'
-import { Button, Popconfirm, Select, Space, Table, Tabs, Tag, type TableProps } from 'antd'
+import dayjs, { type Dayjs } from 'dayjs'
+import { Button, DatePicker, Input, Popconfirm, Select, Space, Table, Tabs, Tag, type TableProps } from 'antd'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { ModalVenta } from '../components/ModalVenta'
@@ -9,6 +9,7 @@ import { EstadoPagoTag } from '../components/EstadoPagoTag'
 import {
   ESTADO_VENTA,
   nombresEstadoVenta,
+  opcionesComprobante,
   puedeAnular,
   puedeConfirmar,
   rutaExportarVentas,
@@ -16,7 +17,10 @@ import {
   useConfirmarVenta,
   useVentas,
   useVentasPendientesComprobante,
+  type FiltroComprobante,
+  type FiltrosVentas,
 } from '../api/ventas'
+import { useClientes } from '../api/clientes'
 import { GERENCIA } from '../api/ordenes'
 import { descargarArchivo } from '../utils/descarga'
 import type { VentaResponse } from '../api/tipos'
@@ -62,6 +66,10 @@ const precioBloqueado = (venta: VentaResponse) =>
 
 export function VentasPage() {
   const [estado, setEstado] = useState<number>()
+  const [clienteId, setClienteId] = useState<string>()
+  const [comprobante, setComprobante] = useState<FiltroComprobante>()
+  const [busqueda, setBusqueda] = useState('')
+  const [rango, setRango] = useState<[Dayjs | null, Dayjs | null] | null>(null)
   const [vista, setVista] = useState('todas')
   const [errorDescarga, setErrorDescarga] = useState<unknown>(null)
   const [modalNueva, setModalNueva] = useState(false)
@@ -71,12 +79,25 @@ export function VentasPage() {
   const puedeVender = tienePermiso(PERMISOS.ventasCrear)
   const puedeAnularVentas = tienePermiso(PERMISOS.ventasAnular)
 
-  const ventas = useVentas({ estado })
+  const puedeVerClientes = tienePermiso(PERMISOS.clientesVer)
+  const clientes = useClientes(puedeVerClientes)
+
+  // La lista y el Excel usan los mismos filtros: se exporta lo que se ve.
+  const filtros: FiltrosVentas = {
+    estado,
+    clienteId,
+    comprobante,
+    busqueda: busqueda || undefined,
+    fechaDesde: rango?.[0]?.format('YYYY-MM-DD'),
+    fechaHasta: rango?.[1]?.format('YYYY-MM-DD'),
+  }
+  const hayFiltros = Object.values(filtros).some((valor) => valor !== undefined)
+  const ventas = useVentas(filtros)
   const sinComprobante = useVentasPendientesComprobante()
 
   const exportar = () => {
     setErrorDescarga(null)
-    descargarArchivo(rutaExportarVentas({ estado }), `ventas-${dayjs().format('YYYY-MM-DD')}.xlsx`).catch(
+    descargarArchivo(rutaExportarVentas(filtros), `ventas-${dayjs().format('YYYY-MM-DD')}.xlsx`).catch(
       setErrorDescarga,
     )
   }
@@ -88,7 +109,12 @@ export function VentasPage() {
       title: 'Documento',
       dataIndex: 'id',
       className: 'num',
-      render: (id: string) => <strong>{referenciaOrden(id)}</strong>,
+      render: (id: string, venta) => (
+        <>
+          <strong>{referenciaOrden(id)}</strong>
+          {venta.numeroOrdenServicio && <div className="texto-secundario">{venta.numeroOrdenServicio}</div>}
+        </>
+      ),
     },
     { title: 'Cliente', dataIndex: 'clienteNombre' },
     {
@@ -203,6 +229,13 @@ export function VentasPage() {
                 children: (
                   <>
                     <div className="filtros">
+                      <Input.Search
+                        aria-label="Buscar venta"
+                        allowClear
+                        placeholder="Cliente, DNI, orden o comprobante"
+                        onSearch={(texto) => setBusqueda(texto.trim())}
+                        style={{ width: 300 }}
+                      />
                       <Select<number>
                         id="filtro-estado-venta"
                         aria-label="Filtrar por estado"
@@ -211,7 +244,40 @@ export function VentasPage() {
                         value={estado}
                         onChange={setEstado}
                         options={opcionesEstado}
-                        style={{ width: 220 }}
+                        style={{ width: 170 }}
+                      />
+                      <Select<FiltroComprobante>
+                        aria-label="Filtrar por comprobante"
+                        allowClear
+                        placeholder="Comprobante"
+                        value={comprobante}
+                        onChange={setComprobante}
+                        options={opcionesComprobante}
+                        style={{ width: 210 }}
+                      />
+                      {puedeVerClientes && (
+                        <Select<string>
+                          aria-label="Filtrar por cliente"
+                          allowClear
+                          showSearch={{ optionFilterProp: 'label' }}
+                          placeholder="Cliente"
+                          value={clienteId}
+                          onChange={setClienteId}
+                          loading={clientes.isPending}
+                          options={(clientes.data ?? []).map((cliente) => ({
+                            value: cliente.id,
+                            label: cliente.nombreCompleto,
+                          }))}
+                          style={{ width: 240 }}
+                        />
+                      )}
+                      <DatePicker.RangePicker
+                        aria-label="Filtrar por fecha"
+                        format="DD/MM/YYYY"
+                        placeholder={['Desde', 'Hasta']}
+                        value={rango}
+                        onChange={(valor) => setRango(valor)}
+                        style={{ width: 260 }}
                       />
                     </div>
                     <Table
@@ -220,7 +286,9 @@ export function VentasPage() {
                       dataSource={ventas.data ?? []}
                       pagination={false}
                       loading={ventas.isPending}
-                      locale={{ emptyText: 'Todavía no hay ventas ni cotizaciones' }}
+                      locale={{
+                        emptyText: hayFiltros ? 'No hay ventas con estos filtros' : 'Todavía no hay ventas ni cotizaciones',
+                      }}
                     />
                   </>
                 ),

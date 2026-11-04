@@ -70,7 +70,8 @@ public static class ReporteEndpoints
             IReporteService service)
         {
             bool incluirFinanciero = user.IsInRole(RolesDefinidos.GerenciaAdmin) || user.HasClaim("permission", PermisosDefinidos.ReportesVerFinancieros);
-            var bytes = await service.ExportarVentasExcelAsync(fechaDesde, fechaHasta, estado, clienteId, incluirFinanciero);
+            var bytes = await service.ExportarVentasExcelAsync(
+                new FiltrosVentas(clienteId, estado, FechaDesde: fechaDesde, FechaHasta: fechaHasta), incluirFinanciero);
             var fileName = $"ventas_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
             return Results.File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }

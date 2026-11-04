@@ -37,6 +37,8 @@ public static class VentaEndpoints
         })
         .WithName("GetMetodosPagoVenta");
 
+        // Las fechas son días del taller (AAAA-MM-DD) y «hasta» incluye el día. La búsqueda
+        // encuentra por cliente, documento, número de orden, comprobante o referencia.
         group.MapGet("/", async (
             Guid? clienteId,
             EstadoVenta? estado,
@@ -44,6 +46,8 @@ public static class VentaEndpoints
             DateTime? fechaDesde,
             DateTime? fechaHasta,
             bool? pendienteComprobante,
+            FiltroComprobanteVenta? comprobante,
+            string? busqueda,
             ClaimsPrincipal user,
             IVentaService service,
             ApplicationDbContext dbContext) =>
@@ -54,7 +58,11 @@ public static class VentaEndpoints
                 return Results.Ok(new List<VentaResponse>());
             }
 
-            var ventas = await service.GetAllAsync(clienteId, estado, ordenServicioId, fechaDesde, fechaHasta, isolation.SoloClienteId, pendienteComprobante);
+            var filtros = new FiltrosVentas(
+                clienteId, estado, ordenServicioId, fechaDesde, fechaHasta,
+                comprobante ?? (pendienteComprobante == true ? FiltroComprobanteVenta.Pendiente : null),
+                busqueda);
+            var ventas = await service.GetAllAsync(filtros, isolation.SoloClienteId);
             return Results.Ok(ventas);
         })
         .RequireAuthorization(PoliticaVerVentas)
@@ -73,17 +81,24 @@ public static class VentaEndpoints
                 return Results.Ok(new List<VentaResponse>());
             }
 
-            var ventas = await service.GetAllAsync(null, EstadoVenta.Confirmada, null, fechaDesde, fechaHasta, isolation.SoloClienteId, pendienteComprobante: true);
+            var filtros = new FiltrosVentas(
+                Estado: EstadoVenta.Confirmada, FechaDesde: fechaDesde, FechaHasta: fechaHasta,
+                Comprobante: FiltroComprobanteVenta.Pendiente);
+            var ventas = await service.GetAllAsync(filtros, isolation.SoloClienteId);
             return Results.Ok(ventas);
         })
         .RequireAuthorization(PoliticaVerVentas)
         .WithName("GetVentasPendientesComprobante");
 
+        // Con los mismos filtros de la lista: exporta lo que se ve.
         group.MapGet("/exportar-excel", async (
             DateTime? fechaDesde,
             DateTime? fechaHasta,
             EstadoVenta? estado,
             Guid? clienteId,
+            Guid? ordenServicioId,
+            FiltroComprobanteVenta? comprobante,
+            string? busqueda,
             ClaimsPrincipal user,
             IReporteService reporteService,
             ApplicationDbContext dbContext) =>
@@ -96,7 +111,8 @@ public static class VentaEndpoints
 
             var efectivoClienteId = isolation.SoloClienteId ?? clienteId;
             bool incluirFinanciero = !isolation.SoloClienteId.HasValue && (user.IsInRole(RolesDefinidos.GerenciaAdmin) || user.HasClaim("permission", PermisosDefinidos.ReportesVerFinancieros));
-            var bytes = await reporteService.ExportarVentasExcelAsync(fechaDesde, fechaHasta, estado, efectivoClienteId, incluirFinanciero);
+            var filtros = new FiltrosVentas(efectivoClienteId, estado, ordenServicioId, fechaDesde, fechaHasta, comprobante, busqueda);
+            var bytes = await reporteService.ExportarVentasExcelAsync(filtros, incluirFinanciero);
             var fileName = $"ventas_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
             return Results.File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         })

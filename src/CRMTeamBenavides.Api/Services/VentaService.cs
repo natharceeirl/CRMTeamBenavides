@@ -16,14 +16,7 @@ public class VentaService : IVentaService
         _auditoriaService = auditoriaService;
     }
 
-    public async Task<List<VentaResponse>> GetAllAsync(
-        Guid? clienteId,
-        EstadoVenta? estado,
-        Guid? ordenServicioId,
-        DateTime? fechaDesde,
-        DateTime? fechaHasta,
-        Guid? soloClienteId = null,
-        bool? pendienteComprobante = null)
+    public async Task<List<VentaResponse>> GetAllAsync(FiltrosVentas filtros, Guid? soloClienteId = null)
     {
         var query = _context.Ventas
             .Include(v => v.Cliente)
@@ -33,41 +26,13 @@ public class VentaService : IVentaService
             .Include(v => v.Comprobante)
             .Where(v => v.Activo);
 
+        // El cliente ve solo sus ventas, pida el filtro que pida.
         if (soloClienteId.HasValue)
         {
-            query = query.Where(v => v.ClienteId == soloClienteId.Value);
-        }
-        else if (clienteId.HasValue)
-        {
-            query = query.Where(v => v.ClienteId == clienteId.Value);
+            filtros = filtros with { ClienteId = soloClienteId.Value };
         }
 
-        if (estado.HasValue)
-        {
-            query = query.Where(v => v.Estado == estado.Value);
-        }
-
-        if (ordenServicioId.HasValue)
-        {
-            query = query.Where(v => v.OrdenServicioId == ordenServicioId.Value);
-        }
-
-        if (pendienteComprobante == true)
-        {
-            query = query.Where(v => v.Comprobante == null && v.Estado == EstadoVenta.Confirmada);
-        }
-
-        if (fechaDesde.HasValue)
-        {
-            var desdeUtc = DateTime.SpecifyKind(fechaDesde.Value, DateTimeKind.Utc);
-            query = query.Where(v => v.Fecha >= desdeUtc);
-        }
-
-        if (fechaHasta.HasValue)
-        {
-            var hastaUtc = DateTime.SpecifyKind(fechaHasta.Value, DateTimeKind.Utc);
-            query = query.Where(v => v.Fecha <= hastaUtc);
-        }
+        query = filtros.Aplicar(query);
 
         var lista = await query
             .OrderByDescending(v => v.Fecha)

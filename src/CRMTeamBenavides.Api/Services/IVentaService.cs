@@ -5,14 +5,8 @@ namespace CRMTeamBenavides.Api.Services;
 
 public interface IVentaService
 {
-    Task<List<VentaResponse>> GetAllAsync(
-        Guid? clienteId,
-        EstadoVenta? estado,
-        Guid? ordenServicioId,
-        DateTime? fechaDesde,
-        DateTime? fechaHasta,
-        Guid? soloClienteId = null,
-        bool? pendienteComprobante = null);
+    /// <summary>El registro de ventas con sus filtros. Con <paramref name="soloClienteId"/>, el cliente ve solo las suyas.</summary>
+    Task<List<VentaResponse>> GetAllAsync(FiltrosVentas filtros, Guid? soloClienteId = null);
 
     Task<ServiceResult<VentaDetalleResponse>> GetByIdAsync(Guid id, Guid? soloClienteId = null);
     Task<ServiceResult<VentaDetalleResponse>> CreateAsync(

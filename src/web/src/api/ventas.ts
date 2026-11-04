@@ -39,10 +39,25 @@ export const puedeRegistrarComprobante = (estadoId: number, tieneComprobante: bo
 export const puedeAnularComprobante = (estadoComprobante: string | null | undefined) =>
   estadoComprobante === 'Emitido'
 
+/** Situación del comprobante por la que se filtra (enum FiltroComprobanteVenta de la API). */
+export type FiltroComprobante = 'Pendiente' | 'Emitido' | 'Anulado'
+
+export const opcionesComprobante: { value: FiltroComprobante; label: string }[] = [
+  { value: 'Emitido', label: 'Con comprobante' },
+  { value: 'Pendiente', label: 'Sin comprobante' },
+  { value: 'Anulado', label: 'Comprobante anulado' },
+]
+
 export type FiltrosVentas = {
   estado?: number
   clienteId?: string
   ordenServicioId?: string
+  /** Días del taller, AAAA-MM-DD; «hasta» incluye el día. */
+  fechaDesde?: string
+  fechaHasta?: string
+  comprobante?: FiltroComprobante
+  /** Cliente, documento, número de orden, comprobante o referencia de la venta. */
+  busqueda?: string
 }
 
 export function rutaVentas(filtros: FiltrosVentas = {}): string {
@@ -50,6 +65,10 @@ export function rutaVentas(filtros: FiltrosVentas = {}): string {
   if (filtros.estado !== undefined) parametros.set('estado', String(filtros.estado))
   if (filtros.clienteId) parametros.set('clienteId', filtros.clienteId)
   if (filtros.ordenServicioId) parametros.set('ordenServicioId', filtros.ordenServicioId)
+  if (filtros.fechaDesde) parametros.set('fechaDesde', filtros.fechaDesde)
+  if (filtros.fechaHasta) parametros.set('fechaHasta', filtros.fechaHasta)
+  if (filtros.comprobante) parametros.set('comprobante', filtros.comprobante)
+  if (filtros.busqueda) parametros.set('busqueda', filtros.busqueda)
 
   const consulta = parametros.toString()
   return `/ventas${consulta ? `?${consulta}` : ''}`
@@ -62,8 +81,8 @@ export const rutaExportarVentas = (filtros: FiltrosVentas = {}) =>
 export const clavesVentas = {
   todas: ['ventas'] as const,
   pendientesComprobante: ['ventas', 'pendientes-comprobante'] as const,
-  lista: (filtros: FiltrosVentas) =>
-    ['ventas', filtros.estado ?? 'todos', filtros.clienteId ?? 'todos', filtros.ordenServicioId ?? 'todas'] as const,
+  // La ruta lleva todos los filtros: cada combinación es su propia consulta.
+  lista: (filtros: FiltrosVentas) => ['ventas', 'lista', rutaVentas(filtros)] as const,
   una: (id: string) => ['ventas', id] as const,
 }
 
