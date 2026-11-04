@@ -29,6 +29,7 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
   bool _cargadoDelServidor = false;
   bool _guardando = false;
   String? _error;
+  String? _errorDiagnostico;
 
   @override
   void dispose() {
@@ -68,7 +69,7 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
 
   Future<void> _guardarDiagnostico() async {
     setState(() {
-      _error = null;
+      _errorDiagnostico = null;
       _guardando = true;
     });
 
@@ -87,7 +88,7 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
       }
     } catch (fallo) {
       if (mounted) {
-        setState(() => _error = '$fallo');
+        setState(() => _errorDiagnostico = '$fallo');
       }
     } finally {
       if (mounted) {
@@ -248,50 +249,6 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
             children: [
               _FichaOrden(datos: datos),
               if (esCliente) _AvanceOrden(datos: datos),
-              _Aprobaciones(
-                orden: datosOrden,
-                ocupado: _guardando,
-                puedeResponder: sesion.tieneAlgunPermiso(Permisos.responderPresupuesto),
-                esCliente: sesion.soloCliente,
-                alResponder: (estado) =>
-                    _responderPresupuesto(estado, esCliente: sesion.soloCliente),
-                puedeEnviar: !sesion.soloCliente && sesion.tienePermiso(Permisos.ordenesEditar),
-                alEnviar: _enviarPresupuesto,
-              ),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: Text(_error!, style: const TextStyle(color: Marca.acento)),
-                ),
-              if (aprobadaBloqueada)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: Text(
-                    'No puede pasar a «Aprobada»: $bloqueoAprobacion',
-                    style: const TextStyle(color: Marca.textoSecundario),
-                  ),
-                ),
-              if (destinos.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final destino in destinos)
-                        destino == EstadoOrden.cancelada
-                            ? OutlinedButton(
-                                onPressed: _guardando ? null : () => _cambiarEstado(destino),
-                                child: const Text('Anular'),
-                              )
-                            : FilledButton(
-                                style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
-                                onPressed: _guardando ? null : () => _cambiarEstado(destino),
-                                child: Text('Pasar a ${nombreEstadoOrden(destino)}'),
-                              ),
-                    ],
-                  ),
-                ),
               const _Titulo('Diagnóstico'),
               if (esCliente)
                 _DiagnosticoCliente(orden: datosOrden)
@@ -334,6 +291,11 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                               : const Text('Guardar diagnóstico'),
                         ),
                       ],
+                      if (_errorDiagnostico != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(_errorDiagnostico!, style: const TextStyle(color: Marca.acento)),
+                        ),
                       if (esEstadoTerminal(datosOrden.estadoId))
                         const Padding(
                           padding: EdgeInsets.only(top: 8),
@@ -477,6 +439,53 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                 else
                   ...datos.historial.map((cambio) => _CambioDeEstado(cambio: cambio)),
               ],
+              // Lo que decide va al final, después de revisar la orden: el presupuesto,
+              // las aprobaciones de Gerencia y el cambio de estado.
+              const SizedBox(height: 16),
+              _Aprobaciones(
+                orden: datosOrden,
+                ocupado: _guardando,
+                puedeResponder: sesion.tieneAlgunPermiso(Permisos.responderPresupuesto),
+                esCliente: sesion.soloCliente,
+                alResponder: (estado) =>
+                    _responderPresupuesto(estado, esCliente: sesion.soloCliente),
+                puedeEnviar: !sesion.soloCliente && sesion.tienePermiso(Permisos.ordenesEditar),
+                alEnviar: _enviarPresupuesto,
+              ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: Text(_error!, style: const TextStyle(color: Marca.acento)),
+                ),
+              if (aprobadaBloqueada)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: Text(
+                    'No puede pasar a «Aprobada»: $bloqueoAprobacion',
+                    style: const TextStyle(color: Marca.textoSecundario),
+                  ),
+                ),
+              if (destinos.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final destino in destinos)
+                        destino == EstadoOrden.cancelada
+                            ? OutlinedButton(
+                                onPressed: _guardando ? null : () => _cambiarEstado(destino),
+                                child: const Text('Anular'),
+                              )
+                            : FilledButton(
+                                style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
+                                onPressed: _guardando ? null : () => _cambiarEstado(destino),
+                                child: Text('Pasar a ${nombreEstadoOrden(destino)}'),
+                              ),
+                    ],
+                  ),
+                ),
             ],
           );
         },

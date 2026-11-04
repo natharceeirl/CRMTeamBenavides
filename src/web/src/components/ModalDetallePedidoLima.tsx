@@ -472,30 +472,29 @@ export function ModalDetallePedidoLima({ pedidoId, onCerrar }: Readonly<Props>) 
           <section style={{ marginTop: 28 }}>
             <div className="seccion-titulo">
               <h2>Seguimiento</h2>
-              {abierto && (
-                <div className="acciones">
-                  {puedeCancelar && (
-                    <Button onClick={() => setPaso({ tipo: 'cancelar' })}>Cancelar pedido</Button>
-                  )}
-                  {destino !== null && puedeEditar && (!entregar || puedeDespachar) && (
-                    <Button
-                      type="primary"
-                      disabled={bloqueadoPorPrecio}
-                      onClick={() => setPaso({ tipo: 'avanzar', destino })}
-                    >
-                      {entregar ? 'Entregar al cliente' : `Marcar ${nombresEstadoPedidoLima[destino].toLowerCase()}`}
-                    </Button>
-                  )}
-                </div>
-              )}
             </div>
+            <HistorialEstados cambios={datos.historial} nombres={nombresEstadoPedidoLima} />
+            {/* Lo que decide va al final, después del historial. */}
             {bloqueadoPorPrecio && (
               <p className="texto-secundario">El pedido sigue cuando Gerencia apruebe el precio.</p>
             )}
             {entregar && !puedeDespachar && (
               <p className="texto-secundario">La entrega descuenta stock: la registra quien tiene permiso de despacho.</p>
             )}
-            <HistorialEstados cambios={datos.historial} nombres={nombresEstadoPedidoLima} />
+            {abierto && (
+              <div className="acciones decisiones-acciones" style={{ marginTop: 16 }}>
+                {puedeCancelar && <Button onClick={() => setPaso({ tipo: 'cancelar' })}>Cancelar pedido</Button>}
+                {destino !== null && puedeEditar && (!entregar || puedeDespachar) && (
+                  <Button
+                    type="primary"
+                    disabled={bloqueadoPorPrecio}
+                    onClick={() => setPaso({ tipo: 'avanzar', destino })}
+                  >
+                    {entregar ? 'Entregar al cliente' : `Marcar ${nombresEstadoPedidoLima[destino].toLowerCase()}`}
+                  </Button>
+                )}
+              </div>
+            )}
           </section>
         </>
       )}

@@ -289,21 +289,6 @@ export function OrdenDetallePage() {
           <Button onClick={() => setModalFotos(true)}>Fotos</Button>
           <Button onClick={() => setModalFormato(true)}>Formato de atención</Button>
           <Button onClick={() => setModalYamaha(true)}>Catálogo Yamaha</Button>
-          {destinos.map((destino) => {
-            const bloqueado = destino === ESTADO.aprobada ? bloqueoAprobacion : null
-            return (
-              <Tooltip key={destino} title={bloqueado}>
-                <Button
-                  danger={destino === ESTADO.cancelada}
-                  type={destino === ESTADO.cancelada ? 'default' : 'primary'}
-                  disabled={Boolean(bloqueado)}
-                  onClick={() => setEstadoDestino(destino)}
-                >
-                  {destino === ESTADO.cancelada ? 'Anular' : `Pasar a ${nombresEstado[destino]}`}
-                </Button>
-              </Tooltip>
-            )
-          })}
         </div>
       </header>
 
@@ -387,19 +372,6 @@ export function OrdenDetallePage() {
                   <h2>Cobro</h2>
                   <div className="acciones">
                     {puedeAdelantar && <Button onClick={() => setModalAdelanto(true)}>Registrar adelanto</Button>}
-                    {puedeLiquidar && (
-                      <Popconfirm
-                        title="Liquidar la orden"
-                        description="Se genera la venta con los ítems y los adelantos de la orden. Los repuestos no se vuelven a descontar del stock."
-                        okText="Liquidar"
-                        cancelText="Cancelar"
-                        onConfirm={liquidarOrden}
-                      >
-                        <Button type="primary" loading={liquidar.isPending}>
-                          Liquidar y generar comprobante
-                        </Button>
-                      </Popconfirm>
-                    )}
                     {datos.ventaId && (
                       <Button onClick={() => setVentaAbierta(datos.ventaId ?? null)}>Ver venta y comprobante</Button>
                     )}
@@ -425,8 +397,6 @@ export function OrdenDetallePage() {
           </section>
 
           <aside className="columna">
-            <PanelAprobaciones orden={datos} />
-
             <section>
               <div className="seccion-titulo">
                 <h2>Diagnóstico</h2>
@@ -577,6 +547,49 @@ export function OrdenDetallePage() {
               </table>
             </section>
           </aside>
+        </div>
+
+        {/* Lo que decide va al final, después de revisar la orden: las aprobaciones,
+            la liquidación y el cambio de estado. Arriba quedan solo las herramientas. */}
+        <div className="decisiones">
+          <PanelAprobaciones orden={datos} />
+          {(destinos.length > 0 || (veCobro && puedeLiquidar)) && (
+            <section>
+              <div className="seccion-titulo">
+                <h2>Estado de la orden</h2>
+              </div>
+              <div className="acciones decisiones-acciones">
+                {veCobro && puedeLiquidar && (
+                  <Popconfirm
+                    title="Liquidar la orden"
+                    description="Se genera la venta con los ítems y los adelantos de la orden. Los repuestos no se vuelven a descontar del stock."
+                    okText="Liquidar"
+                    cancelText="Cancelar"
+                    onConfirm={liquidarOrden}
+                  >
+                    <Button type="primary" loading={liquidar.isPending}>
+                      Liquidar y generar comprobante
+                    </Button>
+                  </Popconfirm>
+                )}
+                {destinos.map((destino) => {
+                  const bloqueado = destino === ESTADO.aprobada ? bloqueoAprobacion : null
+                  return (
+                    <Tooltip key={destino} title={bloqueado}>
+                      <Button
+                        danger={destino === ESTADO.cancelada}
+                        type={destino === ESTADO.cancelada ? 'default' : 'primary'}
+                        disabled={Boolean(bloqueado)}
+                        onClick={() => setEstadoDestino(destino)}
+                      >
+                        {destino === ESTADO.cancelada ? 'Anular' : `Pasar a ${nombresEstado[destino]}`}
+                      </Button>
+                    </Tooltip>
+                  )
+                })}
+              </div>
+            </section>
+          )}
         </div>
       </div>
 

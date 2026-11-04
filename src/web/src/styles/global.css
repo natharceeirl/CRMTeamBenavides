@@ -412,6 +412,27 @@ h4 {
   border-top: 2px solid var(--color-divisor);
 }
 
+/* Al final de la orden: las aprobaciones y el cambio de estado, separados de lo que se revisa. */
+.decisiones {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 40px;
+  align-items: start;
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 2px solid var(--color-texto);
+}
+
+.decisiones-acciones {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .decisiones {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .aprobacion {
   display: flex;
   flex-direction: column;

@@ -222,7 +222,10 @@ void main() {
       final api = await montarOrden(tester, _orden());
 
       final boton = find.text('Enviar presupuesto al cliente');
-      await tester.scrollUntilVisible(boton, 200);
+      // Las aprobaciones van al final de la orden; los campos de texto también desplazan.
+      await tester.scrollUntilVisible(boton, 200, scrollable: find.byType(Scrollable).first);
+      await tester.ensureVisible(boton);
+      await tester.pumpAndSettle();
       await tester.tap(boton);
       await tester.pumpAndSettle();
 
@@ -233,7 +236,7 @@ void main() {
       await montarOrden(tester, _orden(gerencia: EstadoGerencia.pendiente));
 
       final aviso = find.text('Se envía cuando Gerencia resuelva los precios.');
-      await tester.scrollUntilVisible(aviso, 200);
+      await tester.scrollUntilVisible(aviso, 200, scrollable: find.byType(Scrollable).first);
       final boton = tester.widget<ButtonStyleButton>(
         find.ancestor(of: find.text('Enviar presupuesto al cliente'), matching: find.bySubtype<ButtonStyleButton>()),
       );
