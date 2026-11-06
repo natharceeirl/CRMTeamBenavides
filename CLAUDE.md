@@ -61,6 +61,7 @@ El detalle por módulo está en [docs/resumen-cambios-reunion.md](docs/resumen-c
 - **Chatbot:** atención inicial, preguntas frecuentes y derivación a un asesor. Va como widget en la web y la app, e integrado con WhatsApp. Los costos de Meta, del proveedor de mensajería o de IA son del cliente; proveedor y cuenta sin definir.
 - **Comprobantes:** solo se registra la información: tipo, serie, número, cliente, OS y venta, repuestos y servicios, IGV 18 %, método de pago, total, observaciones y estado. No hay emisión electrónica; el alcance de SUNAT, OSE o PSE se valida después.
 - **Excel:** importación de clientes, unidades y repuestos con costo y stock, con errores por fila.
+- **DNI y RUC:** Decolecta completa nombres (RENIEC) y razón social (SUNAT) al registrar clientes y proveedores; 1.000 consultas gratis al mes. Token en `Decolecta__Token` (`DECOLECTA_TOKEN` en el `.env` del servidor). Si no responde o se acaba la cuota, se escribe a mano.
 - **ERP:** no es una integración. En el tablero de Trello, «ERP» nombra los módulos internos. Falta confirmar qué quiere decir en el Gantt.
 - **Web:** es un canal, no una integración.
 
@@ -138,7 +139,7 @@ Principios del documento técnico que no se negocian:
   - Todo cambio de stock usa el bloqueo `FOR UPDATE` de `InventarioService`.
   - Correlativos con secuencia de PostgreSQL o fila bloqueada, nunca `MAX()+1`.
   - `CreadoPorId` y `ModificadoPorId` hoy solo los llena el chatbot; el interceptor de auditoría los completará en todas las tablas.
-- Configuración local: la cadena de conexión y `JwtSettings:SecretKey` van en `dotnet user-secrets`, nunca en `appsettings.json`.
+- Configuración local: la cadena de conexión, `JwtSettings:SecretKey` y, si se usa, `Decolecta:Token` van en `dotnet user-secrets`, nunca en `appsettings.json`.
 - En desarrollo, el documento OpenAPI se sirve en `/openapi/v1.json`.
 
 ## Identidad visual

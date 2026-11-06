@@ -1,3 +1,5 @@
+using CRMTeamBenavides.Api.Services.ConsultaDocumento;
+using CRMTeamBenavides.Api.Features.ConsultaDocumento;
 using CRMTeamBenavides.Api.Features.Motos;
 using System.Text;
 using CRMTeamBenavides.Api.Configuration;
@@ -188,6 +190,13 @@ builder.Services.AddAuthorization(options =>
             PermisosDefinidos.VentasVer,
             PermisosDefinidos.PortalAcceso)));
 
+    // Completar DNI y RUC: quien registra o edita clientes, o registra compras (proveedores).
+    options.AddPolicy(ConsultaDocumentoEndpoints.Politica, policy =>
+        policy.Requirements.Add(new PermissionRequirement(
+            PermisosDefinidos.ClientesCrear,
+            PermisosDefinidos.ClientesEditar,
+            PermisosDefinidos.ComprasRegistrar)));
+
     foreach (var permiso in PermisosDefinidos.Todos)
     {
         options.AddPolicy(permiso, policy =>
@@ -254,6 +263,18 @@ builder.Services.AddScoped<ActivacionCuentaService>();
 builder.Services
     .AddOptions<YamahaSettings>()
     .Bind(builder.Configuration.GetSection(YamahaSettings.SectionName));
+
+// DNI y RUC con Decolecta: 5 segundos como máximo; si no responde, el nombre se escribe a mano.
+builder.Services.AddMemoryCache();
+builder.Services
+    .AddOptions<DecolectaSettings>()
+    .Bind(builder.Configuration.GetSection(DecolectaSettings.SectionName));
+builder.Services.AddHttpClient<IConsultaDocumentoService, DecolectaConsultaDocumentoService>((serviceProvider, client) =>
+{
+    var settings = serviceProvider.GetRequiredService<IOptions<DecolectaSettings>>().Value;
+    client.BaseAddress = new Uri(settings.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds > 0 ? settings.TimeoutSeconds : 5);
+});
 
 builder.Services
     .AddHttpClient<IYamahaApiClient, YamahaApiClient>((serviceProvider, client) =>
@@ -326,6 +347,7 @@ app.MapOrdenServicioEndpoints();
 app.MapCategoriaProductoEndpoints();
 app.MapInventarioEndpoints();
 app.MapMotoEndpoints();
+app.MapConsultaDocumentoEndpoints();
 app.MapVentaEndpoints();
 app.MapDashboardEndpoints();
 app.MapReporteEndpoints();

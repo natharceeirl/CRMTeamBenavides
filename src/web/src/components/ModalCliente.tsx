@@ -1,7 +1,9 @@
 import { Form, Input, Modal, Select } from 'antd'
 import { useGuardarCliente } from '../api/clientes'
-import type { ClienteRequest, ClienteResponse, TipoDocumentoCliente } from '../api/tipos'
+import { useConsultaDocumento, useRellenarConDocumento, type CampoConsultado } from '../api/consultaDocumento'
+import type { ClienteRequest, ClienteResponse, ConsultaDocumentoResponse, TipoDocumentoCliente } from '../api/tipos'
 import { AvisoError } from './AvisoError'
+import { AyudaConsultaDocumento } from './AyudaConsultaDocumento'
 
 type Props = {
   abierto: boolean
@@ -24,9 +26,22 @@ type Campos = {
 
 const sinVacios = (valor?: string) => (valor && valor.trim() !== '' ? valor.trim() : null)
 
+// Con DNI se completa el nombre; con RUC, también la razón social y la dirección.
+const camposDelDocumento = (datos: ConsultaDocumentoResponse): CampoConsultado[] => [
+  ['tipoDocumento', datos.tipoDocumentoId, true],
+  ['nombreCompleto', datos.nombreCompleto],
+  ['razonSocial', datos.razonSocial],
+  ['direccion', datos.direccion],
+]
+
 export function ModalCliente({ abierto, cliente, onCerrar, onGuardado }: Readonly<Props>) {
   const [formulario] = Form.useForm<Campos>()
   const guardar = useGuardarCliente()
+  const numeroDocumento = Form.useWatch('numeroDocumento', formulario)
+  // Al editar, solo si cambió el documento: el cliente ya tiene su nombre.
+  const documentoInicial = cliente?.numeroDocumento ?? cliente?.documentoIdentidad ?? ''
+  const consulta = useConsultaDocumento(numeroDocumento, abierto && numeroDocumento?.trim() !== documentoInicial)
+  useRellenarConDocumento(formulario, consulta.data, camposDelDocumento)
 
   const enviar = async (campos: Campos) => {
     const doc = sinVacios(campos.numeroDocumento)
@@ -91,16 +106,6 @@ export function ModalCliente({ abierto, cliente, onCerrar, onGuardado }: Readonl
           observaciones: cliente?.observaciones ?? '',
         }}
       >
-        <Form.Item
-          label="Nombre completo"
-          name="nombreCompleto"
-          rules={[{ required: true, message: 'Ingresa el nombre del cliente' }]}
-        >
-          <Input placeholder="Nombre y apellidos, o contacto de la empresa" />
-        </Form.Item>
-        <Form.Item label="Razón social" name="razonSocial">
-          <Input placeholder="Solo si el cliente es empresa" />
-        </Form.Item>
         <Form.Item label="Tipo de documento" name="tipoDocumento">
           <Select
             allowClear
@@ -115,6 +120,7 @@ export function ModalCliente({ abierto, cliente, onCerrar, onGuardado }: Readonl
         <Form.Item
           label="Número de documento"
           name="numeroDocumento"
+          extra={<AyudaConsultaDocumento consulta={consulta} avisarClienteExistente={!cliente} />}
           rules={[
             ({ getFieldValue }) => ({
               validator(_, value) {
@@ -131,7 +137,17 @@ export function ModalCliente({ abierto, cliente, onCerrar, onGuardado }: Readonl
             }),
           ]}
         >
-          <Input placeholder="DNI, RUC o documento de identidad" />
+          <Input placeholder="DNI o RUC: el nombre se completa solo" />
+        </Form.Item>
+        <Form.Item
+          label="Nombre completo"
+          name="nombreCompleto"
+          rules={[{ required: true, message: 'Ingresa el nombre del cliente' }]}
+        >
+          <Input placeholder="Nombre y apellidos, o contacto de la empresa" />
+        </Form.Item>
+        <Form.Item label="Razón social" name="razonSocial">
+          <Input placeholder="Solo si el cliente es empresa" />
         </Form.Item>
         <Form.Item label="Teléfono" name="telefono">
           <Input />

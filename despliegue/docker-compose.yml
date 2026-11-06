@@ -56,6 +56,9 @@ services:
       Proxy__RedesConfiables__0: ${RED_INTERNA:-172.30.0.0/24}
       Notificaciones__Proveedor: ${NOTIFICACIONES_PROVEEDOR:-Registro}
       Notificaciones__Firebase__CredencialesJson: ${FIREBASE_CREDENCIALES_JSON:-}
+      # DNI (RENIEC) y RUC (SUNAT) con Decolecta para completar clientes y proveedores.
+      # Sin token, la consulta avisa y el nombre se escribe a mano.
+      Decolecta__Token: ${DECOLECTA_TOKEN:-}
       # Yamaha v3: integración de servicios de datos (Ventas, Stock, Servicio Técnico).
       # Permanece en "false" por defecto hasta tener credenciales y autorización para enviar.
       YamahaApi__Enabled: ${YAMAHA_ENABLED:-false}

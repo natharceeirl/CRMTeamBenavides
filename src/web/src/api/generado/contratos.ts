@@ -708,6 +708,24 @@ export type TipoCambioResponse = {
   ultimoUsuarioNombre: string | null
 }
 
+// ── ConsultaDocumento ───────────────────────────────────────────────────────
+
+export type ConsultaDocumentoResponse = {
+  tipoDocumento: string
+  tipoDocumentoId: number
+  numeroDocumento: string
+  nombreCompleto: string
+  nombres: string | null
+  apellidoPaterno: string | null
+  apellidoMaterno: string | null
+  razonSocial: string | null
+  direccion: string | null
+  estado: string | null
+  condicion: string | null
+  clienteExistenteId: string | null
+  clienteExistenteNombre: string | null
+}
+
 // ── Dashboard ───────────────────────────────────────────────────────────────
 
 export type ClientesVehiculosResumenResponse = {

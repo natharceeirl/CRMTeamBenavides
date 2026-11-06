@@ -5,6 +5,8 @@ import { useNavigate, useSearchParams } from 'react-router'
 import { BarraSuperior } from '../components/BarraSuperior'
 import { AvisoError } from '../components/AvisoError'
 import { useClientePorDocumento } from '../api/clientes'
+import { useConsultaDocumento, useRellenarConDocumento, type CampoConsultado } from '../api/consultaDocumento'
+import { AyudaConsultaDocumento } from '../components/AyudaConsultaDocumento'
 import { useHistorialServicioUnidad } from '../api/portal'
 import {
   TIPO_DOCUMENTO_CLIENTE,
@@ -92,6 +94,11 @@ const unidadNuevaInicial: CamposUnidadNueva = {
   modelo: '',
 }
 
+/** Lo que trae la consulta del DNI o RUC para el cliente que se registra con la orden. */
+const camposClienteNuevo = (datos: { nombreCompleto: string }): CampoConsultado[] => [
+  [['clienteNuevo', 'nombreCompleto'], datos.nombreCompleto],
+]
+
 export function NuevaOrdenPage() {
   const navigate = useNavigate()
   const [formulario] = Form.useForm<Campos>()
@@ -139,6 +146,10 @@ export function NuevaOrdenPage() {
     setQuiereUnidadNueva(false)
     formulario.setFieldsValue({ vehiculoId: undefined })
   }
+
+  // El cliente que no está registrado se completa con RENIEC o SUNAT.
+  const consultaDocumento = useConsultaDocumento(documentoBuscado, clienteNoEncontrado)
+  useRellenarConDocumento(formulario, consultaDocumento.data, camposClienteNuevo)
 
   // El tipo de documento del cliente nuevo se propone por la cantidad de dígitos.
   useEffect(() => {
@@ -343,6 +354,7 @@ export function NuevaOrdenPage() {
                     <Form.Item
                       label="Nombre completo o razón social"
                       name={['clienteNuevo', 'nombreCompleto']}
+                      extra={<AyudaConsultaDocumento consulta={consultaDocumento} avisarClienteExistente={false} />}
                       rules={[{ required: true, whitespace: true, message: 'Ingresa el nombre del cliente' }]}
                     >
                       <Input maxLength={200} />

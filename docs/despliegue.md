@@ -49,7 +49,7 @@ Hace falta el servidor con Docker y el swap, el DNS del dominio apuntando a él 
    cp .env.ejemplo .env
    ```
 
-   Completar `DOMINIO`, `POSTGRES_PASSWORD` y `JWT_SECRET_KEY`. Las claves se generan con `openssl rand -hex 32` y `openssl rand -hex 48`.
+   Completar `DOMINIO`, `POSTGRES_PASSWORD` y `JWT_SECRET_KEY`. `DECOLECTA_TOKEN` es opcional: con él, el DNI y el RUC completan el nombre del cliente o proveedor; sin él, se escribe a mano. Las claves se generan con `openssl rand -hex 32` y `openssl rand -hex 48`.
 2. Levantar solo la base:
 
    ```

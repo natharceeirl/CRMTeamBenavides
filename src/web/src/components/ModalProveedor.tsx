@@ -1,7 +1,14 @@
 import { Form, Input, Modal, Select } from 'antd'
 import { useGuardarProveedor } from '../api/compras'
-import { TIPO_DOCUMENTO_CLIENTE, type ProveedorResponse, type TipoDocumentoCliente } from '../api/tipos'
+import { useConsultaDocumento, useRellenarConDocumento, type CampoConsultado } from '../api/consultaDocumento'
+import {
+  TIPO_DOCUMENTO_CLIENTE,
+  type ConsultaDocumentoResponse,
+  type ProveedorResponse,
+  type TipoDocumentoCliente,
+} from '../api/tipos'
 import { AvisoError } from './AvisoError'
+import { AyudaConsultaDocumento } from './AyudaConsultaDocumento'
 
 type Props = {
   abierto: boolean
@@ -28,8 +35,18 @@ const LARGO_DOCUMENTO: Record<number, number> = {
 
 const sinVacios = (valor?: string) => (valor?.trim() ? valor.trim() : null)
 
+// Con RUC se completan la razón social y la dirección de SUNAT; con DNI, el nombre.
+const camposDelProveedor = (datos: ConsultaDocumentoResponse): CampoConsultado[] => [
+  ['tipoDocumento', datos.tipoDocumentoId, true],
+  ['razonSocial', datos.nombreCompleto],
+  ['direccion', datos.direccion],
+]
+
 export function ModalProveedor({ abierto, proveedor, onCerrar, onGuardado }: Readonly<Props>) {
   const [formulario] = Form.useForm<Campos>()
+  const numeroDocumento = Form.useWatch('numeroDocumento', formulario)
+  const consulta = useConsultaDocumento(numeroDocumento, abierto && numeroDocumento?.trim() !== (proveedor?.numeroDocumento ?? ''))
+  useRellenarConDocumento(formulario, consulta.data, camposDelProveedor)
   const guardar = useGuardarProveedor()
 
   const cerrar = () => {
@@ -96,6 +113,7 @@ export function ModalProveedor({ abierto, proveedor, onCerrar, onGuardado }: Rea
             label="Número de documento"
             name="numeroDocumento"
             dependencies={['tipoDocumento']}
+            extra={<AyudaConsultaDocumento consulta={consulta} avisarClienteExistente={false} />}
             rules={[
               { required: true, whitespace: true, message: 'Ingresa el documento' },
               ({ getFieldValue }) => ({
