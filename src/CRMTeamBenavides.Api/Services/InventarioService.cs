@@ -130,8 +130,9 @@ public class InventarioService : IInventarioService
         }
 
         var codigoNormalizado = request.Codigo.Trim();
+        // Solo entre los activos: el código de un producto dado de baja se puede volver a usar.
         var codigoExiste = await _context.Productos
-            .AnyAsync(p => p.Codigo.ToLower() == codigoNormalizado.ToLower());
+            .AnyAsync(p => p.Activo && p.Codigo.ToLower() == codigoNormalizado.ToLower());
 
         if (codigoExiste)
         {
@@ -320,7 +321,7 @@ public class InventarioService : IInventarioService
 
         var codigoNormalizado = request.Codigo.Trim();
         var codigoExiste = await _context.Productos
-            .AnyAsync(p => p.Codigo.ToLower() == codigoNormalizado.ToLower() && p.Id != id);
+            .AnyAsync(p => p.Activo && p.Codigo.ToLower() == codigoNormalizado.ToLower() && p.Id != id);
 
         if (codigoExiste)
         {

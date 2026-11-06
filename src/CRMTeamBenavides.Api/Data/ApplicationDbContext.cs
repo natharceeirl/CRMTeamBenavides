@@ -122,7 +122,10 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
         {
             entity.Property(p => p.PrecioVenta).HasPrecision(12, 2);
             entity.Property(p => p.Costo).HasPrecision(12, 2);
-            entity.HasIndex(p => p.Codigo).IsUnique();
+            // Único entre los activos, como la placa y la serie: un código dado de baja se reutiliza.
+            entity.HasIndex(p => p.Codigo)
+                .IsUnique()
+                .HasFilter("\"Activo\" = true");
         });
 
         modelBuilder.Entity<MovimientoInventario>(entity =>

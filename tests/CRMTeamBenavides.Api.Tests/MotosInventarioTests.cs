@@ -184,6 +184,23 @@ public class MotosInventarioTests : IDisposable
     }
 
     [Fact]
+    public async Task El_codigo_de_un_modelo_dado_de_baja_se_puede_volver_a_usar()
+    {
+        var e = await EscenarioAsync();
+        InventarioService Servicio(IServiceProvider sp) =>
+            new(sp.GetRequiredService<ApplicationDbContext>(), sp.GetRequiredService<IAuditoriaService>());
+        var categoriaId = await _identity.ConAsync(sp => sp.GetRequiredService<ApplicationDbContext>().CategoriasProducto.Select(c => c.Id).FirstAsync());
+        var nuevo = new CreateProductoRequest(categoriaId, "FZ25", "Motocicleta Yamaha FZ 25", null, "unidad", 15000m, 0, Tipo: TipoProducto.Vehiculo);
+
+        var mientrasEstaActivo = await _identity.ConAsync(sp => Servicio(sp).CreateProductoAsync(nuevo));
+        await _identity.ConAsync(sp => Servicio(sp).DeleteProductoAsync(e.OtroModeloId));
+        var despuesDeLaBaja = await _identity.ConAsync(sp => Servicio(sp).CreateProductoAsync(nuevo));
+
+        Assert.Equal("Ya existe un producto registrado con el código 'FZ25'.", mientrasEstaActivo.Error);
+        Assert.True(despuesDeLaBaja.IsSuccess, despuesDeLaBaja.Error);
+    }
+
+    [Fact]
     public async Task Una_moto_que_ya_estaba_en_la_tienda_se_ingresa_con_su_serie()
     {
         var e = await EscenarioAsync();

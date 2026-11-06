@@ -2107,7 +2107,8 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.HasIndex("CategoriaId");
 
                     b.HasIndex("Codigo")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"Activo\" = true");
 
                     b.ToTable("Productos");
                 });

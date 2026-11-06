@@ -132,7 +132,7 @@ Principios del documento técnico que no se negocian:
 - Convenciones del backend: dominio en español, identificadores `Guid`, `BaseEntity` con campos de auditoría y borrado lógico (`Activo`).
 - Reglas de base de datos (detalle en el plan):
   - Una migración de EF por bloque, con nombre en español. En producción se aplica con un script idempotente revisado; la API no migra sola al arrancar.
-  - Índices únicos filtrados por `Activo`. Hoy `Vehiculos.Placa` y `Productos.Codigo` no lo están y una placa dada de baja no se puede volver a registrar.
+  - Índices únicos filtrados por `Activo`: `Vehiculos.Placa`, `Vehiculos.NumeroSerieVIN`, `Productos.Codigo` y `UnidadesInventario.NumeroSerieVIN`. Un valor dado de baja se puede volver a usar.
   - Montos en `numeric(12,2)` y tipo de cambio en `numeric(10,4)`.
   - Estados y tipos como enum o catálogo, nunca texto libre.
   - Todo cambio de stock usa el bloqueo `FOR UPDATE` de `InventarioService`.
