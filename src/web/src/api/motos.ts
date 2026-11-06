@@ -35,6 +35,19 @@ export function useMotos(filtros: FiltrosMotos = {}, habilitado = true) {
   })
 }
 
+/** Da de baja un modelo de moto; la API lo impide si todavía tiene motos en stock. */
+export function useDarDeBajaModelo() {
+  const consultas = useQueryClient()
+  return useMutation({
+    meta: { exito: 'Modelo dado de baja' },
+    mutationFn: (productoId: string) => solicitar<void>(`/productos/${productoId}`, { metodo: 'DELETE' }),
+    onSuccess: async () => {
+      await consultas.invalidateQueries({ queryKey: clavesInventario.productos })
+      await consultas.invalidateQueries({ queryKey: clavesMotos.todas })
+    },
+  })
+}
+
 /** Ingresa una moto que ya estaba en la tienda: suma 1 al stock de su modelo. */
 export function useIngresarMoto() {
   const consultas = useQueryClient()

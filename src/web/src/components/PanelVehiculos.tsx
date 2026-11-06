@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Button, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, type TableProps } from 'antd'
+import { Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, type TableProps } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import { TIPO_PRODUCTO, useProductos } from '../api/inventario'
-import { ESTADO_MOTO, useIngresarMoto, useMotos } from '../api/motos'
+import { ESTADO_MOTO, useDarDeBajaModelo, useIngresarMoto, useMotos } from '../api/motos'
 import type { MotoResponse, ProductoResponse } from '../api/tipos'
 import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
@@ -39,6 +39,8 @@ export function PanelVehiculos() {
   const puedeCrear = tienePermiso(PERMISOS.inventarioCrear)
   const puedeEditar = tienePermiso(PERMISOS.inventarioEditar)
   const puedeIngresar = tienePermiso(PERMISOS.inventarioAjustar)
+  const puedeDarDeBaja = tienePermiso(PERMISOS.inventarioEliminar)
+  const darDeBaja = useDarDeBajaModelo()
 
   const [estado, setEstado] = useState<number | undefined>(ESTADO_MOTO.enStock)
   const [busqueda, setBusqueda] = useState('')
@@ -84,6 +86,20 @@ export function PanelVehiculos() {
             >
               Editar
             </Button>
+          )}
+          {/* Con motos en stock no se puede: quedarían sin modelo. */}
+          {puedeDarDeBaja && modelo.stockActual === 0 && (
+            <Popconfirm
+              title="Dar de baja el modelo"
+              description="Deja de aparecer en compras y ventas. Las ventas ya hechas lo conservan."
+              okText="Dar de baja"
+              cancelText="Cancelar"
+              onConfirm={() => darDeBaja.mutate(modelo.id)}
+            >
+              <Button type="link" danger>
+                Dar de baja
+              </Button>
+            </Popconfirm>
           )}
         </Space>
       ),
@@ -142,7 +158,7 @@ export function PanelVehiculos() {
 
   return (
     <>
-      <AvisoError error={modelos.error ?? motos.error} />
+      <AvisoError error={modelos.error ?? motos.error ?? darDeBaja.error} />
       <section>
         <div className="seccion-titulo">
           <h2>Modelos</h2>

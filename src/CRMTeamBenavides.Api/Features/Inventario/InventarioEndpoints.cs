@@ -110,6 +110,7 @@ public static class InventarioEndpoints
             {
                 ServiceResultStatus.Success => Results.NoContent(),
                 ServiceResultStatus.NotFound => Results.NotFound(),
+                ServiceResultStatus.ValidationError => Results.BadRequest(new { mensaje = result.Error }),
                 _ => Results.Problem()
             };
         })

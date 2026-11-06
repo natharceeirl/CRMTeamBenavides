@@ -414,6 +414,18 @@ public class InventarioService : IInventarioService
             return ServiceResult<bool>.NotFound();
         }
 
+        // Un modelo con motos en stock no se da de baja: esas motos quedarían sin modelo.
+        if (producto.Tipo == TipoProducto.Vehiculo)
+        {
+            var enStock = await _context.UnidadesInventario
+                .CountAsync(u => u.ProductoId == producto.Id && u.Activo && u.Estado == EstadoUnidadInventario.EnStock);
+            if (enStock > 0)
+            {
+                return ServiceResult<bool>.Invalid(
+                    $"El modelo tiene {enStock} {(enStock == 1 ? "moto" : "motos")} en stock: véndelas o anula su compra antes de darlo de baja.");
+            }
+        }
+
         producto.Activo = false;
         producto.FechaModificacion = DateTime.UtcNow;
 

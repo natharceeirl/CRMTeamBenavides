@@ -169,6 +169,21 @@ public class MotosInventarioTests : IDisposable
     }
 
     [Fact]
+    public async Task Un_modelo_con_motos_en_stock_no_se_da_de_baja_y_uno_sin_motos_si()
+    {
+        var e = await EscenarioAsync();
+        InventarioService Servicio(IServiceProvider sp) =>
+            new(sp.GetRequiredService<ApplicationDbContext>(), sp.GetRequiredService<IAuditoriaService>());
+
+        var conMotos = await _identity.ConAsync(sp => Servicio(sp).DeleteProductoAsync(e.ModeloId));
+        var sinMotos = await _identity.ConAsync(sp => Servicio(sp).DeleteProductoAsync(e.OtroModeloId));
+
+        Assert.False(conMotos.IsSuccess);
+        Assert.Equal("El modelo tiene 2 motos en stock: véndelas o anula su compra antes de darlo de baja.", conMotos.Error);
+        Assert.True(sinMotos.IsSuccess, sinMotos.Error);
+    }
+
+    [Fact]
     public async Task Una_moto_que_ya_estaba_en_la_tienda_se_ingresa_con_su_serie()
     {
         var e = await EscenarioAsync();
