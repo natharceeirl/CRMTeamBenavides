@@ -1,5 +1,5 @@
 import { Form, InputNumber, Modal, Select } from 'antd'
-import { useProductos } from '../api/inventario'
+import { TIPO_PRODUCTO, useProductos } from '../api/inventario'
 import { useAgregarDetalle } from '../api/ordenes'
 import { AvisoError } from './AvisoError'
 import { textoPrecioLista } from '../utils/precios'
@@ -21,7 +21,8 @@ type Campos = {
  */
 export function ModalRepuestoOrden({ abierto, ordenId, onCerrar }: Readonly<Props>) {
   const [formulario] = Form.useForm<Campos>()
-  const productos = useProductos()
+  // Las motos se venden desde Ventas, con su serie: aquí solo van repuestos.
+  const productos = useProductos({ tipo: TIPO_PRODUCTO.repuesto })
   const agregar = useAgregarDetalle()
 
   const productoId = Form.useWatch('productoId', formulario)

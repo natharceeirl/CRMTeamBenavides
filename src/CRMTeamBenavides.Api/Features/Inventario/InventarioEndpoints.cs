@@ -17,9 +17,10 @@ public static class InventarioEndpoints
             string? busqueda,
             bool? bajoStock,
             string? marca,
+            TipoProducto? tipo,
             IInventarioService service) =>
         {
-            var productos = await service.GetAllProductosAsync(categoriaId, busqueda, bajoStock, marca);
+            var productos = await service.GetAllProductosAsync(categoriaId, busqueda, bajoStock, marca, tipo);
             return Results.Ok(productos);
         })
         .RequireAuthorization(PermisosDefinidos.InventarioVer)

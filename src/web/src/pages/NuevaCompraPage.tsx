@@ -8,7 +8,7 @@ import { AvisoError } from '../components/AvisoError'
 import { ModalProveedor } from '../components/ModalProveedor'
 import { ModalAltaRapidaRepuesto } from '../components/ModalesAltaRapida'
 import { nombresTipoComprobanteCompra, useProveedores, useRegistrarCompra } from '../api/compras'
-import { useProductos } from '../api/inventario'
+import { esMoto, useProductos } from '../api/inventario'
 import { useConfiguracionEmpresa, useTipoCambio } from '../api/configuracion'
 import { useMetodosPago } from '../api/pagos'
 import { useCajaActual } from '../api/caja'
@@ -38,7 +38,21 @@ type LineaForm = {
   cantidad?: number
   precioUnitario?: number
   tipoAfectacionIgv: TipoAfectacionIgv
+  /** Si el repuesto es una moto: la serie y los datos de cada una. */
+  motos?: MotoForm[]
 }
+
+type MotoForm = {
+  numeroSerieVIN?: string
+  numeroMotor?: string
+  anio?: number | null
+  color?: string
+  dua?: string
+  itemDua?: string
+}
+
+/** Más motos en una línea no caben en pantalla: se registran en varias líneas. */
+const MAXIMO_MOTOS_POR_LINEA = 30
 
 type PagoForm = {
   monto?: number
@@ -145,8 +159,10 @@ export function NuevaCompraPage() {
   // Se busca por código o nombre; un lector de código de barras escribe el código y Enter elige el que coincide.
   const opcionesRepuesto = catalogo.map((producto) => ({
     value: producto.id,
-    label: `${producto.codigo} · ${producto.nombre}`,
+    label: `${producto.codigo} · ${producto.nombre}${esMoto(producto) ? ' (moto)' : ''}`,
   }))
+  const esLineaDeMoto = (linea?: LineaForm) =>
+    linea?.tipo === 'repuesto' && esMoto(productos.data?.find((producto) => producto.id === linea.productoId))
 
   const cambiarMoneda = (nueva: MonedaCompra) => {
     if (nueva === MONEDA_COMPRA.usd && !formulario.getFieldValue('tipoCambio')) {
@@ -196,6 +212,16 @@ export function NuevaCompraPage() {
         cantidad: linea.cantidad ?? 0,
         precioUnitario: linea.precioUnitario ?? 0,
         tipoAfectacionIgv: linea.tipoAfectacionIgv,
+        motos: esLineaDeMoto(linea)
+          ? (linea.motos ?? []).slice(0, linea.cantidad ?? 0).map((moto) => ({
+              numeroSerieVIN: moto.numeroSerieVIN?.trim() ?? '',
+              numeroMotor: sinVacios(moto.numeroMotor),
+              anio: moto.anio ?? null,
+              color: sinVacios(moto.color),
+              dua: sinVacios(moto.dua),
+              itemDua: sinVacios(moto.itemDua),
+            }))
+          : null,
       })),
       pagos: campos.registrarPagos
         ? (campos.pagos ?? []).map((pago) => ({
@@ -506,6 +532,45 @@ export function NuevaCompraPage() {
                         <Form.Item name={[campo.name, 'tipo']} hidden>
                           <Input />
                         </Form.Item>
+                        {esLineaDeMoto(linea) && (
+                          <div className="motos-compra">
+                            <div className="texto-secundario">
+                              Cada moto entra al stock con su serie. Al venderla, sus datos pasan a la unidad del cliente.
+                            </div>
+                            {(linea?.cantidad ?? 0) > MAXIMO_MOTOS_POR_LINEA ? (
+                              <div className="texto-secundario">
+                                Para más de {MAXIMO_MOTOS_POR_LINEA} motos, regístralas en varias líneas.
+                              </div>
+                            ) : (
+                              Array.from({ length: linea?.cantidad ?? 0 }, (_, indice) => (
+                                <div key={indice} className="moto-compra">
+                                  <Form.Item
+                                    label={`Moto ${indice + 1}: serie (VIN o chasis)`}
+                                    name={[campo.name, 'motos', indice, 'numeroSerieVIN']}
+                                    rules={[{ required: true, whitespace: true, message: 'Escribe la serie' }]}
+                                  >
+                                    <Input maxLength={50} style={{ textTransform: 'uppercase' }} />
+                                  </Form.Item>
+                                  <Form.Item label="Motor" name={[campo.name, 'motos', indice, 'numeroMotor']}>
+                                    <Input maxLength={50} style={{ textTransform: 'uppercase' }} />
+                                  </Form.Item>
+                                  <Form.Item label="Año" name={[campo.name, 'motos', indice, 'anio']}>
+                                    <InputNumber min={1950} max={2100} precision={0} style={{ width: '100%' }} />
+                                  </Form.Item>
+                                  <Form.Item label="Color" name={[campo.name, 'motos', indice, 'color']}>
+                                    <Input maxLength={50} />
+                                  </Form.Item>
+                                  <Form.Item label="DUA" name={[campo.name, 'motos', indice, 'dua']}>
+                                    <Input maxLength={50} />
+                                  </Form.Item>
+                                  <Form.Item label="Ítem DUA" name={[campo.name, 'motos', indice, 'itemDua']}>
+                                    <Input maxLength={20} />
+                                  </Form.Item>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   })}

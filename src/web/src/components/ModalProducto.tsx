@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { AutoComplete, Button, Form, Input, InputNumber, Modal, Select } from 'antd'
+import { AutoComplete, Button, Checkbox, Form, Input, InputNumber, Modal, Select } from 'antd'
 import {
+  TIPO_PRODUCTO,
   useAltaRapidaCategoria,
   useCategoriasProducto,
   useGuardarProducto,
@@ -16,6 +17,8 @@ import { MONEDA_PRECIO } from '../utils/precios'
 type Props = {
   abierto: boolean
   producto?: ProductoResponse | null
+  /** Un modelo de moto nace sin stock: cada moto entra con su serie. */
+  moto?: boolean
   onCerrar: () => void
 }
 
@@ -35,11 +38,13 @@ type Campos = {
   stockMinimo?: number | null
   marca?: string
   fotoUrl?: string
+  /** Al editar: un repuesto sin stock pasa a ser modelo de moto, o al revés. */
+  esModeloMoto?: boolean
 }
 
 const sinVacios = (valor?: string) => (valor && valor.trim() !== '' ? valor.trim() : null)
 
-export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) {
+export function ModalProducto({ abierto, producto, moto = false, onCerrar }: Readonly<Props>) {
   const [formulario] = Form.useForm<Campos>()
   const categorias = useCategoriasProducto()
   const marcas = useMarcasProductos()
@@ -58,6 +63,7 @@ export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) 
   }
 
   const editando = Boolean(producto)
+  const esModeloMoto = producto ? producto.tipoId === TIPO_PRODUCTO.vehiculo : moto
 
   const cerrar = () => {
     guardar.reset()
@@ -88,7 +94,20 @@ export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) 
     // salidas o ajustes, que es lo que deja rastro en el kardex.
     await guardar.mutateAsync({
       id: producto?.id,
-      datos: producto ? comunes : { ...comunes, stockInicial: campos.stockInicial ?? 0 },
+      datos: producto
+        ? {
+            ...comunes,
+            // Sin la casilla (hay stock), el tipo se queda como está.
+            tipo:
+              campos.esModeloMoto === undefined
+                ? (producto.tipoId as 0 | 1)
+                : campos.esModeloMoto
+                  ? TIPO_PRODUCTO.vehiculo
+                  : TIPO_PRODUCTO.repuesto,
+          }
+        : esModeloMoto
+          ? { ...comunes, stockInicial: 0, tipo: TIPO_PRODUCTO.vehiculo }
+          : { ...comunes, stockInicial: campos.stockInicial ?? 0 },
     })
 
     cerrar()
@@ -96,7 +115,15 @@ export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) 
 
   return (
     <Modal
-      title={editando ? 'Editar producto' : 'Registrar producto'}
+      title={
+        esModeloMoto
+          ? editando
+            ? 'Editar modelo de moto'
+            : 'Nuevo modelo de moto'
+          : editando
+            ? 'Editar producto'
+            : 'Registrar producto'
+      }
       open={abierto}
       onCancel={cerrar}
       onOk={() => formulario.submit()}
@@ -126,6 +153,7 @@ export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) 
           monedaCosto: MONEDA_PRECIO.pen,
           costoIncluyeIgv: false,
           stockInicial: 0,
+          esModeloMoto: producto?.tipoId === TIPO_PRODUCTO.vehiculo,
           stockMinimo: producto?.stockMinimo ?? undefined,
           marca: producto?.marca ?? '',
           fotoUrl: producto?.fotoUrl ?? '',
@@ -207,9 +235,15 @@ export function ModalProducto({ abierto, producto, onCerrar }: Readonly<Props>) 
           nombreIncluyeIgv="costoIncluyeIgv"
           ayudaDolares="Se guarda en soles al tipo de cambio de hoy."
         />
-        {!editando && (
+        {!editando && !esModeloMoto && (
           <Form.Item label="Stock inicial" name="stockInicial">
             <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+        )}
+        {/* El tipo cambia solo sin stock: el stock de una moto son sus series. */}
+        {editando && producto?.stockActual === 0 && (
+          <Form.Item name="esModeloMoto" valuePropName="checked" extra="Sus motos entran por Compras, cada una con su serie.">
+            <Checkbox>Es un modelo de moto</Checkbox>
           </Form.Item>
         )}
         <Form.Item

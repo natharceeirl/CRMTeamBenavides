@@ -48,7 +48,7 @@ describe('menú según el rol', () => {
 
     montarLayout()
 
-    await waitFor(() => expect(enlacesDelMenu()).toEqual(['Clientes', 'Repuestos', 'Ventas']))
+    await waitFor(() => expect(enlacesDelMenu()).toEqual(['Clientes', 'Inventario', 'Ventas']))
     expect(await screen.findByText('US$ 3.762')).toBeTruthy()
   })
 

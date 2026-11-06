@@ -47,6 +47,7 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
     public DbSet<CategoriaProducto> CategoriasProducto => Set<CategoriaProducto>();
     public DbSet<Producto> Productos => Set<Producto>();
     public DbSet<MovimientoInventario> MovimientosInventario => Set<MovimientoInventario>();
+    public DbSet<UnidadInventario> UnidadesInventario => Set<UnidadInventario>();
 
     // Ventas y Pagos
     public DbSet<Venta> Ventas => Set<Venta>();
@@ -127,6 +128,28 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
         modelBuilder.Entity<MovimientoInventario>(entity =>
         {
             entity.Property(m => m.CostoUnitario).HasPrecision(12, 2);
+        });
+
+        // Cada moto del inventario: serie única entre las activas, como en las unidades de los clientes.
+        modelBuilder.Entity<UnidadInventario>(entity =>
+        {
+            entity.ToTable("UnidadesInventario");
+            entity.Property(u => u.NumeroSerieVIN).HasMaxLength(50);
+            entity.Property(u => u.NumeroMotor).HasMaxLength(50);
+            entity.Property(u => u.Color).HasMaxLength(50);
+            entity.Property(u => u.Dua).HasMaxLength(50);
+            entity.Property(u => u.ItemDua).HasMaxLength(20);
+            entity.Property(u => u.CostoUnitario).HasPrecision(12, 2);
+
+            entity.HasIndex(u => u.NumeroSerieVIN)
+                .IsUnique()
+                .HasFilter("\"Activo\" = true");
+            entity.HasIndex(u => new { u.ProductoId, u.Estado });
+
+            entity.HasOne(u => u.Producto).WithMany().HasForeignKey(u => u.ProductoId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(u => u.Compra).WithMany().HasForeignKey(u => u.CompraId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(u => u.Venta).WithMany().HasForeignKey(u => u.VentaId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(u => u.Vehiculo).WithMany().HasForeignKey(u => u.VehiculoId).OnDelete(DeleteBehavior.SetNull);
         });
 
         // Vehiculo: placa opcional con índice único filtrado por unidades activas con placa, índices de búsqueda y precisión

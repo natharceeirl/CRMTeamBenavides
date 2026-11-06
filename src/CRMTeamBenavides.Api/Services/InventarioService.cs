@@ -16,11 +16,16 @@ public class InventarioService : IInventarioService
         _auditoriaService = auditoriaService;
     }
 
-    public async Task<List<ProductoResponse>> GetAllProductosAsync(Guid? categoriaId, string? busqueda, bool? bajoStock, string? marca = null)
+    public async Task<List<ProductoResponse>> GetAllProductosAsync(Guid? categoriaId, string? busqueda, bool? bajoStock, string? marca = null, TipoProducto? tipo = null)
     {
         var query = _context.Productos
             .Include(p => p.Categoria)
             .Where(p => p.Activo);
+
+        if (tipo.HasValue)
+        {
+            query = query.Where(p => p.Tipo == tipo.Value);
+        }
 
         if (categoriaId.HasValue)
         {
@@ -94,6 +99,18 @@ public class InventarioService : IInventarioService
             return ServiceResult<ProductoResponse>.Invalid("El stock inicial debe ser mayor o igual a 0.");
         }
 
+        if (!Enum.IsDefined(request.Tipo))
+        {
+            return ServiceResult<ProductoResponse>.Invalid("El tipo de producto no es válido.");
+        }
+
+        // Cada moto entra con su serie: por una compra o con «Ingresar moto».
+        if (request.Tipo == TipoProducto.Vehiculo && request.StockInicial > 0)
+        {
+            return ServiceResult<ProductoResponse>.Invalid(
+                "Un modelo de moto se crea sin stock: cada moto entra con su serie, por una compra o con «Ingresar moto».");
+        }
+
         if (request.StockMinimo.HasValue && request.StockMinimo.Value < 0)
         {
             return ServiceResult<ProductoResponse>.Invalid("El stock mínimo debe ser mayor o igual a 0.");
@@ -132,6 +149,7 @@ public class InventarioService : IInventarioService
 
         var producto = new Producto
         {
+            Tipo          = request.Tipo,
             CategoriaId   = request.CategoriaId,
             Categoria     = categoria,
             Codigo        = codigoNormalizado,
@@ -320,6 +338,24 @@ public class InventarioService : IInventarioService
             }
         }
 
+        if (request.Tipo.HasValue && request.Tipo.Value != producto.Tipo)
+        {
+            if (!Enum.IsDefined(request.Tipo.Value))
+            {
+                return ServiceResult<ProductoResponse>.Invalid("El tipo de producto no es válido.");
+            }
+
+            // El stock de una moto son sus series: el tipo cambia solo sin stock de por medio.
+            var tieneMotos = await _context.UnidadesInventario.AnyAsync(u => u.ProductoId == producto.Id && u.Activo);
+            if (producto.StockActual != 0 || tieneMotos)
+            {
+                return ServiceResult<ProductoResponse>.Invalid(
+                    "Para cambiar entre repuesto y vehículo, el stock tiene que estar en 0: ajústalo primero.");
+            }
+
+            producto.Tipo = request.Tipo.Value;
+        }
+
         producto.CategoriaId       = request.CategoriaId;
         producto.Categoria         = categoria;
         producto.Codigo            = codigoNormalizado;
@@ -398,6 +434,11 @@ public class InventarioService : IInventarioService
             return ServiceResult<ProductoResponse>.Invalid("El motivo de la entrada es obligatorio.");
         }
 
+        if (await EsMotoAsync(productoId))
+        {
+            return ServiceResult<ProductoResponse>.Invalid(MotosInventario.MensajeStockManual);
+        }
+
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
@@ -451,6 +492,11 @@ public class InventarioService : IInventarioService
         if (string.IsNullOrWhiteSpace(request.Motivo))
         {
             return ServiceResult<ProductoResponse>.Invalid("El motivo de la salida es obligatorio.");
+        }
+
+        if (await EsMotoAsync(productoId))
+        {
+            return ServiceResult<ProductoResponse>.Invalid(MotosInventario.MensajeStockManual);
         }
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
@@ -512,6 +558,11 @@ public class InventarioService : IInventarioService
         if (string.IsNullOrWhiteSpace(request.Motivo))
         {
             return ServiceResult<ProductoResponse>.Invalid("El motivo del ajuste es obligatorio.");
+        }
+
+        if (await EsMotoAsync(productoId))
+        {
+            return ServiceResult<ProductoResponse>.Invalid(MotosInventario.MensajeStockManual);
         }
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
@@ -696,6 +747,12 @@ public class InventarioService : IInventarioService
             p.FotoUrl,
             p.MonedaPrecio,
             p.PrecioIncluyeIgv,
-            PrecioLista.Calcular(p, parametros.TipoCambio, parametros.PorcentajeIgv)?.Referencia);
+            PrecioLista.Calcular(p, parametros.TipoCambio, parametros.PorcentajeIgv)?.Referencia,
+            p.Tipo.ToString(),
+            (int)p.Tipo);
     }
+
+    /// <summary>El stock de las motos no se mueve a mano: lo mueven sus compras y ventas.</summary>
+    private Task<bool> EsMotoAsync(Guid productoId) =>
+        _context.Productos.AnyAsync(p => p.Id == productoId && p.Tipo == TipoProducto.Vehiculo);
 }

@@ -1,3 +1,4 @@
+using CRMTeamBenavides.Api.Features.Motos;
 using CRMTeamBenavides.Domain.Entities;
 
 namespace CRMTeamBenavides.Api.Features.Compras;
@@ -32,7 +33,9 @@ public record DetalleCompraRequest(
     string? Descripcion,
     int Cantidad,
     decimal PrecioUnitario,
-    TipoAfectacionIgv TipoAfectacionIgv);
+    TipoAfectacionIgv TipoAfectacionIgv,
+    // Si el producto es un vehículo: una moto por cada unidad comprada, con su serie.
+    List<UnidadMotoRequest>? Motos = null);
 
 /// <summary>Monto en la moneda de la compra.</summary>
 public record RegistrarPagoCompraRequest(
@@ -123,7 +126,9 @@ public record DetalleCompraResponse(
     decimal MontoIgv,
     decimal Total,
     decimal CostoUnitarioSoles,
-    bool MueveStock);
+    bool MueveStock,
+    // Las series de las motos que entraron con esta línea.
+    List<string>? Series = null);
 
 public record PagoCompraResponse(
     Guid Id,

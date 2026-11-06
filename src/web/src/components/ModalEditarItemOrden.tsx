@@ -1,5 +1,5 @@
 import { Form, Input, InputNumber, Modal } from 'antd'
-import { useProductos } from '../api/inventario'
+import { TIPO_PRODUCTO, useProductos } from '../api/inventario'
 import { useServicios } from '../api/servicios'
 import { useActualizarDetalle } from '../api/ordenes'
 import { TIPO_ITEM_SERVICIO, type ActualizarDetalleRequest, type DetalleServicioResponse } from '../api/tipos'
@@ -33,7 +33,8 @@ export function ModalEditarItemOrden({
   const actualizar = useActualizarDetalle()
   const esRepuesto = detalle.tipoItem === TIPO_ITEM_SERVICIO.repuesto || detalle.esRepuesto
   const esServicio = detalle.tipoItem === TIPO_ITEM_SERVICIO.servicio
-  const productos = useProductos()
+  // Las motos se venden desde Ventas, con su serie: aquí solo van repuestos.
+  const productos = useProductos({ tipo: TIPO_PRODUCTO.repuesto })
   const servicios = useServicios(true, esServicio)
 
   const producto = esRepuesto ? (productos.data ?? []).find((item) => item.id === detalle.productoId) : undefined

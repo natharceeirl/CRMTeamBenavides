@@ -192,6 +192,10 @@ public class VehiculoService : IVehiculoService
         vehiculo.ValorEstimado        = request.ValorEstimado;
         vehiculo.Color                = request.Color?.Trim();
         vehiculo.Observaciones        = request.Observaciones?.Trim();
+        vehiculo.Dua                  = Mayusculas(request.Dua);
+        vehiculo.ItemDua              = Texto(request.ItemDua);
+        vehiculo.NumeroTarjetaPropiedad = Mayusculas(request.NumeroTarjetaPropiedad);
+        vehiculo.FechaInicioGarantia  = request.FechaInicioGarantia;
         vehiculo.FechaModificacion    = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -274,10 +278,18 @@ public class VehiculoService : IVehiculoService
             ValorEstimado        = request.ValorEstimado,
             Color                = request.Color?.Trim(),
             Observaciones        = request.Observaciones?.Trim(),
+            Dua                  = Mayusculas(request.Dua),
+            ItemDua              = Texto(request.ItemDua),
+            NumeroTarjetaPropiedad = Mayusculas(request.NumeroTarjetaPropiedad),
+            FechaInicioGarantia  = request.FechaInicioGarantia,
             FechaCreacion        = DateTime.UtcNow,
             Activo               = true
         };
     }
+
+    private static string? Texto(string? valor) => string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
+
+    private static string? Mayusculas(string? valor) => Texto(valor)?.ToUpperInvariant();
 
     private static string? ValidateBasicFields(string? placa, string marca, string modelo)
     {
@@ -306,5 +318,10 @@ public class VehiculoService : IVehiculoService
         (int)vehiculo.TipoMedidor,
         vehiculo.HorasUso,
         vehiculo.ValorEstimado,
-        vehiculo.LecturaMedidorActual ?? (vehiculo.TipoMedidor == TipoMedidor.Kilometraje ? (vehiculo.Kilometraje.HasValue ? (decimal?)vehiculo.Kilometraje.Value : null) : vehiculo.HorasUso));
+        vehiculo.LecturaMedidorActual ?? (vehiculo.TipoMedidor == TipoMedidor.Kilometraje ? (vehiculo.Kilometraje.HasValue ? (decimal?)vehiculo.Kilometraje.Value : null) : vehiculo.HorasUso),
+        vehiculo.Dua,
+        vehiculo.ItemDua,
+        vehiculo.NumeroTarjetaPropiedad,
+        vehiculo.FechaInicioGarantia,
+        vehiculo.FechaInicioGarantia.HasValue && string.IsNullOrWhiteSpace(vehiculo.NumeroTarjetaPropiedad));
 }

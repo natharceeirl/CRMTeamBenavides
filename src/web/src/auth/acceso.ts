@@ -146,7 +146,7 @@ export const enlaces: EnlaceMenu[] = [
   { ruta: '/citas', texto: 'Agenda', permiso: PERMISOS.citasVer },
   { ruta: '/clientes', texto: 'Clientes', permiso: PERMISOS.clientesVer },
   { ruta: '/unidades', texto: 'Unidades', permiso: PERMISOS.unidadesVer },
-  { ruta: '/repuestos', texto: 'Repuestos', permiso: PERMISOS.inventarioVer },
+  { ruta: '/repuestos', texto: 'Inventario', permiso: PERMISOS.inventarioVer },
   { ruta: '/compras', texto: 'Compras', permiso: PERMISOS.comprasVer },
   { ruta: '/pedidos-lima', texto: 'Pedidos a Lima', permiso: PERMISOS.pedidosLimaVer },
   { ruta: '/ventas', texto: 'Ventas', permiso: PERMISOS.ventasVer },

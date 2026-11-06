@@ -46,6 +46,12 @@ public class Producto : BaseEntity
 
     public int StockActual { get; set; }
 
+    /// <summary>
+    /// Repuesto o vehículo. El stock de un vehículo es la cantidad de motos en stock
+    /// (<see cref="UnidadInventario"/>): solo lo mueven las compras y las ventas.
+    /// </summary>
+    public TipoProducto Tipo { get; set; } = TipoProducto.Repuesto;
+
     /// <summary>Stock mínimo específico de este producto. Si es NULL, se resuelve mediante Categoria.StockMinimoDefault o 4.</summary>
     public int? StockMinimo { get; set; }
 

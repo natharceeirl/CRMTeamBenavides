@@ -21,7 +21,9 @@ public record CreateProductoRequest(
     MonedaPrecio MonedaPrecio = MonedaPrecio.PEN,
     bool PrecioIncluyeIgv = true,
     MonedaPrecio MonedaCosto = MonedaPrecio.PEN,
-    bool CostoIncluyeIgv = false);
+    bool CostoIncluyeIgv = false,
+    // Un vehículo es un modelo de moto: su stock entra con la serie de cada moto.
+    TipoProducto Tipo = TipoProducto.Repuesto);
 
 public record AltaRapidaProductoRequest(
     string Nombre,
@@ -48,7 +50,8 @@ public record UpdateProductoRequest(
     MonedaPrecio? MonedaPrecio = null,
     bool? PrecioIncluyeIgv = null,
     MonedaPrecio MonedaCosto = Domain.Entities.MonedaPrecio.PEN,
-    bool CostoIncluyeIgv = false);
+    bool CostoIncluyeIgv = false,
+    TipoProducto? Tipo = null);
 
 public record ProductoResponse(
     Guid Id,
@@ -72,7 +75,9 @@ public record ProductoResponse(
     bool PrecioIncluyeIgv = false,
     // El precio de lista en soles con el tipo de cambio de hoy, en los términos del repuesto
     // (con IGV si lo incluye). Nulo si está en dólares y no hay tipo de cambio.
-    decimal? PrecioListaSoles = null);
+    decimal? PrecioListaSoles = null,
+    string Tipo = "Repuesto",
+    int TipoId = 0);
 
 public record RegistrarEntradaRequest(
     int Cantidad,

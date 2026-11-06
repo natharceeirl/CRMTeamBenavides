@@ -251,7 +251,8 @@ class ApiHttp {
   }
 
   Future<List<ProductoApi>> productos() async {
-    final datos = await _lista('/api/productos');
+    // Solo repuestos: las motos se venden desde la web, eligiendo la serie de cada una.
+    final datos = await _lista('/api/productos?tipo=0');
     return datos.map(ProductoApi.desdeJson).toList();
   }
 

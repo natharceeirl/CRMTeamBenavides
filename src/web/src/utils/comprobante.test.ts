@@ -43,6 +43,8 @@ const venta = (extra: Partial<VentaDetalleResponse> = {}): VentaDetalleResponse 
       montoIgv: 7.56,
       total: 49.56,
       precioUnitarioConIgv: null,
+      unidadesInventarioIds: null,
+      series: null,
     },
   ],
   comprobante: {

@@ -73,6 +73,8 @@ export function UnidadesPage() {
             <div className="texto-secundario">Serie: {vehiculo.numeroSerieVIN}</div>
           )}
           {!vehiculo.placa && !vehiculo.numeroSerieVIN && '—'}
+          {/* Vendida por el taller: falta registrar la tarjeta de propiedad. */}
+          {vehiculo.tarjetaPendiente && <Tag style={{ marginTop: 4, marginInlineEnd: 0 }}>Tarjeta pendiente</Tag>}
         </div>
       ),
     },

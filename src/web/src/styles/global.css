@@ -1537,6 +1537,32 @@ mark.pendiente {
   margin-bottom: 12px;
 }
 
+/* Las series de las motos de una línea de compra, debajo de la línea y a todo lo ancho. */
+.motos-compra {
+  grid-column: 1 / -1;
+  margin: 0 0 16px;
+  padding: 12px 16px 4px;
+  border-left: 3px solid var(--color-divisor);
+}
+
+.moto-compra {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) repeat(5, minmax(0, 1fr));
+  gap: 0 12px;
+  margin-top: 8px;
+}
+
+/* Aquí sí se ven los rótulos: no hay cabecera de columnas para las motos. */
+.linea-compra .moto-compra .ant-form-item-label {
+  display: block;
+}
+
+@media (max-width: 900px) {
+  .moto-compra {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* En escritorio los rótulos van en la cabecera de columnas; en celular, sobre cada campo. */
 .linea-compra .ant-form-item-label,
 .linea-compra-total .etiqueta {

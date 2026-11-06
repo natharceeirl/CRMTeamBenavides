@@ -43,6 +43,9 @@ function columnasLineas(compra: CompraResponse): TableProps<DetalleCompraRespons
               .filter(Boolean)
               .join(' · ')}
           </div>
+          {linea.series && linea.series.length > 0 && (
+            <div className="texto-secundario">Series: {linea.series.join(', ')}</div>
+          )}
         </>
       ),
     },

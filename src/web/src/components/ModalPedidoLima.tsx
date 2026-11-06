@@ -2,7 +2,7 @@ import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 import { Button, DatePicker, Form, Input, InputNumber, Modal, Select, Space } from 'antd'
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons'
-import { useProductos } from '../api/inventario'
+import { TIPO_PRODUCTO, useProductos } from '../api/inventario'
 import { useCrearPedidoLima } from '../api/pedidosLima'
 import type { PedidoLimaResponse } from '../api/tipos'
 import { AvisoError } from './AvisoError'
@@ -35,7 +35,8 @@ const textoOpcional = (valor: string | undefined) => valor?.trim() || null
 
 export function ModalPedidoLima({ abierto, onCerrar, onCreado }: Readonly<Props>) {
   const [formulario] = Form.useForm<Campos>()
-  const productos = useProductos()
+  // Las motos se venden desde Ventas, con su serie: aquí solo van repuestos.
+  const productos = useProductos({ tipo: TIPO_PRODUCTO.repuesto })
   const crear = useCrearPedidoLima()
 
   const lineas = Form.useWatch('detalles', formulario) ?? []

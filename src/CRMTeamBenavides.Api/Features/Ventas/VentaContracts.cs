@@ -13,7 +13,9 @@ public record CreateDetalleVentaRequest(
     int Cantidad,
     decimal? PrecioUnitario = null,
     decimal? Descuento = null,
-    TipoAfectacionIgv? TipoAfectacionIgv = null);
+    TipoAfectacionIgv? TipoAfectacionIgv = null,
+    // Si el producto es un vehículo: la moto exacta de cada unidad, por su serie.
+    List<Guid>? UnidadesInventarioIds = null);
 
 public record ActualizarVentaRequest(
     List<CreateDetalleVentaRequest> Detalles,
@@ -87,7 +89,9 @@ public record DetalleVentaResponse(
     decimal PorcentajeIgvAplicado = 18m,
     decimal MontoIgv = 0m,
     decimal Total = 0m,
-    decimal? PrecioUnitarioConIgv = null);
+    decimal? PrecioUnitarioConIgv = null,
+    List<Guid>? UnidadesInventarioIds = null,
+    List<string>? Series = null);
 
 public record ComprobanteResponse(
     Guid Id,

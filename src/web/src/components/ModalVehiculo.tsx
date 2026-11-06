@@ -1,4 +1,5 @@
-import { Form, Input, InputNumber, Modal, Select } from 'antd'
+import dayjs, { type Dayjs } from 'dayjs'
+import { DatePicker, Form, Input, InputNumber, Modal, Select } from 'antd'
 import { useGuardarVehiculo } from '../api/vehiculos'
 import type { TipoMedidor, TipoUnidad, VehiculoRequest, VehiculoResponse } from '../api/tipos'
 import { AvisoError } from './AvisoError'
@@ -26,6 +27,10 @@ type Campos = {
   kilometraje?: number
   color?: string
   observaciones?: string
+  dua?: string
+  itemDua?: string
+  numeroTarjetaPropiedad?: string
+  fechaInicioGarantia?: Dayjs | null
 }
 
 const sinVacios = (valor?: string) => (valor && valor.trim() !== '' ? valor.trim() : null)
@@ -56,6 +61,10 @@ export function ModalVehiculo({ abierto, vehiculo, clienteFijo, onCerrar }: Read
       kilometraje: campos.kilometraje ?? (medidor != null ? Math.round(medidor) : null),
       color: sinVacios(campos.color),
       observaciones: sinVacios(campos.observaciones),
+      dua: sinVacios(campos.dua),
+      itemDua: sinVacios(campos.itemDua),
+      numeroTarjetaPropiedad: sinVacios(campos.numeroTarjetaPropiedad),
+      fechaInicioGarantia: campos.fechaInicioGarantia ? campos.fechaInicioGarantia.format('YYYY-MM-DD') : null,
     }
 
     await guardar.mutateAsync({ id: vehiculo?.id, datos })
@@ -97,6 +106,10 @@ export function ModalVehiculo({ abierto, vehiculo, clienteFijo, onCerrar }: Read
           kilometraje: vehiculo?.kilometraje ?? undefined,
           color: vehiculo?.color ?? '',
           observaciones: vehiculo?.observaciones ?? '',
+          dua: vehiculo?.dua ?? '',
+          itemDua: vehiculo?.itemDua ?? '',
+          numeroTarjetaPropiedad: vehiculo?.numeroTarjetaPropiedad ?? '',
+          fechaInicioGarantia: vehiculo?.fechaInicioGarantia ? dayjs(vehiculo.fechaInicioGarantia) : null,
         }}
       >
         {!clienteFijo && <CampoCliente etiqueta="Propietario" mensaje="Elige el cliente propietario" />}
@@ -155,6 +168,23 @@ export function ModalVehiculo({ abierto, vehiculo, clienteFijo, onCerrar }: Read
         </Form.Item>
         <Form.Item label="Color" name="color">
           <Input />
+        </Form.Item>
+        {/* De la moto que vendió el taller: la tarjeta y la placa llegan después de la venta. */}
+        <Form.Item label="DUA" name="dua">
+          <Input maxLength={50} />
+        </Form.Item>
+        <Form.Item label="Ítem de la DUA" name="itemDua">
+          <Input maxLength={20} />
+        </Form.Item>
+        <Form.Item label="Tarjeta de propiedad" name="numeroTarjetaPropiedad" extra="Se completa cuando salga la tarjeta.">
+          <Input maxLength={30} style={{ textTransform: 'uppercase' }} />
+        </Form.Item>
+        <Form.Item
+          label="Inicio de la garantía"
+          name="fechaInicioGarantia"
+          extra="Al venderla es la fecha de la venta; corrígela si la entrega fue otro día."
+        >
+          <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
         </Form.Item>
         <Form.Item label="Observaciones" name="observaciones">
           <Input.TextArea rows={2} />

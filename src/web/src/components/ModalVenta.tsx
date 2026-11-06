@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Button, Form, InputNumber, Modal, Radio, Select, Space } from 'antd'
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons'
-import { useProductos } from '../api/inventario'
+import { esMoto, useProductos } from '../api/inventario'
 import { useCrearVenta } from '../api/ventas'
 import type { VentaDetalleResponse } from '../api/tipos'
 import { AvisoError } from './AvisoError'
 import { CampoCliente } from './CampoCliente'
+import { SelectorMotos } from './SelectorMotos'
 import { precioDistintoAlDeLista } from './AvisoPrecioGerencia'
 import { ModalAltaRapidaRepuesto } from './ModalesAltaRapida'
 import { useSesion } from '../auth/sesion'
@@ -24,6 +25,8 @@ type Linea = {
   productoId?: string
   cantidad?: number
   precioUnitario?: number | null
+  /** Si el producto es una moto: la moto exacta de cada unidad, por su serie. */
+  unidadesInventarioIds?: string[]
 }
 
 type Campos = {
@@ -64,12 +67,17 @@ export function ModalVenta({ abierto, onCerrar, onCreada }: Readonly<Props>) {
       clienteId: campos.clienteId,
       ordenServicioId: null,
       esCotizacion: campos.esCotizacion,
-      detalles: campos.detalles.map((linea) => ({
-        productoId: linea.productoId!,
-        cantidad: linea.cantidad ?? 1,
-        // Sin precio, o con el de lista, el backend usa el de lista y no pide aprobación.
-        precioUnitario: linea.precioUnitario ?? null,
-      })),
+      detalles: campos.detalles.map((linea) => {
+        const motos = esMoto(productoDe(linea.productoId)) ? (linea.unidadesInventarioIds ?? []) : []
+        return {
+          productoId: linea.productoId!,
+          // Una moto se vende por serie: la cantidad es la de motos elegidas.
+          cantidad: motos.length > 0 ? motos.length : (linea.cantidad ?? 1),
+          // Sin precio, o con el de lista, el backend usa el de lista y no pide aprobación.
+          precioUnitario: linea.precioUnitario ?? null,
+          unidadesInventarioIds: motos.length > 0 ? motos : null,
+        }
+      }),
     })
 
     cerrar()
@@ -126,19 +134,33 @@ export function ModalVenta({ abierto, onCerrar, onCreada }: Readonly<Props>) {
                       showSearch={{ optionFilterProp: 'label' }}
                       loading={productos.isPending}
                       placeholder="Producto"
-                      onChange={(productoId: string) =>
+                      onChange={(productoId: string) => {
                         formulario.setFieldValue(['detalles', campo.name, 'precioUnitario'], precioDeLista(productoId))
-                      }
+                        formulario.setFieldValue(['detalles', campo.name, 'unidadesInventarioIds'], [])
+                      }}
                       options={(productos.data ?? []).map((producto) => ({
                         value: producto.id,
                         label: `${producto.codigo} · ${producto.nombre} · ${textoPrecioLista(producto)} · stock ${producto.stockActual}`,
                       }))}
                     />
                   </Form.Item>
+                  {esMoto(productoDe(lineas[campo.name]?.productoId)) && (
+                    <Form.Item
+                      name={[campo.name, 'unidadesInventarioIds']}
+                      rules={[{ required: true, type: 'array', min: 1, message: 'Elige la moto por su serie' }]}
+                      style={{ marginBottom: 0 }}
+                    >
+                      <SelectorMotos
+                        productoId={lineas[campo.name]?.productoId}
+                        onChange={(ids) => formulario.setFieldValue(['detalles', campo.name, 'cantidad'], Math.max(ids.length, 1))}
+                      />
+                    </Form.Item>
+                  )}
                   <Form.Item
                     name={[campo.name, 'cantidad']}
                     initialValue={1}
                     rules={[{ required: true, message: 'Cantidad' }]}
+                    hidden={esMoto(productoDe(lineas[campo.name]?.productoId))}
                     style={{ marginBottom: 0 }}
                   >
                     <InputNumber min={1} placeholder="Cant." />

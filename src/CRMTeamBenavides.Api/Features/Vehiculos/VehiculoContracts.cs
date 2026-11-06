@@ -22,7 +22,13 @@ public record VehiculoResponse(
     int TipoMedidorId = 0,
     decimal? HorasUso = null,
     decimal? ValorEstimado = null,
-    decimal? LecturaMedidorActual = null);
+    decimal? LecturaMedidorActual = null,
+    string? Dua = null,
+    string? ItemDua = null,
+    string? NumeroTarjetaPropiedad = null,
+    DateOnly? FechaInicioGarantia = null,
+    // Vendida por el taller y todavía sin tarjeta de propiedad.
+    bool TarjetaPendiente = false);
 
 public record CreateVehiculoRequest(
     Guid ClienteId,
@@ -39,7 +45,12 @@ public record CreateVehiculoRequest(
     TipoMedidor TipoMedidor = TipoMedidor.Kilometraje,
     decimal? HorasUso = null,
     decimal? ValorEstimado = null,
-    decimal? LecturaMedidorActual = null);
+    decimal? LecturaMedidorActual = null,
+    // De la moto vendida por el taller: la tarjeta y la placa llegan después de la venta.
+    string? Dua = null,
+    string? ItemDua = null,
+    string? NumeroTarjetaPropiedad = null,
+    DateOnly? FechaInicioGarantia = null);
 
 public record UpdateVehiculoRequest(
     Guid ClienteId,
@@ -56,7 +67,12 @@ public record UpdateVehiculoRequest(
     TipoMedidor TipoMedidor = TipoMedidor.Kilometraje,
     decimal? HorasUso = null,
     decimal? ValorEstimado = null,
-    decimal? LecturaMedidorActual = null);
+    decimal? LecturaMedidorActual = null,
+    // De la moto vendida por el taller: la tarjeta y la placa llegan después de la venta.
+    string? Dua = null,
+    string? ItemDua = null,
+    string? NumeroTarjetaPropiedad = null,
+    DateOnly? FechaInicioGarantia = null);
 
 public record AltaRapidaVehiculoRequest(
     Guid ClienteId,

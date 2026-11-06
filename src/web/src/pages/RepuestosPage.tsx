@@ -8,6 +8,7 @@ import { ModalProducto } from '../components/ModalProducto'
 import { ModalCategoria } from '../components/ModalCategoria'
 import { ModalServicio } from '../components/ModalServicio'
 import { ModalMovimientoStock, type TipoMovimiento } from '../components/ModalMovimientoStock'
+import { PanelVehiculos } from '../components/PanelVehiculos'
 import {
   MOVIMIENTO,
   useCategoriasProducto,
@@ -15,6 +16,7 @@ import {
   useEliminarProducto,
   useMarcasProductos,
   useMovimientos,
+  TIPO_PRODUCTO,
   useProductos,
 } from '../api/inventario'
 import { useEliminarServicio, useServicios } from '../api/servicios'
@@ -60,7 +62,8 @@ export function RepuestosPage() {
   const puedeDarDeBajaServicio = tienePermiso(PERMISOS.serviciosEliminar)
 
   // La búsqueda, la categoría, la marca y el stock bajo los filtra la API.
-  const productos = useProductos({ categoriaId, marca, busqueda: texto, bajoStock: soloBajoStock })
+  // Las motos tienen su propia pestaña, con la serie de cada una.
+  const productos = useProductos({ categoriaId, marca, busqueda: texto, bajoStock: soloBajoStock, tipo: TIPO_PRODUCTO.repuesto })
   const marcas = useMarcasProductos()
   const categorias = useCategoriasProducto()
   const servicios = useServicios(true, veServicios)
@@ -321,7 +324,7 @@ export function RepuestosPage() {
   return (
     <>
       <BarraSuperior
-        titulo="Repuestos e inventario"
+        titulo="Inventario"
         acciones={
           <Space>
             {puedeCrearServicio && (
@@ -412,6 +415,11 @@ export function RepuestosPage() {
                   />
                 </>
               ),
+            },
+            {
+              key: 'vehiculos',
+              label: 'Vehículos',
+              children: <PanelVehiculos />,
             },
             ...(veServicios
               ? [

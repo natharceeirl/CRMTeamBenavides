@@ -175,6 +175,13 @@ public class PedidoLimaService : IPedidoLimaService
             return ServiceResult<PedidoLimaResponse>.Invalid("Uno o más productos solicitados no existen o están inactivos.");
         }
 
+        // Las motos entran por una compra, cada una con su serie: no se piden a Lima.
+        var moto = productos.Values.FirstOrDefault(p => p.Tipo == TipoProducto.Vehiculo);
+        if (moto is not null)
+        {
+            return ServiceResult<PedidoLimaResponse>.Invalid($"«{moto.Nombre}» es una moto: entra por una compra, con su serie.");
+        }
+
         var config = await _context.ConfiguracionesEmpresa.AsNoTracking().FirstOrDefaultAsync(ct);
         var porcentajeIgv = config?.PorcentajeIgv ?? 18.00m;
         var tipoCambio = config?.TipoCambioVigente is > 0 ? config.TipoCambioVigente : null;

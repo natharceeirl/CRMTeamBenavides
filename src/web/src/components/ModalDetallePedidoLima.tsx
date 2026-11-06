@@ -16,7 +16,7 @@ import {
   useRegistrarPagoPedidoLima,
 } from '../api/pedidosLima'
 import { GERENCIA, nombresGerencia } from '../api/ordenes'
-import { useProductos } from '../api/inventario'
+import { TIPO_PRODUCTO, useProductos } from '../api/inventario'
 import { tieneSaldo } from '../api/pagos'
 import {
   ESTADO_PEDIDO_LIMA,
@@ -131,7 +131,8 @@ function ModalEditarLineaPedido({
   onCerrar,
 }: Readonly<{ pedidoId: string; detalle: DetallePedidoLimaResponse; onCerrar: () => void }>) {
   const [formulario] = Form.useForm<CamposLinea>()
-  const productos = useProductos()
+  // Las motos se venden desde Ventas, con su serie: aquí solo van repuestos.
+  const productos = useProductos({ tipo: TIPO_PRODUCTO.repuesto })
   const actualizar = useActualizarDetallePedidoLima()
   const precioUnitario = Form.useWatch('precioUnitario', formulario)
   // En soles y con IGV si el repuesto lo incluye: así se escribe el precio de la línea.

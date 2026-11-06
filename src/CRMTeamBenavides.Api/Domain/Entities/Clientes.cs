@@ -84,5 +84,14 @@ public class Vehiculo : BaseEntity
 
     public string? Observaciones { get; set; }
 
+    // Datos de la moto que vendió el taller. La tarjeta de propiedad y la placa llegan
+    // después de la venta: mientras falten, la unidad figura con «Tarjeta pendiente».
+    public string? Dua { get; set; }
+    public string? ItemDua { get; set; }
+    public string? NumeroTarjetaPropiedad { get; set; }
+
+    /// <summary>Inicio de la garantía: por defecto el día de la venta; se corrige si la entrega fue otro día.</summary>
+    public DateOnly? FechaInicioGarantia { get; set; }
+
     public ICollection<OrdenServicio> OrdenesServicio { get; set; } = new List<OrdenServicio>();
 }

@@ -8,7 +8,14 @@ import { precioDistintoAlDeLista } from './AvisoPrecioGerencia'
 import { soles } from '../utils/formato'
 import { precioDeLinea, precioListaSoles } from '../utils/precios'
 
-type Linea = { detalleId: string; productoId: string; cantidad: number; precioUnitario: number }
+type Linea = {
+  detalleId: string
+  productoId: string
+  cantidad: number
+  precioUnitario: number
+  /** Las motos elegidas de la línea: se conservan, la cantidad es la de motos. */
+  unidadesInventarioIds?: string[] | null
+}
 type Campos = { lineas: Linea[] }
 
 /**
@@ -62,6 +69,7 @@ export function ModalEditarCotizacion({
           productoId: linea.productoId,
           cantidad: linea.cantidad,
           precioUnitario: linea.precioUnitario,
+          unidadesInventarioIds: linea.unidadesInventarioIds ?? null,
         })),
         observaciones: null,
       },
@@ -93,7 +101,13 @@ export function ModalEditarCotizacion({
           rules={[{ required: true, message: 'Cantidad' }]}
           style={{ marginBottom: 0 }}
         >
-          <InputNumber min={1} precision={0} style={{ width: '100%' }} />
+          <InputNumber
+            min={1}
+            precision={0}
+            style={{ width: '100%' }}
+            // La cantidad de una moto es la de series elegidas: se cambia eligiendo otras motos.
+            disabled={(detalle.unidadesInventarioIds?.length ?? 0) > 0}
+          />
         </Form.Item>
       ),
     },
@@ -138,6 +152,7 @@ export function ModalEditarCotizacion({
             detalleId: detalle.id,
             productoId: detalle.productoId ?? '',
             cantidad: detalle.cantidad,
+            unidadesInventarioIds: detalle.unidadesInventarioIds,
             // Se edita en los términos en que se cobró: con IGV si la línea lo incluye.
             precioUnitario: precioDeLinea(detalle),
           })),

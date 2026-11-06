@@ -839,6 +839,13 @@ public class OrdenServicioService : IOrdenServicioService
                     return ServiceResult<DetalleServicioResponse>.Invalid("El producto indicado no existe o está inactivo.");
                 }
 
+                // Una moto se vende desde Ventas, con su serie; no es un repuesto de la orden.
+                if (producto.Tipo == TipoProducto.Vehiculo)
+                {
+                    return ServiceResult<DetalleServicioResponse>.Invalid(
+                        $"«{producto.Nombre}» es una moto: se vende desde Ventas, con su serie.");
+                }
+
                 if (producto.StockActual < request.Cantidad)
                 {
                     return ServiceResult<DetalleServicioResponse>.Invalid(

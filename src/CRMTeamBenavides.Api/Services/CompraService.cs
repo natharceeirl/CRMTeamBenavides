@@ -177,7 +177,23 @@ public partial class CompraService : ICompraService
                 .ToListAsync(ct))
             .ToHashSet();
 
-        return ServiceResult<CompraResponse>.Success(Mapear(compra, pagosConCaja, HoraPeru.Hoy()));
+        var respuesta = Mapear(compra, pagosConCaja, HoraPeru.Hoy());
+        var series = (await _context.UnidadesInventario.AsNoTracking()
+                .Where(u => u.CompraId == compra.Id && u.DetalleCompraId != null)
+                .OrderBy(u => u.NumeroSerieVIN)
+                .Select(u => new { u.DetalleCompraId, u.NumeroSerieVIN })
+                .ToListAsync(ct))
+            .GroupBy(u => u.DetalleCompraId!.Value)
+            .ToDictionary(g => g.Key, g => g.Select(u => u.NumeroSerieVIN).ToList());
+        if (series.Count > 0)
+        {
+            respuesta = respuesta with
+            {
+                Detalles = respuesta.Detalles.Select(d => d with { Series = series.GetValueOrDefault(d.Id) }).ToList()
+            };
+        }
+
+        return ServiceResult<CompraResponse>.Success(respuesta);
     }
 
     // ------------------------------------------------------------------
@@ -261,6 +277,9 @@ public partial class CompraService : ICompraService
             Activo = true
         };
 
+        // Las motos de cada línea, por su número de línea: entran al stock con la compra.
+        var motosPorLinea = new Dictionary<int, List<MotoNormalizada>>();
+
         var orden = 0;
         foreach (var linea in request.Detalles)
         {
@@ -279,6 +298,17 @@ public partial class CompraService : ICompraService
                 if (!productos.TryGetValue(linea.ProductoId.Value, out producto))
                     return ServiceResult<CompraResponse>.Invalid($"Línea {orden}: el repuesto no existe o fue dado de baja.");
                 descripcion = producto.Nombre.Length > 250 ? producto.Nombre[..250] : producto.Nombre;
+
+                if (producto.Tipo == TipoProducto.Vehiculo)
+                {
+                    if (pedido is not null)
+                        return ServiceResult<CompraResponse>.Invalid($"Línea {orden}: las motos no se compran por un pedido a Lima.");
+
+                    var (motos, errorMotos) = MotosInventario.ValidarIngreso(linea.Motos, linea.Cantidad, $"Línea {orden}");
+                    if (errorMotos is not null)
+                        return ServiceResult<CompraResponse>.Invalid(errorMotos);
+                    motosPorLinea[orden] = motos;
+                }
             }
             else
             {
@@ -287,6 +317,11 @@ public partial class CompraService : ICompraService
                     return ServiceResult<CompraResponse>.Invalid($"Línea {orden}: elige un repuesto o escribe el concepto.");
                 if (descripcion.Length > 250)
                     return ServiceResult<CompraResponse>.Invalid($"Línea {orden}: el concepto no puede pasar de 250 caracteres.");
+            }
+
+            if (linea.Motos is { Count: > 0 } && producto?.Tipo != TipoProducto.Vehiculo)
+            {
+                return ServiceResult<CompraResponse>.Invalid($"Línea {orden}: solo las motos llevan serie.");
             }
 
             var precio = Math.Round(linea.PrecioUnitario, 4, MidpointRounding.AwayFromZero);
@@ -323,6 +358,14 @@ public partial class CompraService : ICompraService
 
         if (compra.Total <= 0)
             return ServiceResult<CompraResponse>.Invalid("El total de la compra debe ser mayor a 0.");
+
+        var seriesCompradas = motosPorLinea.Values.SelectMany(m => m).Select(m => m.NumeroSerieVIN).ToList();
+        var serieRepetida = seriesCompradas.GroupBy(s => s).FirstOrDefault(g => g.Count() > 1);
+        if (serieRepetida is not null)
+            return ServiceResult<CompraResponse>.Invalid($"La serie {serieRepetida.Key} está en dos líneas de la compra.");
+        var serieOcupada = await MotosInventario.SerieOcupadaAsync(_context, seriesCompradas, ct);
+        if (serieOcupada is not null)
+            return ServiceResult<CompraResponse>.Invalid(serieOcupada);
 
         var pagos = request.Pagos ?? new List<RegistrarPagoCompraRequest>();
         var metodoIds = pagos.Select(p => p.MetodoPagoId).Distinct().ToList();
@@ -384,6 +427,15 @@ public partial class CompraService : ICompraService
                     FechaCreacion = DateTime.UtcNow,
                     Activo = true
                 });
+
+                // Cada moto queda en stock con su serie y el costo de su línea.
+                foreach (var moto in motosPorLinea.GetValueOrDefault(detalle.Orden) ?? [])
+                {
+                    var unidad = MotosInventario.NuevaUnidad(producto.Id, moto, detalle.CostoUnitarioSoles, usuarioId);
+                    unidad.CompraId = compra.Id;
+                    unidad.DetalleCompraId = detalle.Id;
+                    _context.UnidadesInventario.Add(unidad);
+                }
             }
 
             var caja = new CajaDeLaOperacion();
@@ -695,6 +747,24 @@ public partial class CompraService : ICompraService
             {
                 await tx.RollbackAsync(ct);
                 return ServiceResult<CompraResponse>.Invalid("La compra ya está anulada.");
+            }
+
+            // Las motos de la compra salen del inventario, salvo que alguna ya se haya vendido.
+            var motosDeLaCompra = await _context.UnidadesInventario
+                .Where(u => u.CompraId == compra.Id && u.Activo)
+                .ToListAsync(ct);
+            var motoVendida = motosDeLaCompra.FirstOrDefault(u => u.Estado != EstadoUnidadInventario.EnStock);
+            if (motoVendida is not null)
+            {
+                await tx.RollbackAsync(ct);
+                return ServiceResult<CompraResponse>.Invalid(
+                    $"No se puede anular: la moto {motoVendida.NumeroSerieVIN} de esta compra ya se vendió.");
+            }
+            foreach (var moto in motosDeLaCompra)
+            {
+                moto.Activo = false;
+                moto.ModificadoPorId = usuarioId;
+                moto.FechaModificacion = DateTime.UtcNow;
             }
 
             // En orden inverso: con el mismo repuesto en dos líneas, cada una deshace el costo que dejó.

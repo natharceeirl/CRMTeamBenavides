@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button, Form, Input, InputNumber, Modal, Radio, Select } from 'antd'
-import { useProductos } from '../api/inventario'
+import { TIPO_PRODUCTO, useProductos } from '../api/inventario'
 import { useServicios } from '../api/servicios'
 import { useAgregarDetalle } from '../api/ordenes'
 import { AvisoError } from './AvisoError'
@@ -49,7 +49,8 @@ export function ModalItemOrden({
   onCerrar,
 }: Readonly<Props>) {
   const [formulario] = Form.useForm<Campos>()
-  const productos = useProductos()
+  // Las motos se venden desde Ventas, con su serie: aquí solo van repuestos.
+  const productos = useProductos({ tipo: TIPO_PRODUCTO.repuesto })
   const servicios = useServicios()
   const agregar = useAgregarDetalle()
   const { tienePermiso } = useSesion()

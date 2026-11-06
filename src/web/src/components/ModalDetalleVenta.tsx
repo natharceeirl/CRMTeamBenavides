@@ -41,6 +41,9 @@ const columnas: TableProps<DetalleVentaResponse>['columns'] = [
         <>
           <div>{detalle.productoNombre}</div>
           <div className="texto-secundario">{[tipo, detalle.productoCodigo].filter(Boolean).join(' · ')}</div>
+          {detalle.series && detalle.series.length > 0 && (
+            <div className="texto-secundario">Serie {detalle.series.join(', ')}</div>
+          )}
         </>
       )
     },

@@ -96,7 +96,25 @@ public class VentaService : IVentaService
             return ServiceResult<VentaDetalleResponse>.NotFound();
         }
 
-        return ServiceResult<VentaDetalleResponse>.Success(MapToDetalleResponse(venta));
+        var respuesta = MapToDetalleResponse(venta);
+        var idsMotos = venta.Detalles.SelectMany(d => d.UnidadesInventarioIds).Distinct().ToList();
+        if (idsMotos.Count > 0)
+        {
+            var series = await _context.UnidadesInventario.AsNoTracking()
+                .Where(u => idsMotos.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.NumeroSerieVIN);
+            respuesta = respuesta with
+            {
+                Detalles = respuesta.Detalles
+                    .Select(d => d.UnidadesInventarioIds is null ? d : d with
+                    {
+                        Series = d.UnidadesInventarioIds.Select(id => series.GetValueOrDefault(id, "—")).ToList()
+                    })
+                    .ToList()
+            };
+        }
+
+        return ServiceResult<VentaDetalleResponse>.Success(respuesta);
     }
 
     public async Task<ServiceResult<VentaDetalleResponse>> CreateAsync(
@@ -362,6 +380,12 @@ public class VentaService : IVentaService
             return ServiceResult<VentaDetalleResponse>.Invalid("La cantidad de cada producto debe ser mayor a 0.");
         }
 
+        var motoRepetida = MotosInventario.MotoRepetida(request.Detalles.Select(d => d.UnidadesInventarioIds));
+        if (motoRepetida is not null)
+        {
+            return ServiceResult<VentaDetalleResponse>.Invalid(motoRepetida);
+        }
+
         var cantidadesPorProducto = request.Detalles
             .GroupBy(d => d.ProductoId)
             .ToDictionary(g => g.Key, g => g.Sum(d => d.Cantidad));
@@ -439,6 +463,15 @@ public class VentaService : IVentaService
                     FechaCreacion          = DateTime.UtcNow,
                     Activo                 = true
                 };
+                // La cotización no aparta la moto: al confirmar se comprueba que siga en stock.
+                var (motosCotizacion, errorMotosCotizacion) = await MotosInventario.ValidarSeleccionAsync(
+                    _context, prod, item.Cantidad, item.UnidadesInventarioIds);
+                if (errorMotosCotizacion is not null)
+                {
+                    return ServiceResult<VentaDetalleResponse>.Invalid(errorMotosCotizacion);
+                }
+                detalle.UnidadesInventarioIds = motosCotizacion;
+
                 cotizacion.Detalles.Add(detalle);
                 _context.DetallesVenta.Add(detalle);
             }
@@ -586,6 +619,19 @@ public class VentaService : IVentaService
                     FechaCreacion          = DateTime.UtcNow,
                     Activo                 = true
                 };
+                var (motosVenta, errorMotosVenta) = await MotosInventario.ValidarSeleccionAsync(
+                    _context, prod, item.Cantidad, item.UnidadesInventarioIds);
+                if (errorMotosVenta is not null)
+                {
+                    return ServiceResult<VentaDetalleResponse>.Invalid(errorMotosVenta);
+                }
+                detalle.UnidadesInventarioIds = motosVenta;
+                var errorVenderMotos = await MotosInventario.VenderAsync(_context, venta, detalle, prod);
+                if (errorVenderMotos is not null)
+                {
+                    return ServiceResult<VentaDetalleResponse>.Invalid(errorVenderMotos);
+                }
+
                 venta.Detalles.Add(detalle);
                 _context.DetallesVenta.Add(detalle);
 
@@ -753,6 +799,22 @@ public class VentaService : IVentaService
                 return ServiceResult<VentaDetalleResponse>.Invalid("Uno o más productos no existen o están inactivos.");
             }
 
+            // Las motos de una venta confirmada ya pasaron a sus clientes: se anula y se vuelve a registrar.
+            if (venta.Estado == EstadoVenta.Confirmada
+                && productos.Values.Any(p => p.Tipo == TipoProducto.Vehiculo))
+            {
+                await transaction.RollbackAsync();
+                return ServiceResult<VentaDetalleResponse>.Invalid(
+                    "Una venta confirmada con motos no se edita: anúlala y regístrala de nuevo.");
+            }
+
+            var motoRepetidaEdicion = MotosInventario.MotoRepetida(request.Detalles.Select(d => d.UnidadesInventarioIds));
+            if (motoRepetidaEdicion is not null)
+            {
+                await transaction.RollbackAsync();
+                return ServiceResult<VentaDetalleResponse>.Invalid(motoRepetidaEdicion);
+            }
+
             // Si es venta confirmada, ajustar inventario según diferencia de cantidades
             if (venta.Estado == EstadoVenta.Confirmada)
             {
@@ -862,6 +924,15 @@ public class VentaService : IVentaService
                     Activo = true,
                     FechaCreacion = DateTime.UtcNow
                 };
+                var (motosEdicion, errorMotosEdicion) = await MotosInventario.ValidarSeleccionAsync(
+                    _context, prod, item.Cantidad, item.UnidadesInventarioIds);
+                if (errorMotosEdicion is not null)
+                {
+                    await transaction.RollbackAsync();
+                    return ServiceResult<VentaDetalleResponse>.Invalid(errorMotosEdicion);
+                }
+                nuevoDetalle.UnidadesInventarioIds = motosEdicion;
+
                 venta.Detalles.Add(nuevoDetalle);
                 _context.DetallesVenta.Add(nuevoDetalle);
             }
@@ -1046,6 +1117,13 @@ public class VentaService : IVentaService
                 prod.StockActual -= det.Cantidad;
                 prod.FechaModificacion = DateTime.UtcNow;
 
+                // Las motos elegidas tienen que seguir en stock: la cotización no las apartó.
+                var errorMotos = await MotosInventario.VenderAsync(_context, venta, det, prod);
+                if (errorMotos is not null)
+                {
+                    return ServiceResult<VentaDetalleResponse>.Invalid(errorMotos + " Edita la cotización.");
+                }
+
                 var movimiento = new MovimientoInventario
                 {
                     ProductoId    = prod.Id,
@@ -1179,6 +1257,9 @@ public class VentaService : IVentaService
                     _context.MovimientosInventario.Add(movimiento);
                 }
             }
+
+            // Las motos vuelven al stock y la unidad del cliente se da de baja si no pasó por el taller.
+            await MotosInventario.RevertirVentaAsync(_context, venta.Id);
 
             venta.Estado            = EstadoVenta.Anulada;
             venta.FechaModificacion = DateTime.UtcNow;
@@ -1541,7 +1622,8 @@ public class VentaService : IVentaService
                     d.PorcentajeIgvAplicado,
                     d.MontoIgv,
                     d.Total,
-                    d.PrecioUnitarioConIgv))
+                    d.PrecioUnitarioConIgv,
+                    d.UnidadesInventarioIds.Count > 0 ? d.UnidadesInventarioIds : null))
                 .ToList(),
             v.Activo,
             v.Comprobante != null ? MapToComprobanteResponse(v.Comprobante) : null,

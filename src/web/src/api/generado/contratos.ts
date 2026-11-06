@@ -565,6 +565,7 @@ export type DetalleCompraRequest = {
   cantidad: number
   precioUnitario: number
   tipoAfectacionIgv: TipoAfectacionIgv
+  motos?: UnidadMotoRequest[] | null
 }
 
 export type DetalleCompraResponse = {
@@ -580,6 +581,7 @@ export type DetalleCompraResponse = {
   total: number
   costoUnitarioSoles: number
   mueveStock: boolean
+  series: string[] | null
 }
 
 export type GuardarProveedorRequest = {
@@ -819,6 +821,9 @@ export type TipoMovimientoCaja = 0 | 1
 /** SolicitudAprobacion = 0 · PresupuestoEnviado = 1 · OrdenLista = 2 · PedidoLimaRecibido = 3 · CitaConfirmada = 4 · OrdenAsignada = 5 */
 export type TipoNotificacion = 0 | 1 | 2 | 3 | 4 | 5
 
+/** Repuesto = 0 · Vehiculo = 1 */
+export type TipoProducto = 0 | 1
+
 /** Motocicleta = 0 · Cuatrimoto = 1 · MotoAcuatica = 2 · Generador = 3 · Otro = 4 */
 export type TipoUnidad = 0 | 1 | 2 | 3 | 4
 
@@ -927,6 +932,7 @@ export type CreateProductoRequest = {
   precioIncluyeIgv?: boolean
   monedaCosto?: MonedaPrecio
   costoIncluyeIgv?: boolean
+  tipo?: TipoProducto
 }
 
 export type MovimientoInventarioResponse = {
@@ -965,6 +971,8 @@ export type ProductoResponse = {
   monedaPrecio: MonedaPrecio
   precioIncluyeIgv: boolean
   precioListaSoles: number | null
+  tipo: string
+  tipoId: number
 }
 
 export type RegistrarAjusteRequest = {
@@ -999,6 +1007,46 @@ export type UpdateProductoRequest = {
   precioIncluyeIgv?: boolean | null
   monedaCosto?: MonedaPrecio
   costoIncluyeIgv?: boolean
+  tipo?: TipoProducto | null
+}
+
+// ── Motos ───────────────────────────────────────────────────────────────────
+
+export type IngresarMotoRequest = {
+  moto: UnidadMotoRequest
+  costo: number
+}
+
+export type MotoResponse = {
+  id: string
+  productoId: string
+  productoCodigo: string
+  productoNombre: string
+  numeroSerieVIN: string
+  numeroMotor: string | null
+  anio: number | null
+  color: string | null
+  dua: string | null
+  itemDua: string | null
+  costoUnitario: number
+  estado: string
+  estadoId: number
+  fechaIngreso: string
+  compraId: string | null
+  numeroCompra: string | null
+  ventaId: string | null
+  fechaVenta: string | null
+  vehiculoId: string | null
+  clienteNombre: string | null
+}
+
+export type UnidadMotoRequest = {
+  numeroSerieVIN: string
+  numeroMotor?: string | null
+  anio?: number | null
+  color?: string | null
+  dua?: string | null
+  itemDua?: string | null
 }
 
 // ── Notificaciones ──────────────────────────────────────────────────────────
@@ -1775,6 +1823,10 @@ export type CreateVehiculoRequest = {
   horasUso?: number | null
   valorEstimado?: number | null
   lecturaMedidorActual?: number | null
+  dua?: string | null
+  itemDua?: string | null
+  numeroTarjetaPropiedad?: string | null
+  fechaInicioGarantia?: string | null
 }
 
 export type UpdateVehiculoRequest = {
@@ -1793,6 +1845,10 @@ export type UpdateVehiculoRequest = {
   horasUso?: number | null
   valorEstimado?: number | null
   lecturaMedidorActual?: number | null
+  dua?: string | null
+  itemDua?: string | null
+  numeroTarjetaPropiedad?: string | null
+  fechaInicioGarantia?: string | null
 }
 
 export type VehiculoResponse = {
@@ -1816,6 +1872,11 @@ export type VehiculoResponse = {
   horasUso: number | null
   valorEstimado: number | null
   lecturaMedidorActual: number | null
+  dua: string | null
+  itemDua: string | null
+  numeroTarjetaPropiedad: string | null
+  fechaInicioGarantia: string | null
+  tarjetaPendiente: boolean
 }
 
 // ── Ventas ──────────────────────────────────────────────────────────────────
@@ -1851,6 +1912,7 @@ export type CreateDetalleVentaRequest = {
   precioUnitario?: number | null
   descuento?: number | null
   tipoAfectacionIgv?: TipoAfectacionIgv | null
+  unidadesInventarioIds?: string[] | null
 }
 
 export type CreateVentaRequest = {
@@ -1879,6 +1941,8 @@ export type DetalleVentaResponse = {
   montoIgv: number
   total: number
   precioUnitarioConIgv: number | null
+  unidadesInventarioIds: string[] | null
+  series: string[] | null
 }
 
 export type MetodoPagoResponse = {

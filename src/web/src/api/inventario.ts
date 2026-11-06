@@ -27,11 +27,18 @@ export const nombresMovimiento: Record<number, string> = {
   2: 'Ajuste',
 }
 
+/** Enum TipoProducto del backend: un vehículo es un modelo de moto, con una serie por moto. */
+export const TIPO_PRODUCTO = { repuesto: 0, vehiculo: 1 } as const
+
+export const esMoto = (producto: { tipoId?: number | null } | null | undefined) => producto?.tipoId === TIPO_PRODUCTO.vehiculo
+
 export type FiltrosProductos = {
   categoriaId?: string
   busqueda?: string
   bajoStock?: boolean
   marca?: string
+  /** Sin tipo trae repuestos y motos: la venta y la compra usan los dos. */
+  tipo?: (typeof TIPO_PRODUCTO)[keyof typeof TIPO_PRODUCTO]
 }
 
 /** Arma la ruta con los filtros que acepta GET /api/productos. */
@@ -41,6 +48,7 @@ export function rutaProductos(filtros: FiltrosProductos = {}): string {
   if (filtros.busqueda?.trim()) parametros.set('busqueda', filtros.busqueda.trim())
   if (filtros.bajoStock) parametros.set('bajoStock', 'true')
   if (filtros.marca) parametros.set('marca', filtros.marca)
+  if (filtros.tipo !== undefined) parametros.set('tipo', String(filtros.tipo))
 
   const consulta = parametros.toString()
   return `/productos${consulta ? `?${consulta}` : ''}`
@@ -55,6 +63,7 @@ export const clavesInventario = {
       filtros.busqueda ?? '',
       filtros.bajoStock ?? false,
       filtros.marca ?? 'todas',
+      filtros.tipo ?? 'todos',
     ] as const,
   marcas: ['productos', 'marcas'] as const,
   categorias: ['categorias-producto'] as const,

@@ -109,6 +109,12 @@ public class DetalleVenta : BaseEntity
     /// se separa. Nulo si el precio de la línea era sin IGV.
     /// </summary>
     public decimal? PrecioUnitarioConIgv { get; set; }
+
+    /// <summary>
+    /// Las motos elegidas por su serie, si el producto es un vehículo. En una cotización
+    /// no las aparta: al confirmar la venta se comprueba que sigan en stock.
+    /// </summary>
+    public List<Guid> UnidadesInventarioIds { get; set; } = [];
     public decimal CostoUnitarioHistorico { get; set; }
     public TipoAfectacionIgv TipoAfectacionIgv { get; set; } = TipoAfectacionIgv.Gravado;
     public decimal SubtotalGravado { get; set; }
