@@ -424,11 +424,11 @@ public class OrdenServicioService : IOrdenServicioService
     /// <summary>El cliente nuevo validado como en el alta de clientes, sin guardarlo todavía.</summary>
     private async Task<(Cliente? Cliente, ServiceResult<OrdenServicioResponse>? Error)> PrepararClienteNuevoAsync(ClienteNuevoRequest datos)
     {
-        var nombre = datos.NombreCompleto?.Trim() ?? string.Empty;
-        if (nombre.Length == 0)
-            return (null, ServiceResult<OrdenServicioResponse>.Invalid("El nombre del cliente es obligatorio."));
-        if (nombre.Length > 200)
-            return (null, ServiceResult<OrdenServicioResponse>.Invalid("El nombre del cliente no puede pasar de 200 caracteres."));
+        // Una persona llega con nombres y apellidos; una empresa, con su razón social.
+        var (nombre, errorNombre) = NombreDeCliente.Resolver(
+            datos.NombreCompleto, datos.Nombres, datos.ApellidoPaterno, datos.ApellidoMaterno);
+        if (nombre is null)
+            return (null, ServiceResult<OrdenServicioResponse>.Invalid(errorNombre!));
 
         if (string.IsNullOrWhiteSpace(datos.NumeroDocumento))
             return (null, ServiceResult<OrdenServicioResponse>.Invalid("El documento del cliente es obligatorio."));
@@ -454,7 +454,10 @@ public class OrdenServicioService : IOrdenServicioService
 
         return (new Cliente
         {
-            NombreCompleto     = nombre,
+            NombreCompleto     = nombre.NombreCompleto,
+            Nombres            = nombre.Nombres,
+            ApellidoPaterno    = nombre.ApellidoPaterno,
+            ApellidoMaterno    = nombre.ApellidoMaterno,
             TipoDocumento      = tipo,
             NumeroDocumento    = numero,
             DocumentoIdentidad = numero,

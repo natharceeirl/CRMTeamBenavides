@@ -11,6 +11,12 @@ public class Cliente : BaseEntity
 {
     public string NombreCompleto { get; set; } = string.Empty;
 
+    // De una persona, como en su DNI: el nombre completo los une en este orden. Una
+    // empresa o un cliente registrado antes los tiene vacíos.
+    public string? Nombres { get; set; }
+    public string? ApellidoPaterno { get; set; }
+    public string? ApellidoMaterno { get; set; }
+
     /// <summary>Si el cliente es una empresa (ej. flota).</summary>
     public string? RazonSocial { get; set; }
 

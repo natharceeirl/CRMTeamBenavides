@@ -7,10 +7,12 @@ import { AvisoError } from '../components/AvisoError'
 import { useClientePorDocumento } from '../api/clientes'
 import { useConsultaDocumento, useRellenarConDocumento, type CampoConsultado } from '../api/consultaDocumento'
 import { AyudaConsultaDocumento } from '../components/AyudaConsultaDocumento'
+import { CamposNombreCliente, nombreDelCliente } from '../components/CamposNombreCliente'
 import { useHistorialServicioUnidad } from '../api/portal'
 import {
   TIPO_DOCUMENTO_CLIENTE,
   type AperturaOrdenRequest,
+  type ConsultaDocumentoResponse,
   type ModalidadAtencion,
   type TipoAtencion,
   type TipoDocumentoCliente,
@@ -53,7 +55,11 @@ import { PERMISOS } from '../auth/acceso'
 
 type CamposClienteNuevo = {
   tipoDocumento: TipoDocumentoCliente
-  nombreCompleto: string
+  /** De una empresa; una persona tiene nombres y apellidos. */
+  nombreCompleto?: string
+  nombres?: string
+  apellidoPaterno?: string
+  apellidoMaterno?: string
   telefono?: string
   email?: string
 }
@@ -95,8 +101,11 @@ const unidadNuevaInicial: CamposUnidadNueva = {
 }
 
 /** Lo que trae la consulta del DNI o RUC para el cliente que se registra con la orden. */
-const camposClienteNuevo = (datos: { nombreCompleto: string }): CampoConsultado[] => [
-  [['clienteNuevo', 'nombreCompleto'], datos.nombreCompleto],
+const camposClienteNuevo = (datos: ConsultaDocumentoResponse): CampoConsultado[] => [
+  [['clienteNuevo', 'nombres'], datos.nombres],
+  [['clienteNuevo', 'apellidoPaterno'], datos.apellidoPaterno],
+  [['clienteNuevo', 'apellidoMaterno'], datos.apellidoMaterno],
+  [['clienteNuevo', 'nombreCompleto'], datos.tipoDocumentoId === TIPO_DOCUMENTO_CLIENTE.ruc ? datos.nombreCompleto : null],
 ]
 
 export function NuevaOrdenPage() {
@@ -149,6 +158,7 @@ export function NuevaOrdenPage() {
 
   // El cliente que no está registrado se completa con RENIEC o SUNAT.
   const consultaDocumento = useConsultaDocumento(documentoBuscado, clienteNoEncontrado)
+  const tipoClienteNuevo = Form.useWatch(['clienteNuevo', 'tipoDocumento'], formulario)
   useRellenarConDocumento(formulario, consultaDocumento.data, camposClienteNuevo)
 
   // El tipo de documento del cliente nuevo se propone por la cantidad de dígitos.
@@ -233,7 +243,7 @@ export function NuevaOrdenPage() {
             ? {
                 tipoDocumento: campos.clienteNuevo.tipoDocumento,
                 numeroDocumento: documentoBuscado ?? '',
-                nombreCompleto: campos.clienteNuevo.nombreCompleto.trim(),
+                ...nombreDelCliente(campos.clienteNuevo, campos.clienteNuevo.tipoDocumento === TIPO_DOCUMENTO_CLIENTE.ruc),
                 telefono: sinVacios(campos.clienteNuevo.telefono),
                 email: sinVacios(campos.clienteNuevo.email),
               }
@@ -351,14 +361,12 @@ export function NuevaOrdenPage() {
                         ]}
                       />
                     </Form.Item>
-                    <Form.Item
-                      label="Nombre completo o razón social"
-                      name={['clienteNuevo', 'nombreCompleto']}
-                      extra={<AyudaConsultaDocumento consulta={consultaDocumento} avisarClienteExistente={false} />}
-                      rules={[{ required: true, whitespace: true, message: 'Ingresa el nombre del cliente' }]}
-                    >
-                      <Input maxLength={200} />
-                    </Form.Item>
+                    <CamposNombreCliente
+                      prefijo={['clienteNuevo']}
+                      esEmpresa={tipoClienteNuevo === TIPO_DOCUMENTO_CLIENTE.ruc}
+                      pideApellido={tipoClienteNuevo === TIPO_DOCUMENTO_CLIENTE.dni}
+                      ayuda={<AyudaConsultaDocumento consulta={consultaDocumento} avisarClienteExistente={false} />}
+                    />
                     <Form.Item label="Teléfono" name={['clienteNuevo', 'telefono']}>
                       <Input maxLength={30} />
                     </Form.Item>

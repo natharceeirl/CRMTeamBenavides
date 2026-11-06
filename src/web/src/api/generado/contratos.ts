@@ -408,6 +408,9 @@ export type AltaRapidaClienteRequest = {
   email?: string | null
   direccion?: string | null
   tipoDocumento?: TipoDocumentoCliente | null
+  nombres?: string | null
+  apellidoPaterno?: string | null
+  apellidoMaterno?: string | null
 }
 
 export type ClienteResponse = {
@@ -423,6 +426,9 @@ export type ClienteResponse = {
   tipoDocumento: string | null
   tipoDocumentoId: number | null
   numeroDocumento: string | null
+  nombres: string | null
+  apellidoPaterno: string | null
+  apellidoMaterno: string | null
 }
 
 export type CodigoActivacionResponse = {
@@ -440,6 +446,9 @@ export type CreateClienteRequest = {
   observaciones?: string | null
   tipoDocumento?: TipoDocumentoCliente | null
   numeroDocumento?: string | null
+  nombres?: string | null
+  apellidoPaterno?: string | null
+  apellidoMaterno?: string | null
 }
 
 export type CuentaAppClienteResponse = {
@@ -458,6 +467,9 @@ export type UpdateClienteRequest = {
   observaciones?: string | null
   tipoDocumento?: TipoDocumentoCliente | null
   numeroDocumento?: string | null
+  nombres?: string | null
+  apellidoPaterno?: string | null
+  apellidoMaterno?: string | null
 }
 
 // ── Compras ─────────────────────────────────────────────────────────────────
@@ -1169,6 +1181,9 @@ export type ClienteNuevoRequest = {
   nombreCompleto: string
   telefono?: string | null
   email?: string | null
+  nombres?: string | null
+  apellidoPaterno?: string | null
+  apellidoMaterno?: string | null
 }
 
 export type DetalleServicioResponse = {

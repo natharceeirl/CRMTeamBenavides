@@ -51,9 +51,11 @@ public class ClienteService : IClienteService
 
     public async Task<ServiceResult<ClienteResponse>> CreateAsync(CreateClienteRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.NombreCompleto))
+        var (nombre, errorNombre) = NombreDeCliente.Resolver(
+            request.NombreCompleto, request.Nombres, request.ApellidoPaterno, request.ApellidoMaterno);
+        if (nombre is null)
         {
-            return ServiceResult<ClienteResponse>.Invalid("NombreCompleto es obligatorio.");
+            return ServiceResult<ClienteResponse>.Invalid(errorNombre!);
         }
 
         var (tipoDoc, numDoc, errorDoc) = ValidarYResolverDocumento(request.TipoDocumento, request.NumeroDocumento, request.DocumentoIdentidad);
@@ -74,7 +76,10 @@ public class ClienteService : IClienteService
 
         var cliente = new Cliente
         {
-            NombreCompleto     = request.NombreCompleto.Trim(),
+            NombreCompleto     = nombre.NombreCompleto,
+            Nombres            = nombre.Nombres,
+            ApellidoPaterno    = nombre.ApellidoPaterno,
+            ApellidoMaterno    = nombre.ApellidoMaterno,
             RazonSocial        = request.RazonSocial?.Trim(),
             TipoDocumento      = tipoDoc,
             NumeroDocumento    = numDoc,
@@ -103,9 +108,11 @@ public class ClienteService : IClienteService
             return ServiceResult<ClienteResponse>.NotFound();
         }
 
-        if (string.IsNullOrWhiteSpace(request.NombreCompleto))
+        var (nombre, errorNombre) = NombreDeCliente.Resolver(
+            request.NombreCompleto, request.Nombres, request.ApellidoPaterno, request.ApellidoMaterno);
+        if (nombre is null)
         {
-            return ServiceResult<ClienteResponse>.Invalid("NombreCompleto es obligatorio.");
+            return ServiceResult<ClienteResponse>.Invalid(errorNombre!);
         }
 
         var (tipoDoc, numDoc, errorDoc) = ValidarYResolverDocumento(request.TipoDocumento, request.NumeroDocumento, request.DocumentoIdentidad);
@@ -124,7 +131,10 @@ public class ClienteService : IClienteService
             }
         }
 
-        cliente.NombreCompleto     = request.NombreCompleto.Trim();
+        cliente.NombreCompleto     = nombre.NombreCompleto;
+        cliente.Nombres            = nombre.Nombres;
+        cliente.ApellidoPaterno    = nombre.ApellidoPaterno;
+        cliente.ApellidoMaterno    = nombre.ApellidoMaterno;
         cliente.RazonSocial        = request.RazonSocial?.Trim();
         cliente.TipoDocumento      = tipoDoc;
         cliente.NumeroDocumento    = numDoc;
@@ -184,9 +194,11 @@ public class ClienteService : IClienteService
 
     public async Task<ServiceResult<ClienteResponse>> AltaRapidaAsync(AltaRapidaClienteRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.NombreCompleto))
+        var (nombre, errorNombre) = NombreDeCliente.Resolver(
+            request.NombreCompleto, request.Nombres, request.ApellidoPaterno, request.ApellidoMaterno);
+        if (nombre is null)
         {
-            return ServiceResult<ClienteResponse>.Invalid("NombreCompleto es obligatorio.");
+            return ServiceResult<ClienteResponse>.Invalid(errorNombre!);
         }
 
         if (string.IsNullOrWhiteSpace(request.NumeroDocumento))
@@ -213,7 +225,10 @@ public class ClienteService : IClienteService
 
         var cliente = new Cliente
         {
-            NombreCompleto     = request.NombreCompleto.Trim(),
+            NombreCompleto     = nombre.NombreCompleto,
+            Nombres            = nombre.Nombres,
+            ApellidoPaterno    = nombre.ApellidoPaterno,
+            ApellidoMaterno    = nombre.ApellidoMaterno,
             TipoDocumento      = tipoDoc,
             NumeroDocumento    = numDoc,
             DocumentoIdentidad = numDoc,
@@ -303,5 +318,8 @@ public class ClienteService : IClienteService
         cliente.Activo,
         cliente.TipoDocumento?.ToString(),
         cliente.TipoDocumento.HasValue ? (int)cliente.TipoDocumento.Value : null,
-        cliente.NumeroDocumento ?? cliente.DocumentoIdentidad);
+        cliente.NumeroDocumento ?? cliente.DocumentoIdentidad,
+        cliente.Nombres,
+        cliente.ApellidoPaterno,
+        cliente.ApellidoMaterno);
 }

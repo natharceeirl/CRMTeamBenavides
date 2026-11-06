@@ -212,6 +212,12 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Property<bool>("Activo")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("ApellidoMaterno")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ApellidoPaterno")
+                        .HasColumnType("text");
+
                     b.Property<string>("CodigoActivacionHash")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -245,6 +251,9 @@ namespace CRMTeamBenavides.Api.Migrations
 
                     b.Property<string>("NombreCompleto")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Nombres")
                         .HasColumnType("text");
 
                     b.Property<string>("NumeroDocumento")

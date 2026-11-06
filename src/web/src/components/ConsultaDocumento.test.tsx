@@ -14,6 +14,9 @@ const dni = {
   tipoDocumentoId: 0,
   numeroDocumento: '46027897',
   nombreCompleto: 'Roxana Karina Delgado Huamani',
+  nombres: 'Roxana Karina',
+  apellidoPaterno: 'Delgado',
+  apellidoMaterno: 'Huamani',
   clienteExistenteId: null,
   clienteExistenteNombre: null,
 }
@@ -26,7 +29,7 @@ describe('completar por DNI o RUC', () => {
     expect(documentoConsultable('CE123456')).toBe(false)
   })
 
-  it('al escribir el DNI del cliente se completa su nombre y el tipo de documento', async () => {
+  it('al escribir el DNI se completan nombres, primer y segundo apellido, y el tipo de documento', async () => {
     const usuario = userEvent.setup()
     const { llamadas } = apiFalsa({
       ...recepcion(),
@@ -37,14 +40,22 @@ describe('completar por DNI o RUC', () => {
 
     await usuario.type(await screen.findByLabelText('Número de documento'), '46027897')
 
-    await vi.waitFor(() =>
-      expect((screen.getByLabelText('Nombre completo') as HTMLInputElement).value).toBe('Roxana Karina Delgado Huamani'),
-    )
+    const valor = (etiqueta: string) => (screen.getByLabelText(etiqueta) as HTMLInputElement).value
+    await vi.waitFor(() => expect(valor('Nombres')).toBe('Roxana Karina'))
+    expect(valor('Primer apellido')).toBe('Delgado')
+    expect(valor('Segundo apellido')).toBe('Huamani')
     expect(screen.getByText('Datos de RENIEC. Revísalos antes de guardar.')).toBeTruthy()
     await usuario.click(screen.getByRole('button', { name: 'Guardar' }))
     await vi.waitFor(() => expect(llamadas.some((llamada) => llamada.metodo === 'POST' && llamada.ruta === '/clientes')).toBe(true))
     const cliente = JSON.parse(String(llamadas.find((llamada) => llamada.ruta === '/clientes' && llamada.metodo === 'POST')?.cuerpo))
-    expect(cliente).toMatchObject({ nombreCompleto: 'Roxana Karina Delgado Huamani', tipoDocumento: 0, numeroDocumento: '46027897' })
+    expect(cliente).toMatchObject({
+      nombreCompleto: 'Roxana Karina Delgado Huamani',
+      nombres: 'Roxana Karina',
+      apellidoPaterno: 'Delgado',
+      apellidoMaterno: 'Huamani',
+      tipoDocumento: 0,
+      numeroDocumento: '46027897',
+    })
     // Un solo pedido por número, aunque se escriba de a un dígito.
     expect(llamadas.filter((llamada) => llamada.ruta.startsWith('/consulta-documento')).length).toBe(1)
   })
@@ -57,11 +68,11 @@ describe('completar por DNI o RUC', () => {
     })
     montar(<ModalCliente abierto onCerrar={vi.fn()} />)
 
-    await usuario.type(await screen.findByLabelText('Nombre completo'), 'Roxi Delgado')
+    await usuario.type(await screen.findByLabelText('Nombres'), 'Roxi')
     await usuario.type(screen.getByLabelText('Número de documento'), '46027897')
 
     expect(await screen.findByText('Ese documento ya es del cliente Roxana Delgado.')).toBeTruthy()
-    expect((screen.getByLabelText('Nombre completo') as HTMLInputElement).value).toBe('Roxi Delgado')
+    expect((screen.getByLabelText('Nombres') as HTMLInputElement).value).toBe('Roxi')
   })
 
   it('si la consulta no está disponible, lo dice y el nombre se escribe a mano', async () => {
@@ -79,7 +90,23 @@ describe('completar por DNI o RUC', () => {
     await usuario.type(await screen.findByLabelText('Número de documento'), '46027897')
 
     expect(await screen.findByText('Se acabaron las consultas de DNI y RUC del mes: escribe el nombre a mano.')).toBeTruthy()
-    expect((screen.getByLabelText('Nombre completo') as HTMLInputElement).value).toBe('')
+    expect((screen.getByLabelText('Nombres') as HTMLInputElement).value).toBe('')
+  })
+
+  it('un cliente de antes muestra su nombre en «Nombres» para repartirlo; una empresa, la razón social', async () => {
+    apiFalsa({ ...recepcion() })
+    const antiguo = { id: 'k1', nombreCompleto: 'Luis Quispe Mamani', tipoDocumentoId: 0, numeroDocumento: '40123456', activo: true }
+    const { unmount } = montar(<ModalCliente abierto cliente={antiguo as never} onCerrar={vi.fn()} />)
+
+    expect(((await screen.findByLabelText('Nombres')) as HTMLInputElement).value).toBe('Luis Quispe Mamani')
+    expect((screen.getByLabelText('Primer apellido') as HTMLInputElement).value).toBe('')
+    unmount()
+
+    const empresa = { id: 'k2', nombreCompleto: 'TEAM BENAVIDES S.R.L.', tipoDocumentoId: 1, numeroDocumento: '20601030013', activo: true }
+    montar(<ModalCliente abierto cliente={empresa as never} onCerrar={vi.fn()} />)
+
+    expect(((await screen.findByLabelText('Nombre o razón social')) as HTMLInputElement).value).toBe('TEAM BENAVIDES S.R.L.')
+    expect(screen.queryByLabelText('Primer apellido')).toBeNull()
   })
 
   it('el proveedor se completa por RUC con la razón social y la dirección de SUNAT', async () => {

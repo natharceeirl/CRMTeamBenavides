@@ -35,7 +35,8 @@ describe('nueva cita', () => {
     // El alta se abre encima de la cita: es el último diálogo.
     expect(await screen.findByText('Registrar cliente')).toBeTruthy()
     const alta = screen.getAllByRole('dialog').at(-1)!
-    await usuario.type(within(alta).getByLabelText('Nombre completo'), 'Rosa Mamani')
+    await usuario.type(within(alta).getByLabelText('Nombres'), 'Rosa')
+    await usuario.type(within(alta).getByLabelText('Primer apellido'), 'Mamani')
     await usuario.click(within(alta).getByRole('button', { name: 'Guardar' }))
 
     expect(await screen.findByTitle('Rosa Mamani')).toBeTruthy()

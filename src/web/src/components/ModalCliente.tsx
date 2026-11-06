@@ -4,6 +4,7 @@ import { useConsultaDocumento, useRellenarConDocumento, type CampoConsultado } f
 import type { ClienteRequest, ClienteResponse, ConsultaDocumentoResponse, TipoDocumentoCliente } from '../api/tipos'
 import { AvisoError } from './AvisoError'
 import { AyudaConsultaDocumento } from './AyudaConsultaDocumento'
+import { CamposNombreCliente, nombreDelCliente } from './CamposNombreCliente'
 
 type Props = {
   abierto: boolean
@@ -14,7 +15,11 @@ type Props = {
 }
 
 type Campos = {
-  nombreCompleto: string
+  /** De una empresa. Una persona tiene nombres y apellidos, y el nombre completo los une. */
+  nombreCompleto?: string
+  nombres?: string
+  apellidoPaterno?: string
+  apellidoMaterno?: string
   razonSocial?: string
   tipoDocumento?: TipoDocumentoCliente | null
   numeroDocumento?: string
@@ -26,10 +31,15 @@ type Campos = {
 
 const sinVacios = (valor?: string) => (valor && valor.trim() !== '' ? valor.trim() : null)
 
-// Con DNI se completa el nombre; con RUC, también la razón social y la dirección.
+const RUC = 1
+
+// Con DNI se completan nombres y apellidos; con RUC, la razón social y la dirección.
 const camposDelDocumento = (datos: ConsultaDocumentoResponse): CampoConsultado[] => [
   ['tipoDocumento', datos.tipoDocumentoId, true],
-  ['nombreCompleto', datos.nombreCompleto],
+  ['nombres', datos.nombres],
+  ['apellidoPaterno', datos.apellidoPaterno],
+  ['apellidoMaterno', datos.apellidoMaterno],
+  ['nombreCompleto', datos.tipoDocumentoId === RUC ? datos.nombreCompleto : null],
   ['razonSocial', datos.razonSocial],
   ['direccion', datos.direccion],
 ]
@@ -42,11 +52,17 @@ export function ModalCliente({ abierto, cliente, onCerrar, onGuardado }: Readonl
   const documentoInicial = cliente?.numeroDocumento ?? cliente?.documentoIdentidad ?? ''
   const consulta = useConsultaDocumento(numeroDocumento, abierto && numeroDocumento?.trim() !== documentoInicial)
   useRellenarConDocumento(formulario, consulta.data, camposDelDocumento)
+  const tipoDocumento = Form.useWatch('tipoDocumento', formulario)
+  const esEmpresa = tipoDocumento === RUC
+  // Un cliente de antes (persona) tiene todo en el nombre completo: va a «Nombres» para repartirlo.
+  const empresaInicial = (cliente?.tipoDocumentoId ?? null) === RUC
 
-  const enviar = async (campos: Campos) => {
+  const enviar = async (formularioValido: Campos) => {
+    // También lo que no está a la vista: la razón social de una persona no se pierde al editar.
+    const campos: Campos = { ...formulario.getFieldsValue(true), ...formularioValido }
     const doc = sinVacios(campos.numeroDocumento)
     const datos: ClienteRequest = {
-      nombreCompleto: campos.nombreCompleto.trim(),
+      ...nombreDelCliente(campos, esEmpresa),
       razonSocial: sinVacios(campos.razonSocial),
       tipoDocumento: campos.tipoDocumento ?? null,
       numeroDocumento: doc,
@@ -85,6 +101,9 @@ export function ModalCliente({ abierto, cliente, onCerrar, onGuardado }: Readonl
         onFinish={enviar}
         initialValues={{
           nombreCompleto: cliente?.nombreCompleto ?? '',
+          nombres: cliente?.nombres ?? (cliente && !empresaInicial ? cliente.nombreCompleto : ''),
+          apellidoPaterno: cliente?.apellidoPaterno ?? '',
+          apellidoMaterno: cliente?.apellidoMaterno ?? '',
           razonSocial: cliente?.razonSocial ?? '',
           tipoDocumento:
             cliente?.tipoDocumentoId ??
@@ -139,16 +158,12 @@ export function ModalCliente({ abierto, cliente, onCerrar, onGuardado }: Readonl
         >
           <Input placeholder="DNI o RUC: el nombre se completa solo" />
         </Form.Item>
-        <Form.Item
-          label="Nombre completo"
-          name="nombreCompleto"
-          rules={[{ required: true, message: 'Ingresa el nombre del cliente' }]}
-        >
-          <Input placeholder="Nombre y apellidos, o contacto de la empresa" />
-        </Form.Item>
-        <Form.Item label="Razón social" name="razonSocial">
-          <Input placeholder="Solo si el cliente es empresa" />
-        </Form.Item>
+        <CamposNombreCliente esEmpresa={esEmpresa} pideApellido={tipoDocumento === 0} />
+        {esEmpresa && (
+          <Form.Item label="Razón social" name="razonSocial">
+            <Input placeholder="Como figura en SUNAT" />
+          </Form.Item>
+        )}
         <Form.Item label="Teléfono" name="telefono">
           <Input />
         </Form.Item>

@@ -32,7 +32,12 @@ public record ClienteNuevoRequest(
     string NumeroDocumento,
     string NombreCompleto,
     string? Telefono = null,
-    string? Email = null);
+    string? Email = null,
+    // Una persona: nombres, primer y segundo apellido, como en su DNI. Con nombres, el
+    // nombre completo se arma con ellos; sin nombres (empresa), se usa NombreCompleto.
+    string? Nombres = null,
+    string? ApellidoPaterno = null,
+    string? ApellidoMaterno = null);
 
 /// <summary>Unidad que se registra al abrir la orden. La lectura de ingreso pasa a ser su lectura actual.</summary>
 public record UnidadNuevaRequest(
