@@ -213,7 +213,8 @@ public class ReporteService : IReporteService
                 {
                     Venta = v,
                     Detalle = d,
-                    IngresoNeto = Math.Round(d.Cantidad * d.PrecioUnitario, 2),
+                    // Una línea gratuita no es ingreso: queda solo su costo.
+                    IngresoNeto = Math.Round(AfectacionIgv.IngresoSinIgv(d.TipoAfectacionIgv, d.Cantidad, d.PrecioUnitario), 2),
                     CostoHistorico = Math.Round(d.Cantidad * d.CostoUnitarioHistorico, 2)
                 }))
             .ToList();
@@ -355,7 +356,7 @@ public class ReporteService : IReporteService
 
             if (incluirFinanciero)
             {
-                var ingresoSinIgv = v.Detalles.Sum(d => d.Cantidad * d.PrecioUnitario);
+                var ingresoSinIgv = v.Detalles.Sum(d => AfectacionIgv.IngresoSinIgv(d.TipoAfectacionIgv, d.Cantidad, d.PrecioUnitario));
                 costoTotal = v.Detalles.Sum(d => d.Cantidad * d.CostoUnitarioHistorico);
                 utilidad = ingresoSinIgv - costoTotal.Value;
                 margen = ingresoSinIgv > 0 ? Math.Round((utilidad.Value / ingresoSinIgv) * 100m, 2) : 0m;
@@ -426,7 +427,7 @@ public class ReporteService : IReporteService
 
             if (incluirFinanciero)
             {
-                var ingresoSinIgv = o.Detalles.Sum(d => d.Cantidad * d.PrecioUnitario);
+                var ingresoSinIgv = o.Detalles.Sum(d => AfectacionIgv.IngresoSinIgv(d.TipoAfectacionIgv, d.Cantidad, d.PrecioUnitario));
                 costoTotal = o.Detalles.Sum(d => d.Cantidad * d.CostoUnitarioHistorico);
                 utilidad = ingresoSinIgv - costoTotal.Value;
                 margen = ingresoSinIgv > 0 ? Math.Round((utilidad.Value / ingresoSinIgv) * 100m, 2) : 0m;

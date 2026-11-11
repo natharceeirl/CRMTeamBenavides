@@ -7,7 +7,7 @@ import { EtiquetaEstado } from './EtiquetaEstado'
 import { entero, fechaHora, importe, nombreDeEnum, soles } from '../utils/formato'
 import { nombresEstado } from '../api/ordenes'
 import { abrirDocumento } from '../utils/impresion'
-import { htmlFormatoAtencion, nombresTiposAtencion } from '../utils/formatoAtencion'
+import { htmlFormatoAtencion, nombresTiposAtencion, rasgosItemFormato } from '../utils/formatoAtencion'
 
 type Props = {
   abierto: boolean
@@ -23,7 +23,7 @@ const columnas: TableProps<FormatoAtencionItemDto>['columns'] = [
       <>
         <div>{item.descripcion}</div>
         <div className="texto-secundario">
-          {[item.tipoItemNombre, item.afectacionIgv === 'Gravado' ? null : item.afectacionIgv].filter(Boolean).join(' · ')}
+          {rasgosItemFormato(item)}
         </div>
       </>
     ),
@@ -169,6 +169,12 @@ export function ModalFormatoAtencion({ abierto, ordenServicioId, onCerrar }: Rea
                 <div>
                   <div className="etiqueta">Inafectas</div>
                   <div className="valor">{soles(datos.financiero.subtotalInafecto)}</div>
+                </div>
+              )}
+              {datos.financiero.subtotalGratuito > 0 && (
+                <div>
+                  <div className="etiqueta">Op. gratuitas</div>
+                  <div className="valor">{soles(datos.financiero.subtotalGratuito)}</div>
                 </div>
               )}
               <div>

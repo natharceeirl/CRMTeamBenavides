@@ -132,7 +132,9 @@ public record DetalleServicioResponse(
     decimal PorcentajeIgvAplicado = 18.00m,
     decimal MontoIgv = 0m,
     decimal Total = 0m,
-    decimal? PrecioUnitarioConIgv = null);
+    decimal? PrecioUnitarioConIgv = null,
+    // Lo que se habría cobrado si la línea es gratuita; 0 si se cobra.
+    decimal ValorReferencial = 0m);
 
 public record HistorialEstadoOrdenResponse(
     Guid Id,
@@ -200,7 +202,9 @@ public record OrdenServicioResponse(
     decimal Saldo = 0m,
     string EstadoPago = "Pendiente",
     DateTime? FechaEnvioPresupuesto = null,
-    List<int>? TiposAtencionIds = null);
+    List<int>? TiposAtencionIds = null,
+    // Op. gratuitas: lo que valen las líneas gratuitas, con IGV. No se suma al total.
+    decimal SubtotalGratuito = 0m);
 
 public record OrdenServicioDetalleResponse(
     Guid Id,
@@ -267,4 +271,6 @@ public record OrdenServicioDetalleResponse(
     string EstadoPago = "Pendiente",
     List<PagoResponse>? Pagos = null,
     DateTime? FechaEnvioPresupuesto = null,
-    List<int>? TiposAtencionIds = null);
+    List<int>? TiposAtencionIds = null,
+    // Op. gratuitas: lo que valen las líneas gratuitas, con IGV. No se suma al total.
+    decimal SubtotalGratuito = 0m);

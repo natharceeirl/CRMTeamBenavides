@@ -66,7 +66,8 @@ public class VentaService : IVentaService
                 estadoComprobante,
                 (int)v.EstadoAprobacionGerencia,
                 v.EstadoAprobacionGerencia.ToString(),
-                v.OrdenServicio?.NumeroOrden);
+                v.OrdenServicio?.NumeroOrden,
+                v.SubtotalGratuito);
         }).ToList();
     }
 
@@ -127,6 +128,11 @@ public class VentaService : IVentaService
         if (soloClienteId.HasValue && request.ClienteId != soloClienteId.Value)
         {
             return ServiceResult<VentaDetalleResponse>.Invalid("No tiene permisos para registrar ventas a nombre de otro cliente.");
+        }
+
+        if (TieneAfectacionInvalida(request.Detalles))
+        {
+            return ServiceResult<VentaDetalleResponse>.Invalid("La afectación de IGV no es válida.");
         }
 
         var cliente = await _context.Clientes
@@ -242,6 +248,7 @@ public class VentaService : IVentaService
                 ventaOs.SubtotalGravado   = ordenServicio.SubtotalGravado;
                 ventaOs.SubtotalExonerado = ordenServicio.SubtotalExonerado;
                 ventaOs.SubtotalInafecto  = ordenServicio.SubtotalInafecto;
+                ventaOs.SubtotalGratuito  = ordenServicio.SubtotalGratuito;
                 ventaOs.MontoIgv          = ordenServicio.MontoIgv;
                 ventaOs.Total             = ordenServicio.Total;
             }
@@ -308,6 +315,7 @@ public class VentaService : IVentaService
                 ventaOs.SubtotalGravado   = ventaOs.Detalles.Sum(d => d.SubtotalGravado);
                 ventaOs.SubtotalExonerado = ventaOs.Detalles.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Exonerado).Sum(d => d.Cantidad * d.PrecioUnitario);
                 ventaOs.SubtotalInafecto  = ventaOs.Detalles.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Inafecto).Sum(d => d.Cantidad * d.PrecioUnitario);
+                ventaOs.SubtotalGratuito  = ventaOs.Detalles.Sum(d => d.ValorReferencial);
                 ventaOs.MontoIgv          = ventaOs.Detalles.Sum(d => d.MontoIgv);
                 ventaOs.Total             = ventaOs.SubtotalGravado + ventaOs.SubtotalExonerado + ventaOs.SubtotalInafecto + ventaOs.MontoIgv;
             }
@@ -431,7 +439,8 @@ public class VentaService : IVentaService
                 var precioBase = calculo.Lista;
                 var precioUnitario = calculo.Escrito;
 
-                if (Math.Abs(precioUnitario - precioBase) > 0.001m || (item.Descuento.HasValue && item.Descuento.Value > 0))
+                if (Math.Abs(precioUnitario - precioBase) > 0.001m || (item.Descuento.HasValue && item.Descuento.Value > 0)
+                    || afectacion.EsGratuita())
                 {
                     requiereAprobacionCotiz = true;
                     detallesCambioCotiz.Add(new
@@ -439,7 +448,7 @@ public class VentaService : IVentaService
                         ProductoId = prod.Id,
                         ProductoNombre = prod.Nombre,
                         PrecioBase = precioBase,
-                        PrecioSolicitado = precioUnitario,
+                        PrecioSolicitado = afectacion.EsGratuita() ? 0m : precioUnitario,
                         Descuento = item.Descuento ?? 0m
                     });
                 }
@@ -479,6 +488,7 @@ public class VentaService : IVentaService
             cotizacion.SubtotalGravado   = cotizacion.Detalles.Sum(d => d.SubtotalGravado);
             cotizacion.SubtotalExonerado = cotizacion.Detalles.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Exonerado).Sum(d => d.Cantidad * d.PrecioUnitario);
             cotizacion.SubtotalInafecto  = cotizacion.Detalles.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Inafecto).Sum(d => d.Cantidad * d.PrecioUnitario);
+            cotizacion.SubtotalGratuito  = cotizacion.Detalles.Sum(d => d.ValorReferencial);
             cotizacion.MontoIgv          = cotizacion.Detalles.Sum(d => d.MontoIgv);
             cotizacion.Total             = cotizacion.SubtotalGravado + cotizacion.SubtotalExonerado + cotizacion.SubtotalInafecto + cotizacion.MontoIgv;
 
@@ -584,7 +594,8 @@ public class VentaService : IVentaService
                 var precioBase = calculo.Lista;
                 var precioUnitario = calculo.Escrito;
 
-                if (Math.Abs(precioUnitario - precioBase) > 0.001m || (item.Descuento.HasValue && item.Descuento.Value > 0))
+                if (Math.Abs(precioUnitario - precioBase) > 0.001m || (item.Descuento.HasValue && item.Descuento.Value > 0)
+                    || afectacion.EsGratuita())
                 {
                     requiereAprobacionVenta = true;
                     detallesCambioVenta.Add(new
@@ -592,7 +603,7 @@ public class VentaService : IVentaService
                         ProductoId = prod.Id,
                         ProductoNombre = prod.Nombre,
                         PrecioBase = precioBase,
-                        PrecioSolicitado = precioUnitario,
+                        PrecioSolicitado = afectacion.EsGratuita() ? 0m : precioUnitario,
                         Descuento = item.Descuento ?? 0m
                     });
                 }
@@ -651,6 +662,7 @@ public class VentaService : IVentaService
             venta.SubtotalGravado   = venta.Detalles.Sum(d => d.SubtotalGravado);
             venta.SubtotalExonerado = venta.Detalles.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Exonerado).Sum(d => d.Cantidad * d.PrecioUnitario);
             venta.SubtotalInafecto  = venta.Detalles.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Inafecto).Sum(d => d.Cantidad * d.PrecioUnitario);
+            venta.SubtotalGratuito  = venta.Detalles.Sum(d => d.ValorReferencial);
             venta.MontoIgv          = venta.Detalles.Sum(d => d.MontoIgv);
             venta.Total             = venta.SubtotalGravado + venta.SubtotalExonerado + venta.SubtotalInafecto + venta.MontoIgv;
 
@@ -720,6 +732,11 @@ public class VentaService : IVentaService
         if (request.Detalles.Any(d => d.Cantidad <= 0))
         {
             return ServiceResult<VentaDetalleResponse>.Invalid("La cantidad de cada producto debe ser mayor a 0.");
+        }
+
+        if (TieneAfectacionInvalida(request.Detalles))
+        {
+            return ServiceResult<VentaDetalleResponse>.Invalid("La afectación de IGV no es válida.");
         }
 
         var venta = await _context.Ventas
@@ -877,6 +894,7 @@ public class VentaService : IVentaService
             decimal subtotalGravadoTotal = 0m;
             decimal subtotalExoneradoTotal = 0m;
             decimal subtotalInafectoTotal = 0m;
+            decimal subtotalGratuitoTotal = 0m;
             decimal montoIgvTotal = 0m;
 
             foreach (var item in request.Detalles)
@@ -895,10 +913,11 @@ public class VentaService : IVentaService
                 bool precioModificado = Math.Abs(precioUnitario - precioBase) > 0.001m;
                 bool tieneDescuento = item.Descuento.HasValue && item.Descuento.Value > 0;
 
-                if (precioModificado || tieneDescuento)
+                // Una línea gratuita se cobra S/ 0.00: Gerencia la aprueba como un descuento.
+                if (precioModificado || tieneDescuento || afectacion.EsGratuita())
                 {
                     requiereAprobacion = true;
-                    detallesCambio.Add(new AprobacionService.CambioPrecioLinea(prod.Nombre, precioBase, precioUnitario, item.Descuento ?? 0m));
+                    detallesCambio.Add(new AprobacionService.CambioPrecioLinea(prod.Nombre, precioBase, afectacion.EsGratuita() ? 0m : precioUnitario, item.Descuento ?? 0m));
                 }
 
                 subtotalGravadoTotal += calculo.SubtotalGravado;
@@ -933,6 +952,8 @@ public class VentaService : IVentaService
                 }
                 nuevoDetalle.UnidadesInventarioIds = motosEdicion;
 
+                subtotalGratuitoTotal += nuevoDetalle.ValorReferencial;
+
                 venta.Detalles.Add(nuevoDetalle);
                 _context.DetallesVenta.Add(nuevoDetalle);
             }
@@ -940,6 +961,7 @@ public class VentaService : IVentaService
             venta.SubtotalGravado = decimal.Round(subtotalGravadoTotal, 2, MidpointRounding.AwayFromZero);
             venta.SubtotalExonerado = decimal.Round(subtotalExoneradoTotal, 2, MidpointRounding.AwayFromZero);
             venta.SubtotalInafecto = decimal.Round(subtotalInafectoTotal, 2, MidpointRounding.AwayFromZero);
+            venta.SubtotalGratuito = decimal.Round(subtotalGratuitoTotal, 2, MidpointRounding.AwayFromZero);
             venta.MontoIgv = decimal.Round(montoIgvTotal, 2, MidpointRounding.AwayFromZero);
             venta.Total = decimal.Round(venta.SubtotalGravado + venta.SubtotalExonerado + venta.SubtotalInafecto + venta.MontoIgv, 2, MidpointRounding.AwayFromZero);
             venta.FechaModificacion = DateTime.UtcNow;
@@ -1416,6 +1438,7 @@ public class VentaService : IVentaService
                 SubtotalGravado      = venta.SubtotalGravado,
                 SubtotalExonerado    = venta.SubtotalExonerado,
                 SubtotalInafecto     = venta.SubtotalInafecto,
+                SubtotalGratuito     = venta.SubtotalGratuito,
                 PorcentajeIgv        = porcentajeIgv,
                 MontoIgv             = venta.MontoIgv,
                 Total                = venta.Total,
@@ -1561,6 +1584,9 @@ public class VentaService : IVentaService
         return ServiceResult<VentaDetalleResponse>.Success(MapToDetalleResponse(venta));
     }
 
+    private static bool TieneAfectacionInvalida(IEnumerable<CreateDetalleVentaRequest>? detalles) =>
+        detalles?.Any(d => d.TipoAfectacionIgv is TipoAfectacionIgv afectacion && !Enum.IsDefined(afectacion)) == true;
+
     /// <summary>
     /// Un repuesto en una línea de venta: <see cref="Lista"/> es el precio de lista de hoy y
     /// <see cref="Escrito"/> el que se cobra, los dos con IGV si el repuesto lo incluye.
@@ -1611,7 +1637,8 @@ public class VentaService : IVentaService
                     d.Producto?.Nombre ?? (d.Servicio?.Nombre ?? "Ítem"),
                     d.Cantidad,
                     d.PrecioUnitario,
-                    d.PrecioUnitarioConIgv.HasValue ? d.SubtotalGravado : d.Cantidad * d.PrecioUnitario,
+                    d.TipoAfectacionIgv.EsGratuita() ? 0m
+                        : d.PrecioUnitarioConIgv.HasValue ? d.SubtotalGravado : d.Cantidad * d.PrecioUnitario,
                     (int)d.TipoItem,
                     d.TipoItem.ToString(),
                     d.ServicioId,
@@ -1623,7 +1650,8 @@ public class VentaService : IVentaService
                     d.MontoIgv,
                     d.Total,
                     d.PrecioUnitarioConIgv,
-                    d.UnidadesInventarioIds.Count > 0 ? d.UnidadesInventarioIds : null))
+                    d.UnidadesInventarioIds.Count > 0 ? d.UnidadesInventarioIds : null,
+                    ValorReferencial: d.ValorReferencial))
                 .ToList(),
             v.Activo,
             v.Comprobante != null ? MapToComprobanteResponse(v.Comprobante) : null,
@@ -1656,7 +1684,8 @@ public class VentaService : IVentaService
             estadoComprobante,
             (int)v.EstadoAprobacionGerencia,
             v.EstadoAprobacionGerencia.ToString(),
-            v.OrdenServicio?.NumeroOrden);
+            v.OrdenServicio?.NumeroOrden,
+            v.SubtotalGratuito);
     }
 
     private static ComprobanteResponse MapToComprobanteResponse(Comprobante c) => new(
@@ -1676,5 +1705,6 @@ public class VentaService : IVentaService
         c.Total,
         c.MetodoPagoPrincipal,
         c.Observaciones,
-        c.OrdenServicioId);
+        c.OrdenServicioId,
+        c.SubtotalGratuito);
 }

@@ -9,7 +9,8 @@ namespace CRMTeamBenavides.Api.Services;
 /// </summary>
 public static class CalculoCompra
 {
-    public record MontosLinea(decimal Subtotal, decimal MontoIgv, decimal Total);
+    /// <param name="ValorReferencial">Lo que se habría pagado por una línea gratuita, con IGV; 0 si se paga.</param>
+    public record MontosLinea(decimal Subtotal, decimal MontoIgv, decimal Total, decimal ValorReferencial = 0m);
 
     public static decimal Redondear(decimal monto) =>
         Math.Round(monto, 2, MidpointRounding.AwayFromZero);
@@ -17,6 +18,8 @@ public static class CalculoCompra
     /// <summary>
     /// Sin IGV: subtotal = cantidad × precio e IGV encima. Con IGV: el importe ya
     /// es el total y el subtotal sale de dividirlo. Exonerado e inafecto no llevan IGV.
+    /// Una línea gratuita (bonificación del proveedor) no se paga: sus montos quedan en
+    /// 0 y su costo también, y guarda lo que se habría pagado como gravada.
     /// </summary>
     public static MontosLinea CalcularLinea(
         int cantidad,
@@ -25,6 +28,12 @@ public static class CalculoCompra
         decimal porcentajeIgv,
         bool preciosIncluyenIgv)
     {
+        if (afectacion.EsGratuita())
+        {
+            var comoGravada = CalcularLinea(cantidad, precioUnitario, TipoAfectacionIgv.Gravado, porcentajeIgv, preciosIncluyenIgv);
+            return new MontosLinea(0m, 0m, 0m, comoGravada.Total);
+        }
+
         var importe = Redondear(cantidad * precioUnitario);
 
         if (afectacion != TipoAfectacionIgv.Gravado || porcentajeIgv <= 0)

@@ -811,6 +811,11 @@ public class OrdenServicioService : IOrdenServicioService
             ? TipoItemServicio.Repuesto
             : (request.ServicioId.HasValue ? TipoItemServicio.Servicio : TipoItemServicio.ManoDeObra));
 
+        if (request.TipoAfectacionIgv is TipoAfectacionIgv afectacionPedida && !Enum.IsDefined(afectacionPedida))
+        {
+            return ServiceResult<DetalleServicioResponse>.Invalid("La afectación de IGV no es válida.");
+        }
+
         // Determinar TipoAfectacionIgv inicial
         var tipoAfectacion = request.TipoAfectacionIgv ?? TipoAfectacionIgv.Gravado;
 
@@ -932,7 +937,11 @@ public class OrdenServicioService : IOrdenServicioService
                 }
 
                 // Gerencia, Recepción y quien tiene precios.modificar fijan el precio sin pedir aprobación.
-                if (precioModificado && !puedeModificarPrecios)
+                if (tipoAfectacion.EsGratuita() && !puedeModificarPrecios)
+                {
+                    await SolicitarAprobacionLineaGratuitaAsync(orden, detalle, producto.Nombre, precioBase, usuarioId);
+                }
+                else if (precioModificado && !puedeModificarPrecios)
                 {
                     orden.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
                     _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
@@ -1044,7 +1053,11 @@ public class OrdenServicioService : IOrdenServicioService
             }
 
             // Gerencia, Recepción y quien tiene precios.modificar fijan el precio sin pedir aprobación.
-            if (precioModificadoServ && !puedeModificarPrecios)
+            if (tipoAfectacion.EsGratuita() && !puedeModificarPrecios)
+            {
+                await SolicitarAprobacionLineaGratuitaAsync(orden, detalle, servicio.Nombre, precioBaseServ, usuarioId);
+            }
+            else if (precioModificadoServ && !puedeModificarPrecios)
             {
                 orden.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
                 _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
@@ -1289,6 +1302,11 @@ public class OrdenServicioService : IOrdenServicioService
             return ServiceResult<DetalleServicioResponse>.Invalid("La cantidad debe ser mayor a 0.");
         }
 
+        if (request.TipoAfectacionIgv is TipoAfectacionIgv afectacionPedida && !Enum.IsDefined(afectacionPedida))
+        {
+            return ServiceResult<DetalleServicioResponse>.Invalid("La afectación de IGV no es válida.");
+        }
+
         var parametros = await PrecioLista.ParametrosAsync(_context);
         decimal precioBase = 0m;
         string nombreItem = detalle.Descripcion;
@@ -1433,15 +1451,21 @@ public class OrdenServicioService : IOrdenServicioService
             detalle.Descripcion = request.Descripcion.Trim();
         }
 
-        if (request.TipoAfectacionIgv.HasValue && request.TipoAfectacionIgv.Value != detalle.TipoAfectacionIgv)
+        var nuevaAfectacion = request.TipoAfectacionIgv is TipoAfectacionIgv pedida && pedida != detalle.TipoAfectacionIgv
+            ? pedida
+            : (TipoAfectacionIgv?)null;
+        var cambiaAfectacion = nuevaAfectacion.HasValue;
+        var pasaAGratuita = nuevaAfectacion is TipoAfectacionIgv nueva && nueva.EsGratuita() && !detalle.TipoAfectacionIgv.EsGratuita();
+
+        if (nuevaAfectacion is TipoAfectacionIgv afectacion)
         {
             // Una línea exonerada o inafecta no lleva IGV: el precio escrito pasa a ser la base.
             var escrito = PrecioLista.Referencia(detalle.PrecioUnitario, detalle.PrecioUnitarioConIgv);
             var segunAfectacion = PrecioLista.DeEscrito(
-                escrito, incluyeIgv || detalle.PrecioUnitarioConIgv.HasValue, request.TipoAfectacionIgv.Value, parametros.PorcentajeIgv);
+                escrito, incluyeIgv || detalle.PrecioUnitarioConIgv.HasValue, afectacion, parametros.PorcentajeIgv);
             detalle.PrecioUnitario = segunAfectacion.SinIgv;
             detalle.PrecioUnitarioConIgv = segunAfectacion.ConIgv;
-            detalle.TipoAfectacionIgv = request.TipoAfectacionIgv.Value;
+            detalle.TipoAfectacionIgv = afectacion;
         }
 
         var igvVigente = parametros.PorcentajeIgv;
@@ -1454,11 +1478,65 @@ public class OrdenServicioService : IOrdenServicioService
         detalle.PorcentajeIgvAplicado = porcIgv;
         detalle.FechaModificacion = DateTime.UtcNow;
 
+        if (pasaAGratuita && !puedeModificarPrecios)
+        {
+            await SolicitarAprobacionLineaGratuitaAsync(orden, detalle, nombreItem, precioBase, usuarioId);
+        }
+        else if (cambiaAfectacion)
+        {
+            if (pasaAGratuita)
+            {
+                await RetirarSolicitudesDelDetalleAsync(
+                    orden,
+                    detalle.Id,
+                    "Superada: la línea la marcó gratuita un usuario autorizado a modificar precios.");
+            }
+
+            // Una línea que deja de ser gratuita ya no espera a Gerencia.
+            await ReevaluarAprobacionOrdenAsync(orden);
+        }
+
         RecalcularTotalesOrden(orden);
         orden.FechaModificacion = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
         return ServiceResult<DetalleServicioResponse>.Success(MapToDetalleServicioResponse(detalle));
+    }
+
+    /// <summary>
+    /// Una línea gratuita la marca quien puede modificar precios. Si la marca otro, queda
+    /// gratuita y Gerencia la aprueba; si la rechaza, vuelve a cobrarse a su precio de lista.
+    /// </summary>
+    private async Task SolicitarAprobacionLineaGratuitaAsync(
+        OrdenServicio orden, DetalleServicio detalle, string nombreItem, decimal precioDeLista, Guid? usuarioId)
+    {
+        var clave = AprobacionService.ClaveDeDetalle(detalle.Id);
+        await AprobacionService.RetirarSolicitudesPendientesPorObjetivoAsync(
+            _context,
+            "OrdenServicio",
+            orden.Id.ToString(),
+            clave,
+            "Superada automáticamente: la línea pasó a ser gratuita.");
+
+        orden.EstadoAprobacionGerencia = EstadoAprobacionGerencia.Pendiente;
+        _context.SolicitudesAprobacion.Add(new SolicitudAprobacion
+        {
+            Id = Guid.NewGuid(),
+            Tipo = AprobacionService.TipoLineaGratuita,
+            Entidad = "OrdenServicio",
+            EntidadId = orden.Id.ToString(),
+            UsuarioSolicitanteId = usuarioId,
+            FechaSolicitud = DateTime.UtcNow,
+            Estado = EstadoAprobacionGerencia.Pendiente,
+            DetalleCambio = $"Línea gratuita en '{nombreItem}' ({detalle.TipoAfectacionIgv.Nombre()}): base S/ {precioDeLista:F2} -> solicitado S/ 0.00",
+            DetalleId = detalle.Id,
+            ClaveObjetivo = clave,
+            ValorAnterior = precioDeLista,
+            ValorSolicitado = 0m,
+            Motivo = "Línea gratuita en Orden de Servicio",
+            FechaCreacion = DateTime.UtcNow,
+            Activo = true
+        });
     }
 
     public async Task<ServiceResult<OrdenServicioResponse>> CambiarEstadoAsync(
@@ -1769,7 +1847,7 @@ public class OrdenServicioService : IOrdenServicioService
             return ServiceResult<OrdenServicioResponse>.Invalid("El presupuesto se envía mientras la orden está en diagnóstico.");
         }
 
-        if (orden.Total <= 0)
+        if (orden.Total <= 0 && orden.SubtotalGratuito <= 0)
         {
             return ServiceResult<OrdenServicioResponse>.Invalid("El presupuesto está vacío: agrega los repuestos y servicios antes de enviarlo.");
         }
@@ -1931,7 +2009,7 @@ public class OrdenServicioService : IOrdenServicioService
                 "La orden ya pasó la etapa de presupuesto: no se puede volver a responder.");
         }
 
-        if (orden.Total <= 0)
+        if (orden.Total <= 0 && orden.SubtotalGratuito <= 0)
         {
             return ServiceResult<OrdenServicioResponse>.Invalid(
                 "El presupuesto todavía no tiene trabajos ni repuestos para responder.");
@@ -2368,6 +2446,12 @@ public class OrdenServicioService : IOrdenServicioService
             }
         }
 
+        // Una línea gratuita espera a Gerencia mientras siga gratuita, aunque tenga el precio de lista.
+        foreach (var gratuita in detallesActivos.Where(d => d.TipoAfectacionIgv.EsGratuita()))
+        {
+            detallesConPrecioModificado.Add(gratuita.Id);
+        }
+
         var solicitudesActivas = await _context.SolicitudesAprobacion
             .Where(s => s.Entidad == "OrdenServicio" && s.EntidadId == orden.Id.ToString() && s.Activo)
             .ToListAsync();
@@ -2508,6 +2592,9 @@ public class OrdenServicioService : IOrdenServicioService
         orden.SubtotalInafecto = decimal.Round(
             detallesActivos.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Inafecto).Sum(d => d.Total),
             2, MidpointRounding.AwayFromZero);
+        orden.SubtotalGratuito = decimal.Round(
+            detallesActivos.Sum(d => d.ValorReferencial),
+            2, MidpointRounding.AwayFromZero);
         orden.MontoIgv = decimal.Round(
             detallesActivos.Sum(d => d.MontoIgv),
             2, MidpointRounding.AwayFromZero);
@@ -2520,10 +2607,19 @@ public class OrdenServicioService : IOrdenServicioService
     /// El precio con IGV cuando se cobra así: el total sale de él y la base se separa, para
     /// que S/ 10,00 cobre S/ 10,00 y no S/ 9,99 por redondear la base primero.
     /// </param>
+    /// <remarks>
+    /// Una línea gratuita no se cobra: base, IGV y total quedan en 0. Guarda el IGV vigente
+    /// para que su valor de referencia salga en los términos en que se habría cobrado.
+    /// </remarks>
     internal static (decimal SubtotalGravado, decimal MontoIgv, decimal Total, decimal PorcentajeIgvAplicado) CalcularFinanzasLinea(
         int cantidad, decimal precioUnitario, TipoAfectacionIgv tipoAfectacion, decimal porcentajeIgvVigente,
         decimal? precioUnitarioConIgv = null)
     {
+        if (tipoAfectacion.EsGratuita())
+        {
+            return (0m, 0m, 0m, porcentajeIgvVigente);
+        }
+
         if (precioUnitarioConIgv is decimal conIgv && tipoAfectacion == TipoAfectacionIgv.Gravado)
         {
             var totalConIgv = decimal.Round(cantidad * conIgv, 2, MidpointRounding.AwayFromZero);
@@ -2554,7 +2650,8 @@ public class OrdenServicioService : IOrdenServicioService
             d.Descripcion,
             d.Cantidad,
             d.PrecioUnitario,
-            d.PrecioUnitarioConIgv.HasValue ? d.SubtotalGravado : d.Cantidad * d.PrecioUnitario,
+            d.TipoAfectacionIgv.EsGratuita() ? 0m
+                : d.PrecioUnitarioConIgv.HasValue ? d.SubtotalGravado : d.Cantidad * d.PrecioUnitario,
             d.TipoItem == TipoItemServicio.Repuesto || d.ProductoId.HasValue,
             d.ServicioId,
             d.Servicio?.Nombre,
@@ -2567,8 +2664,13 @@ public class OrdenServicioService : IOrdenServicioService
             d.PorcentajeIgvAplicado,
             d.MontoIgv,
             d.Total,
-            d.PrecioUnitarioConIgv);
+            d.PrecioUnitarioConIgv,
+            d.ValorReferencial);
     }
+
+    /// <summary>Una orden con todo gratuito no tiene nada que cobrar: queda pagada.</summary>
+    private static string EstadoPagoOrden(decimal total, decimal subtotalGratuito, decimal totalPagado, decimal saldo) =>
+        saldo == 0m && (total > 0m || subtotalGratuito > 0m) ? "Pagado" : (totalPagado > 0m ? "Parcial" : "Pendiente");
 
     private static string DeterminarTipoMedidor(Vehiculo? vehiculo)
     {
@@ -2595,7 +2697,7 @@ public class OrdenServicioService : IOrdenServicioService
 
         var totalPagado = orden.Pagos?.Where(p => p.Activo).Sum(p => p.Monto) ?? 0m;
         var saldo = Math.Max(0m, orden.Total - totalPagado);
-        var estadoPago = saldo == 0m && orden.Total > 0m ? "Pagado" : (totalPagado > 0m ? "Parcial" : "Pendiente");
+        var estadoPago = EstadoPagoOrden(orden.Total, orden.SubtotalGratuito, totalPagado, saldo);
 
         return new OrdenServicioResponse(
             orden.Id,
@@ -2651,7 +2753,8 @@ public class OrdenServicioService : IOrdenServicioService
             saldo,
             estadoPago,
             orden.FechaEnvioPresupuesto,
-            TiposAtencionOrden.DeLaOrden(orden).Select(tipo => (int)tipo).ToList());
+            TiposAtencionOrden.DeLaOrden(orden).Select(tipo => (int)tipo).ToList(),
+            orden.SubtotalGratuito);
     }
 
     private static OrdenServicioDetalleResponse MapToDetalleResponse(OrdenServicio orden)
@@ -2698,7 +2801,7 @@ public class OrdenServicioService : IOrdenServicioService
 
         var totalPagado = orden.Pagos?.Where(p => p.Activo).Sum(p => p.Monto) ?? 0m;
         var saldo = Math.Max(0m, total - totalPagado);
-        var estadoPago = saldo == 0m && total > 0m ? "Pagado" : (totalPagado > 0m ? "Parcial" : "Pendiente");
+        var estadoPago = EstadoPagoOrden(total, orden.SubtotalGratuito, totalPagado, saldo);
 
         var pagos = orden.Pagos?
             .Where(p => p.Activo)
@@ -2785,7 +2888,8 @@ public class OrdenServicioService : IOrdenServicioService
             estadoPago,
              pagos,
             orden.FechaEnvioPresupuesto,
-            TiposAtencionOrden.DeLaOrden(orden).Select(tipo => (int)tipo).ToList());
+            TiposAtencionOrden.DeLaOrden(orden).Select(tipo => (int)tipo).ToList(),
+            orden.SubtotalGratuito);
     }
 
     public async Task<ServiceResult<FormatoAtencionResponse>> GenerarFormatoAtencionAsync(
@@ -2906,7 +3010,9 @@ public class OrdenServicioService : IOrdenServicioService
                 d.Cantidad,
                 d.PrecioUnitario,
                 d.Total,
-                d.TipoAfectacionIgv.ToString()))
+                d.TipoAfectacionIgv.ToString(),
+                d.TipoAfectacionIgv.EsGratuita(),
+                d.ValorReferencial))
             .ToList();
 
         var totalPagado = orden.Pagos.Where(p => p.Activo).Sum(p => p.Monto);
@@ -2921,7 +3027,8 @@ public class OrdenServicioService : IOrdenServicioService
             totalPagado,
             saldo,
             porcentajeIgv,
-            "PEN");
+            "PEN",
+            orden.SubtotalGratuito);
 
         var response = new FormatoAtencionResponse(
             empresaDto,

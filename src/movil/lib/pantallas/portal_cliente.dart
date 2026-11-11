@@ -127,7 +127,7 @@ class _TarjetaOrden extends StatelessWidget {
     // El presupuesto se responde cuando ya hay diagnóstico y la orden no avanzó.
     final porResponder = orden.estadoPresupuestoId == EstadoPresupuesto.pendiente &&
         orden.estadoId == EstadoOrden.diagnostico &&
-        (orden.total ?? 0) > 0;
+        orden.montoPresupuesto > 0;
 
     return Card(
       child: InkWell(

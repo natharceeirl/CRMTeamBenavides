@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { VentaDetalleResponse } from '../api/tipos'
+import { TIPO_AFECTACION_IGV, type VentaDetalleResponse } from '../api/tipos'
 import { tieneSaldo } from '../api/pagos'
 import { htmlComprobante } from './comprobante'
 import { escaparHtml } from './impresion'
@@ -18,6 +18,7 @@ const venta = (extra: Partial<VentaDetalleResponse> = {}): VentaDetalleResponse 
   subtotalGravado: 42,
   subtotalExonerado: 0,
   subtotalInafecto: 0,
+  subtotalGratuito: 0,
   montoIgv: 7.56,
   totalPagado: 20,
   saldo: 29.56,
@@ -45,6 +46,7 @@ const venta = (extra: Partial<VentaDetalleResponse> = {}): VentaDetalleResponse 
       precioUnitarioConIgv: null,
       unidadesInventarioIds: null,
       series: null,
+      valorReferencial: 0,
     },
   ],
   comprobante: {
@@ -59,6 +61,7 @@ const venta = (extra: Partial<VentaDetalleResponse> = {}): VentaDetalleResponse 
     subtotalGravado: 42,
     subtotalExonerado: 0,
     subtotalInafecto: 0,
+    subtotalGratuito: 0,
     porcentajeIgv: 18,
     montoIgv: 7.56,
     total: 49.56,
@@ -84,6 +87,25 @@ describe('ficha del comprobante', () => {
     expect(html).toContain('liquida la orden OS-000024')
     expect(html).toContain('No reemplaza al comprobante electrónico')
     expect(html).not.toContain('ANULADO')
+  })
+
+  it('una línea gratuita dice lo que vale y lo gratuito no entra al total', () => {
+    const base = venta()
+    const gratuita = {
+      ...base.detalles[0],
+      id: 'd2',
+      productoNombre: 'Mantenimiento general',
+      tipoAfectacionIgv: TIPO_AFECTACION_IGV.bonificaciones,
+      subtotal: 0,
+      subtotalGravado: 0,
+      montoIgv: 0,
+      total: 0,
+      valorReferencial: 180,
+    }
+    const html = htmlComprobante(venta({ detalles: [...base.detalles, gratuita], subtotalGratuito: 180 }), undefined)
+    expect(html).toContain('Gratuito (Gravado – Bonificaciones) · vale S/ 180.00')
+    expect(html).toContain('Op. gratuitas (no se cobran)')
+    expect(html).toContain('S/ 49.56')
   })
 
   it('marca como anulado el comprobante anulado', () => {
@@ -147,6 +169,7 @@ describe('hoja del formato de atención', () => {
         subtotalGravado: 42,
         subtotalExonerado: 0,
         subtotalInafecto: 0,
+        subtotalGratuito: 0,
         montoIgv: 7.56,
         total: 49.56,
         totalPagado: 20,

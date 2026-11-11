@@ -19,6 +19,7 @@ import {
   PRESUPUESTO,
   esEstadoTerminal,
   esperaRespuestaDelCliente,
+  montoPresupuesto,
   etiquetaPresupuesto,
   fechaIngresoOrden,
   nombresEstadoCliente,
@@ -64,7 +65,12 @@ const columnasPresupuesto: TableProps<DetalleServicioResponse>['columns'] = [
       <>
         <div>{detalle.descripcion}</div>
         <div className="texto-secundario">
-          {nombresTipoItem[detalle.tipoItem ?? (detalle.esRepuesto ? 0 : 2)] ?? detalle.tipoItemNombre}
+          {[
+            nombresTipoItem[detalle.tipoItem ?? (detalle.esRepuesto ? 0 : 2)] ?? detalle.tipoItemNombre,
+            detalle.valorReferencial > 0 ? `Gratuito · vale ${soles(detalle.valorReferencial)}` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
         </div>
       </>
     ),
@@ -156,7 +162,7 @@ export function PortalClientePage() {
         const etiqueta = etiquetaPresupuesto(
           item.estadoId,
           item.estadoPresupuestoClienteId ?? PRESUPUESTO.pendiente,
-          item.total ?? 0,
+          montoPresupuesto(item),
         )
         return <EtiquetaEstado tono={etiqueta.tono}>{etiqueta.texto}</EtiquetaEstado>
       },
@@ -484,6 +490,12 @@ export function PortalClientePage() {
                   <div className="etiqueta">Total</div>
                   <div className="valor total">{soles(orden.total)}</div>
                 </div>
+                {orden.subtotalGratuito > 0 && (
+                  <div>
+                    <div className="etiqueta">Gratuito (no se cobra)</div>
+                    <div className="valor">{soles(orden.subtotalGratuito)}</div>
+                  </div>
+                )}
                 <div>
                   <div className="etiqueta">Pagado</div>
                   <div className="valor">{soles(orden.totalPagado ?? 0)}</div>

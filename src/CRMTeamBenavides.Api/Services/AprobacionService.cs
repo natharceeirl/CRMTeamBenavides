@@ -228,7 +228,7 @@ public class AprobacionService : IAprobacionService
         // Un precio rechazado vuelve al de lista: la orden, la venta o el pedido siguen con
         // ese precio en vez de quedar bloqueados hasta que alguien lo corrija a mano.
         var precioRestablecido = request.Estado == EstadoAprobacionGerencia.Rechazado
-            && solicitud.Tipo == "CambioPrecio"
+            && (solicitud.Tipo is "CambioPrecio" or TipoLineaGratuita)
             && await RestablecerPrecioDeListaAsync(solicitud, ct);
 
         // Actualizar la entidad origen (OrdenServicio, Venta o PedidoLima)
@@ -259,7 +259,8 @@ public class AprobacionService : IAprobacionService
     /// <summary>
     /// Devuelve al precio de lista lo que pedía la solicitud rechazada y recalcula los
     /// totales. En la orden y el pedido es el ítem de la solicitud; en la venta, cada
-    /// repuesto con otro precio. Una operación ya liquidada, cobrada o anulada no se toca.
+    /// repuesto con otro precio o gratuito. Una línea gratuita rechazada vuelve a cobrarse.
+    /// Una operación ya liquidada, cobrada o anulada no se toca.
     /// </summary>
     private async Task<bool> RestablecerPrecioDeListaAsync(SolicitudAprobacion solicitud, CancellationToken ct)
     {
@@ -282,6 +283,17 @@ public class AprobacionService : IAprobacionService
                 if (await _context.Ventas.AnyAsync(v => v.OrdenServicioId == orden.Id && v.Activo && v.Estado != EstadoVenta.Anulada, ct))
                 {
                     return false;
+                }
+
+                // Una línea gratuita rechazada vuelve a la afectación cobrada de su servicio, o gravada.
+                if (solicitud.Tipo == TipoLineaGratuita && detalle.TipoAfectacionIgv.EsGratuita())
+                {
+                    var afectacionServicio = detalle.ServicioId is Guid servicioId
+                        ? await _context.Servicios.Where(s => s.Id == servicioId).Select(s => (TipoAfectacionIgv?)s.TipoAfectacionIgv).FirstOrDefaultAsync(ct)
+                        : null;
+                    detalle.TipoAfectacionIgv = afectacionServicio is TipoAfectacionIgv cobrada && !cobrada.EsGratuita()
+                        ? cobrada
+                        : TipoAfectacionIgv.Gravado;
                 }
 
                 // El valor anterior está en los términos de la línea: con IGV si se cobraba así.
@@ -310,12 +322,18 @@ public class AprobacionService : IAprobacionService
                     .Where(d => d.Producto != null && d.DetalleServicioOrigenId == null)
                     .Select(d => (Linea: d, Lista: PrecioLista.Calcular(d.Producto!, parametros.TipoCambio, igv)))
                     .Where(x => x.Lista.HasValue
-                        && Math.Abs(PrecioLista.Referencia(x.Linea.PrecioUnitario, x.Linea.PrecioUnitarioConIgv) - x.Lista.Value.Referencia) > 0.001m)
+                        && (x.Linea.TipoAfectacionIgv.EsGratuita()
+                            || Math.Abs(PrecioLista.Referencia(x.Linea.PrecioUnitario, x.Linea.PrecioUnitarioConIgv) - x.Lista.Value.Referencia) > 0.001m))
                     .ToList();
                 if (lineas.Count == 0) return false;
 
                 foreach (var (linea, lista) in lineas)
                 {
+                    if (linea.TipoAfectacionIgv.EsGratuita())
+                    {
+                        linea.TipoAfectacionIgv = TipoAfectacionIgv.Gravado;
+                    }
+
                     var precio = PrecioLista.DeEscrito(lista!.Value.Referencia, linea.Producto!.PrecioIncluyeIgv, linea.TipoAfectacionIgv, igv);
                     linea.PrecioUnitario = precio.SinIgv;
                     linea.PrecioUnitarioConIgv = precio.ConIgv;
@@ -327,6 +345,7 @@ public class AprobacionService : IAprobacionService
                 venta.SubtotalGravado = venta.Detalles.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Gravado).Sum(d => d.SubtotalGravado);
                 venta.SubtotalExonerado = venta.Detalles.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Exonerado).Sum(d => d.Total);
                 venta.SubtotalInafecto = venta.Detalles.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Inafecto).Sum(d => d.Total);
+                venta.SubtotalGratuito = venta.Detalles.Sum(d => d.ValorReferencial);
                 venta.MontoIgv = venta.Detalles.Sum(d => d.MontoIgv);
                 venta.Total = decimal.Round(venta.SubtotalGravado + venta.SubtotalExonerado + venta.SubtotalInafecto + venta.MontoIgv, 2, MidpointRounding.AwayFromZero);
                 return true;
@@ -384,6 +403,12 @@ public class AprobacionService : IAprobacionService
     public static string ClaveDeDetalle(Guid detalleId) => $"detalle_{detalleId}".ToLowerInvariant();
 
     public const string ClaveEntidadVenta = "entidad_venta";
+
+    /// <summary>
+    /// Una línea marcada gratuita por quien no puede modificar precios. Si Gerencia la
+    /// rechaza, la línea vuelve a cobrarse a su precio de lista.
+    /// </summary>
+    public const string TipoLineaGratuita = "LineaGratuita";
     public const string ClaveEntidadOrdenServicio = "entidad_ordenservicio";
     public const string ClaveEntidadPedidoLima = "entidad_pedidolima";
 
@@ -730,6 +755,7 @@ public class AprobacionService : IAprobacionService
                             && !(s.Estado == EstadoAprobacionGerencia.Rechazado
                                  && s.ValorAnterior is decimal precioBase
                                  && detallesActivos.Any(d => d.Id == dId.Value
+                                     && !d.TipoAfectacionIgv.EsGratuita()
                                      && Math.Abs(PrecioLista.Referencia(d.PrecioUnitario, d.PrecioUnitarioConIgv) - precioBase) < 0.001m));
                     }
                     var item = ObtenerNombreItem(s);

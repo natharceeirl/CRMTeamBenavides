@@ -128,7 +128,9 @@ public record DetalleCompraResponse(
     decimal CostoUnitarioSoles,
     bool MueveStock,
     // Las series de las motos que entraron con esta línea.
-    List<string>? Series = null);
+    List<string>? Series = null,
+    // Lo que se habría pagado si la línea es gratuita; 0 si se paga.
+    decimal ValorReferencial = 0m);
 
 public record PagoCompraResponse(
     Guid Id,
@@ -183,4 +185,6 @@ public record CompraResponse(
     string? MotivoAnulacion,
     string? UsuarioAnulacionNombre,
     List<DetalleCompraResponse> Detalles,
-    List<PagoCompraResponse> Pagos);
+    List<PagoCompraResponse> Pagos,
+    // Lo que valen las líneas gratuitas (bonificaciones), con IGV. No se suma al total.
+    decimal SubtotalGratuito = 0m);

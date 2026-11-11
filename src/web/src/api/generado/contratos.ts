@@ -525,6 +525,7 @@ export type CompraResponse = {
   usuarioAnulacionNombre: string | null
   detalles: DetalleCompraResponse[]
   pagos: PagoCompraResponse[]
+  subtotalGratuito: number
 }
 
 export type CompraResumenResponse = {
@@ -594,6 +595,7 @@ export type DetalleCompraResponse = {
   costoUnitarioSoles: number
   mueveStock: boolean
   series: string[] | null
+  valorReferencial: number
 }
 
 export type GuardarProveedorRequest = {
@@ -824,8 +826,8 @@ export type MonedaPrecio = 0 | 1
 /** Android = 0 · IOS = 1 */
 export type PlataformaDispositivo = 0 | 1
 
-/** Gravado = 0 · Exonerado = 1 · Inafecto = 2 */
-export type TipoAfectacionIgv = 0 | 1 | 2
+/** Gravado = 0 · Exonerado = 1 · Inafecto = 2 · GravadoRetiroPorPremio = 3 · GravadoRetiroPorDonacion = 4 · GravadoRetiro = 5 · GravadoRetiroPorPublicidad = 6 · GravadoBonificaciones = 7 · GravadoRetiroPorEntregaATrabajadores = 8 */
+export type TipoAfectacionIgv = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
 
 /** MantenimientoPreventivo = 0 · MantenimientoCorrectivo = 1 · ReclamoGarantia = 2 · Gratuito = 3 · MantenimientoCompleto = 4 */
 export type TipoAtencion = 0 | 1 | 2 | 3 | 4
@@ -1207,6 +1209,7 @@ export type DetalleServicioResponse = {
   montoIgv: number
   total: number
   precioUnitarioConIgv: number | null
+  valorReferencial: number
 }
 
 export type FormatoAtencionClienteDto = {
@@ -1230,6 +1233,7 @@ export type FormatoAtencionFinancieroDto = {
   saldoPendiente: number
   porcentajeIgv: number
   moneda: string
+  subtotalGratuito: number
 }
 
 export type FormatoAtencionItemDto = {
@@ -1241,6 +1245,8 @@ export type FormatoAtencionItemDto = {
   precioUnitario: number
   total: number
   afectacionIgv: string
+  esGratuita: boolean
+  valorReferencial: number
 }
 
 export type FormatoAtencionOrdenDto = {
@@ -1380,6 +1386,7 @@ export type OrdenServicioDetalleResponse = {
   pagos: PagoResponse[] | null
   fechaEnvioPresupuesto: string | null
   tiposAtencionIds: number[] | null
+  subtotalGratuito: number
 }
 
 export type OrdenServicioResponse = {
@@ -1437,6 +1444,7 @@ export type OrdenServicioResponse = {
   estadoPago: string
   fechaEnvioPresupuesto: string | null
   tiposAtencionIds: number[] | null
+  subtotalGratuito: number
 }
 
 export type RegistrarDiagnosticoRequest = {
@@ -1618,6 +1626,7 @@ export type HistorialServicioItemResponse = {
   cantidad: number
   precioUnitario: number
   total: number
+  esGratuita: boolean
 }
 
 export type PortalComprobanteResponse = {
@@ -1638,6 +1647,7 @@ export type PortalComprobanteResponse = {
   estado: string
   metodoPagoPrincipal: string | null
   observaciones: string | null
+  subtotalGratuito: number
 }
 
 export type PortalResumenResponse = {
@@ -1937,6 +1947,7 @@ export type ComprobanteResponse = {
   metodoPagoPrincipal: string | null
   observaciones: string | null
   ordenServicioId: string | null
+  subtotalGratuito: number
 }
 
 export type CreateDetalleVentaRequest = {
@@ -1976,6 +1987,7 @@ export type DetalleVentaResponse = {
   precioUnitarioConIgv: number | null
   unidadesInventarioIds: string[] | null
   series: string[] | null
+  valorReferencial: number
 }
 
 export type MetodoPagoResponse = {
@@ -2044,6 +2056,7 @@ export type VentaDetalleResponse = {
   estadoAprobacionGerenciaId: number
   estadoAprobacionGerencia: string
   numeroOrdenServicio: string | null
+  subtotalGratuito: number
 }
 
 export type VentaResponse = {
@@ -2068,6 +2081,7 @@ export type VentaResponse = {
   estadoAprobacionGerenciaId: number
   estadoAprobacionGerencia: string
   numeroOrdenServicio: string | null
+  subtotalGratuito: number
 }
 
 // ── Yamaha ──────────────────────────────────────────────────────────────────

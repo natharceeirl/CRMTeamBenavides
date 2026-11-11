@@ -197,7 +197,9 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
 
         // --- Propiedades calculadas ---
         modelBuilder.Entity<DetalleServicio>().Ignore(d => d.Subtotal);
+        modelBuilder.Entity<DetalleServicio>().Ignore(d => d.ValorReferencial);
         modelBuilder.Entity<DetalleVenta>().Ignore(d => d.Subtotal);
+        modelBuilder.Entity<DetalleVenta>().Ignore(d => d.ValorReferencial);
         modelBuilder.Entity<DetallePedidoLima>().Ignore(d => d.Subtotal);
 
         modelBuilder.HasSequence<long>("OrdenServicioNumeroSeq")
@@ -304,6 +306,7 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
             entity.Property(o => o.SubtotalGravado).HasPrecision(12, 2);
             entity.Property(o => o.SubtotalExonerado).HasPrecision(12, 2);
             entity.Property(o => o.SubtotalInafecto).HasPrecision(12, 2);
+            entity.Property(o => o.SubtotalGratuito).HasPrecision(12, 2);
             entity.Property(o => o.MontoIgv).HasPrecision(12, 2);
             entity.Property(o => o.Total).HasPrecision(12, 2);
 
@@ -401,6 +404,7 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
             entity.Property(v => v.SubtotalGravado).HasPrecision(12, 2);
             entity.Property(v => v.SubtotalExonerado).HasPrecision(12, 2);
             entity.Property(v => v.SubtotalInafecto).HasPrecision(12, 2);
+            entity.Property(v => v.SubtotalGratuito).HasPrecision(12, 2);
             entity.Property(v => v.MontoIgv).HasPrecision(12, 2);
             entity.Property(v => v.Total).HasPrecision(12, 2);
 
@@ -441,6 +445,7 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
             entity.Property(c => c.SubtotalGravado).HasPrecision(12, 2);
             entity.Property(c => c.SubtotalExonerado).HasPrecision(12, 2);
             entity.Property(c => c.SubtotalInafecto).HasPrecision(12, 2);
+            entity.Property(c => c.SubtotalGratuito).HasPrecision(12, 2);
             entity.Property(c => c.PorcentajeIgv).HasPrecision(5, 2);
             entity.Property(c => c.MontoIgv).HasPrecision(12, 2);
             entity.Property(c => c.Total).HasPrecision(12, 2);
@@ -707,6 +712,7 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
             entity.Property(c => c.SubtotalGravado).HasPrecision(12, 2);
             entity.Property(c => c.SubtotalExonerado).HasPrecision(12, 2);
             entity.Property(c => c.SubtotalInafecto).HasPrecision(12, 2);
+            entity.Property(c => c.SubtotalGratuito).HasPrecision(12, 2);
             entity.Property(c => c.MontoIgv).HasPrecision(12, 2);
             entity.Property(c => c.Total).HasPrecision(12, 2);
             entity.Property(c => c.TotalSoles).HasPrecision(12, 2);

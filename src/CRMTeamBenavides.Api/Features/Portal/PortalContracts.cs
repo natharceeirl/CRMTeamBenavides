@@ -27,7 +27,9 @@ public record PortalComprobanteResponse(
     decimal Total,
     string Estado,
     string? MetodoPagoPrincipal,
-    string? Observaciones);
+    string? Observaciones,
+    // Op. gratuitas: lo que valen las líneas gratuitas, con IGV. No se suma al total.
+    decimal SubtotalGratuito = 0m);
 
 public record HistorialServicioItemResponse(
     Guid Id,
@@ -38,7 +40,9 @@ public record HistorialServicioItemResponse(
     string TipoItemNombre,
     int Cantidad,
     decimal PrecioUnitario,
-    decimal Total);
+    decimal Total,
+    // Una línea gratuita se cobra S/ 0.00.
+    bool EsGratuita = false);
 
 public record AtencionServicioUnidadResponse(
     Guid OrdenServicioId,

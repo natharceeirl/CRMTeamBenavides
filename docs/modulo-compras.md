@@ -17,7 +17,7 @@ Registro de las compras a proveedores: el comprobante, los repuestos que entran 
 | Agregar cliente | Se reemplaza por el pedido a Lima al que corresponde la compra (ver más abajo). |
 | Agregar pagos | Pagos al registrar la compra o después. |
 | Producto o servicio y «+ Nuevo» | Repuesto del catálogo, con alta rápida, u otro concepto libre como flete o servicio externo. |
-| Afectación de IGV | Gravado, exonerado o inafecto. |
+| Afectación de IGV | Gravado, exonerado, inafecto o una gratuita: retiro por premio, por donación, por publicidad o por entrega a trabajadores, retiro y bonificaciones (catálogo 07 de SUNAT, pedido del cliente del 10/11). |
 | Cantidad, precio unitario y total | Igual. Una casilla dice si los precios incluyen IGV. |
 | Código de barras | El lector escribe el código en el buscador del repuesto y selecciona el que coincide. |
 | Almacén de destino | No va todavía: depende de almacenes. |
@@ -33,6 +33,7 @@ Todo en una sola transacción: si algo falla, no queda nada a medias.
    - Precios sin IGV: subtotal = cantidad × precio; IGV = subtotal × % IGV.
    - Precios con IGV: total = cantidad × precio; subtotal = total ÷ (1 + % IGV); IGV = total − subtotal.
    - Exonerado o inafecto: sin IGV.
+   - Gratuita (una bonificación del proveedor): subtotal, IGV y total en 0. Lo que habría costado como gravada se muestra aparte como «Op. gratuitas» y no se suma al total. Una compra solo de líneas gratuitas se puede registrar.
    - Los totales de la compra son la suma de las líneas, redondeadas a dos decimales.
 2. **Stock:** cada repuesto suma su cantidad con el bloqueo `FOR UPDATE` y deja un movimiento de entrada ligado a la compra. Los conceptos libres no mueven stock.
 3. **Costo unitario en soles** de cada repuesto:
@@ -43,7 +44,7 @@ Todo en una sola transacción: si algo falla, no queda nada a medias.
    - Promedio ponderado (por defecto): (stock × costo actual + cantidad × costo de compra) ÷ (stock + cantidad).
    - Último costo: el de la compra.
    - En los dos métodos, si el repuesto no tenía stock o tenía costo 0, toma el costo de la compra.
-   - Una línea con precio 0, como una bonificación, nunca deja el costo en 0. En el promedio solo baja el costo de lo que ya había en stock.
+   - Una línea con precio 0 o gratuita, como una bonificación, nunca deja el costo en 0. En el promedio solo baja el costo de lo que ya había en stock.
    - La línea guarda el costo anterior y el que dejó, para poder deshacerlo al anular.
 5. **Pagos iniciales** (opcional): siguen las reglas de «Pagar».
 

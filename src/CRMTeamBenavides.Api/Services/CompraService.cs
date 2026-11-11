@@ -352,11 +352,13 @@ public partial class CompraService : ICompraService
         compra.SubtotalGravado = compra.Detalles.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Gravado).Sum(d => d.Subtotal);
         compra.SubtotalExonerado = compra.Detalles.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Exonerado).Sum(d => d.Subtotal);
         compra.SubtotalInafecto = compra.Detalles.Where(d => d.TipoAfectacionIgv == TipoAfectacionIgv.Inafecto).Sum(d => d.Subtotal);
+        compra.SubtotalGratuito = compra.Detalles.Sum(d => ValorReferencial(d, porcentajeIgv, request.PreciosIncluyenIgv));
         compra.MontoIgv = compra.Detalles.Sum(d => d.MontoIgv);
         compra.Total = compra.Detalles.Sum(d => d.Total);
         compra.TotalSoles = CalculoCompra.Redondear(compra.Total * tipoCambio);
 
-        if (compra.Total <= 0)
+        // Una compra solo de bonificaciones no tiene nada que pagar, pero sí registra lo que entró.
+        if (compra.Total <= 0 && compra.SubtotalGratuito <= 0)
             return ServiceResult<CompraResponse>.Invalid("El total de la compra debe ser mayor a 0.");
 
         var seriesCompradas = motosPorLinea.Values.SelectMany(m => m).Select(m => m.NumeroSerieVIN).ToList();
@@ -1284,7 +1286,8 @@ public partial class CompraService : ICompraService
                     d.MontoIgv,
                     d.Total,
                     d.CostoUnitarioSoles,
-                    d.MueveStock))
+                    d.MueveStock,
+                    ValorReferencial: ValorReferencial(d, c.PorcentajeIgv, c.PreciosIncluyenIgv)))
                 .ToList(),
             c.Pagos
                 .Where(p => p.Activo)
@@ -1305,8 +1308,13 @@ public partial class CompraService : ICompraService
                     p.FechaAnulacion,
                     p.MotivoAnulacion,
                     p.UsuarioAnulacion?.NombreCompleto))
-                .ToList());
+                .ToList(),
+            c.SubtotalGratuito);
     }
+
+    /// <summary>Lo que se habría pagado por una línea gratuita; 0 si se paga.</summary>
+    private static decimal ValorReferencial(DetalleCompra d, decimal porcentajeIgv, bool preciosIncluyenIgv) =>
+        CalculoCompra.CalcularLinea(d.Cantidad, d.PrecioUnitario, d.TipoAfectacionIgv, porcentajeIgv, preciosIncluyenIgv).ValorReferencial;
 
     [GeneratedRegex(@"^[A-Z0-9]{1,10}$")]
     private static partial Regex SerieValida();

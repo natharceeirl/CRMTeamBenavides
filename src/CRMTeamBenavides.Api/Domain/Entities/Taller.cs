@@ -41,11 +41,23 @@ public enum TipoItemServicio
     Terceros
 }
 
+/// <summary>
+/// Afectación del IGV de una línea, con los nombres del catálogo 07 de SUNAT. Del 3 al 8
+/// son transferencias gratuitas: la línea se registra con su valor y se cobra S/ 0.00.
+/// Los valores se guardan como número: los nuevos van siempre al final.
+/// </summary>
 public enum TipoAfectacionIgv
 {
-    Gravado,
-    Exonerado,
-    Inafecto
+    /// <summary>Gravado – Operación onerosa.</summary>
+    Gravado = 0,
+    Exonerado = 1,
+    Inafecto = 2,
+    GravadoRetiroPorPremio = 3,
+    GravadoRetiroPorDonacion = 4,
+    GravadoRetiro = 5,
+    GravadoRetiroPorPublicidad = 6,
+    GravadoBonificaciones = 7,
+    GravadoRetiroPorEntregaATrabajadores = 8
 }
 
 public enum EstadoPresupuestoCliente
@@ -116,6 +128,8 @@ public class OrdenServicio : BaseEntity
     public decimal SubtotalGravado { get; set; }
     public decimal SubtotalExonerado { get; set; }
     public decimal SubtotalInafecto { get; set; }
+    /// <summary>Lo que valen las líneas gratuitas, con IGV. No se suma al total.</summary>
+    public decimal SubtotalGratuito { get; set; }
     public decimal MontoIgv { get; set; }
     public decimal Total { get; set; }
 
@@ -184,7 +198,7 @@ public class DetalleServicio : BaseEntity
     /// <summary>Costo unitario vigente al momento de agregar el ítem (inmutable).</summary>
     public decimal CostoUnitarioHistorico { get; set; }
 
-    /// <summary>Afectación tributaria: Gravado, Exonerado o Inafecto.</summary>
+    /// <summary>Afectación tributaria: gravado, exonerado, inafecto o una gratuita (retiro o bonificación).</summary>
     public TipoAfectacionIgv TipoAfectacionIgv { get; set; } = TipoAfectacionIgv.Gravado;
 
     /// <summary>Subtotal base imponible gravado.</summary>
@@ -196,10 +210,14 @@ public class DetalleServicio : BaseEntity
     /// <summary>Monto de IGV calculado para la línea.</summary>
     public decimal MontoIgv { get; set; }
 
-    /// <summary>Total de la línea.</summary>
+    /// <summary>Total de la línea: lo que se cobra. 0 si la línea es gratuita.</summary>
     public decimal Total { get; set; }
 
     public decimal Subtotal => Cantidad * PrecioUnitario;
+
+    /// <summary>Lo que se habría cobrado si la línea es gratuita; 0 si se cobra.</summary>
+    public decimal ValorReferencial =>
+        AfectacionIgv.ValorReferencial(TipoAfectacionIgv, Cantidad, PrecioUnitario, PrecioUnitarioConIgv, PorcentajeIgvAplicado);
 }
 
 public enum EtapaFotoOrdenServicio

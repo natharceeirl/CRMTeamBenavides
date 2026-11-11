@@ -64,7 +64,10 @@ public record FormatoAtencionItemDto(
     int Cantidad,
     decimal PrecioUnitario,
     decimal Total,
-    string AfectacionIgv);
+    string AfectacionIgv,
+    // Una línea gratuita se cobra S/ 0.00; su valor de referencia es lo que se habría cobrado.
+    bool EsGratuita = false,
+    decimal ValorReferencial = 0m);
 
 public record FormatoAtencionFinancieroDto(
     decimal SubtotalGravado,
@@ -75,7 +78,9 @@ public record FormatoAtencionFinancieroDto(
     decimal TotalPagado,
     decimal SaldoPendiente,
     decimal PorcentajeIgv,
-    string Moneda);
+    string Moneda,
+    // Op. gratuitas: lo que valen las líneas gratuitas, con IGV. No se suma al total.
+    decimal SubtotalGratuito = 0m);
 
 public record FormatoAtencionResponse(
     FormatoAtencionTallerDto Empresa,

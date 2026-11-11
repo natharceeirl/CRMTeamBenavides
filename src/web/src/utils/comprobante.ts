@@ -1,5 +1,5 @@
 import type { ConfiguracionEmpresaResponse, VentaDetalleResponse } from '../api/tipos'
-import { nombresTipoItem } from '../api/tipos'
+import { etiquetaAfectacion, nombresTipoItem } from '../api/tipos'
 import { documentoImprimible, lineaTotal } from './documento'
 import { escaparHtml } from './impresion'
 import { fechaHoraConAnio, importe, referenciaOrden, soles } from './formato'
@@ -23,7 +23,14 @@ export function htmlComprobante(
   const filas = venta.detalles
     .map((detalle) => {
       const tipo = nombresTipoItem[detalle.tipoItem ?? 0] ?? detalle.tipoItemNombre ?? ''
-      const secundario = [tipo, detalle.productoCodigo].filter(Boolean).join(' · ')
+      const secundario = [
+        tipo,
+        detalle.productoCodigo,
+        etiquetaAfectacion(detalle.tipoAfectacionIgv),
+        detalle.valorReferencial > 0 ? `vale ${soles(detalle.valorReferencial)}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
       return `<tr>
         <td>${escaparHtml(detalle.productoNombre)}<div class="sec">${escaparHtml(secundario)}</div></td>
         <td class="num">${escaparHtml(detalle.cantidad)}</td>
@@ -82,6 +89,7 @@ export function htmlComprobante(
     ${venta.subtotalInafecto > 0 ? lineaTotal('Op. inafectas', soles(venta.subtotalInafecto)) : ''}
     ${lineaTotal(`IGV (${porcentajeIgv} %)`, soles(venta.montoIgv))}
     ${lineaTotal('Total', soles(venta.total), 'total')}
+    ${venta.subtotalGratuito > 0 ? lineaTotal('Op. gratuitas (no se cobran)', soles(venta.subtotalGratuito)) : ''}
     ${lineaTotal('Pagado', soles(venta.totalPagado))}
     ${venta.saldo > 0 ? lineaTotal('Saldo pendiente', soles(venta.saldo), 'saldo') : ''}
   </div>

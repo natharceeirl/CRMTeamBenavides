@@ -3,6 +3,7 @@ import { useAltaRapidaProducto, useMarcasProductos } from '../api/inventario'
 import { useAltaRapidaServicio } from '../api/servicios'
 import {
   TIPO_AFECTACION_IGV,
+  opcionesAfectacionIgv,
   type MonedaPrecio,
   type ProductoResponse,
   type ServicioResponse,
@@ -183,14 +184,8 @@ export function ModalAltaRapidaServicio({
           >
             <InputNumber min={0} precision={2} style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item label="Afectación de IGV" name="tipoAfectacionIgv">
-            <Select
-              options={[
-                { value: TIPO_AFECTACION_IGV.gravado, label: 'Gravado' },
-                { value: TIPO_AFECTACION_IGV.exonerado, label: 'Exonerado' },
-                { value: TIPO_AFECTACION_IGV.inafecto, label: 'Inafecto' },
-              ]}
-            />
+          <Form.Item label="Afectación IGV" name="tipoAfectacionIgv">
+            <Select options={opcionesAfectacionIgv} />
           </Form.Item>
         </div>
       </Form>

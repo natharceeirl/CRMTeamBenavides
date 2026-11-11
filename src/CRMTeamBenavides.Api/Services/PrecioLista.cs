@@ -58,10 +58,10 @@ public static class PrecioLista
 
     /// <summary>
     /// Un precio escrito para una línea, en el modo del repuesto: con IGV si lo incluye
-    /// y la línea es gravada. Una línea exonerada o inafecta no lleva IGV.
+    /// y la línea es gravada, aunque sea gratuita. Una línea exonerada o inafecta no lleva IGV.
     /// </summary>
     public static PrecioDeLista DeEscrito(decimal escrito, bool incluyeIgv, TipoAfectacionIgv afectacion, decimal porcentajeIgv) =>
-        incluyeIgv && afectacion == TipoAfectacionIgv.Gravado
+        incluyeIgv && afectacion.EsGravada()
             ? new PrecioDeLista(QuitarIgv(escrito, porcentajeIgv), escrito)
             : new PrecioDeLista(escrito, null);
 

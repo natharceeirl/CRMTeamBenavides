@@ -316,9 +316,12 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                     child: ListTile(
                       title: Text(detalle.descripcion),
                       subtitle: Text(
-                        '${detalle.tipoItemNombre ?? (detalle.esRepuesto ? 'Repuesto' : 'Mano de obra')} · '
-                        '${detalle.cantidad} x ${soles(detalle.precioEscrito)}'
-                        '${detalle.tipoAfectacionIgvNombre != null ? ' (${detalle.tipoAfectacionIgvNombre})' : ''}',
+                        [
+                          detalle.tipoItemNombre ?? (detalle.esRepuesto ? 'Repuesto' : 'Mano de obra'),
+                          '${detalle.cantidad} x ${soles(detalle.precioEscrito)}',
+                          ?etiquetaAfectacion(detalle.tipoAfectacionIgv),
+                          if (detalle.valorReferencial > 0) 'vale ${soles(detalle.valorReferencial)}',
+                        ].join(' · '),
                         style: const TextStyle(color: Marca.textoSecundario),
                       ),
                       trailing: Text(
@@ -376,6 +379,16 @@ class _PantallaOrdenDetalleState extends ConsumerState<PantallaOrdenDetalle> {
                         ),
                       ],
                     ),
+                    if (datos.subtotalGratuito > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Op. gratuitas (no se cobran)', style: TextStyle(color: Marca.textoSecundario)),
+                          Text(soles(datos.subtotalGratuito)),
+                        ],
+                      ),
+                    ],
                     // Lo pagado lo ve el cliente y quien vende; el técnico no.
                     if (datos.total > 0 &&
                         (esCliente || sesion.tieneAlgunPermiso(const [Permisos.ventasVer, Permisos.ventasCrear]))) ...[
@@ -731,10 +744,10 @@ class _Aprobaciones extends StatelessWidget {
     final presupuesto = orden.estadoPresupuestoId;
     final gerencia = orden.estadoGerenciaId;
     final respuestas =
-        puedeResponder ? respuestasPresupuesto(orden.estadoId, presupuesto, orden.total ?? 0) : const <int>[];
+        puedeResponder ? respuestasPresupuesto(orden.estadoId, presupuesto, orden.montoPresupuesto) : const <int>[];
     // Se envía en la etapa en que el cliente puede responder; con precios
     // esperando a Gerencia el backend no lo deja y se explica en su lugar.
-    final enEtapa = respuestasPresupuesto(orden.estadoId, presupuesto, orden.total ?? 0).isNotEmpty;
+    final enEtapa = respuestasPresupuesto(orden.estadoId, presupuesto, orden.montoPresupuesto).isNotEmpty;
     final mostrarEnviar = puedeEnviar && enEtapa;
     final preciosPorAprobar = gerencia == EstadoGerencia.pendiente || gerencia == EstadoGerencia.rechazado;
 

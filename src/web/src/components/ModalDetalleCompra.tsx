@@ -6,7 +6,7 @@ import { nombresTipoComprobanteCompra, useAnularCompra, useAnularPagoCompra, use
 import {
   ESTADO_COMPRA,
   MONEDA_COMPRA,
-  nombresTipoAfectacion,
+  etiquetaAfectacion,
   type CompraResponse,
   type DetalleCompraResponse,
   type PagoCompraResponse,
@@ -37,7 +37,7 @@ function columnasLineas(compra: CompraResponse): TableProps<DetalleCompraRespons
           <div className="texto-secundario">
             {[
               linea.productoCodigo,
-              linea.tipoAfectacionIgv !== 0 ? nombresTipoAfectacion[linea.tipoAfectacionIgv] : null,
+              etiquetaAfectacion(linea.tipoAfectacionIgv),
               linea.productoId && !linea.mueveStock ? 'No suma stock' : null,
             ]
               .filter(Boolean)
@@ -274,6 +274,12 @@ export function ModalDetalleCompra({ compraId, onCerrar }: Readonly<Props>) {
               <div>
                 <div className="etiqueta">Inafectas</div>
                 <div className="valor">{montoEnMoneda(datos.moneda, datos.subtotalInafecto)}</div>
+              </div>
+            )}
+            {datos.subtotalGratuito > 0 && (
+              <div>
+                <div className="etiqueta">Op. gratuitas</div>
+                <div className="valor">{montoEnMoneda(datos.moneda, datos.subtotalGratuito)}</div>
               </div>
             )}
             <div>

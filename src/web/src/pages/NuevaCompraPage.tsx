@@ -18,7 +18,7 @@ import {
   MONEDA_COMPRA,
   TIPO_AFECTACION_IGV,
   TIPO_COMPROBANTE_COMPRA,
-  nombresTipoAfectacion,
+  opcionesAfectacionIgv,
   type MonedaCompra,
   type ProductoResponse,
   type ProveedorResponse,
@@ -87,11 +87,6 @@ const lineaVacia = (tipo: LineaForm['tipo']): LineaForm => ({
 
 const opcionesComprobante = Object.entries(nombresTipoComprobanteCompra).map(([valor, nombre]) => ({
   value: Number(valor) as TipoComprobanteCompra,
-  label: nombre,
-}))
-
-const opcionesAfectacion = Object.entries(nombresTipoAfectacion).map(([valor, nombre]) => ({
-  value: Number(valor),
   label: nombre,
 }))
 
@@ -499,7 +494,7 @@ export function NuevaCompraPage() {
                           </Form.Item>
                         )}
                         <Form.Item label="IGV" className="lc-igv" name={[campo.name, 'tipoAfectacionIgv']}>
-                          <Select options={opcionesAfectacion} />
+                          <Select options={opcionesAfectacionIgv} popupMatchSelectWidth={false} />
                         </Form.Item>
                         <Form.Item
                           label="Cantidad"
@@ -518,7 +513,7 @@ export function NuevaCompraPage() {
                           <InputNumber min={0} step={0.01} style={{ width: '100%' }} />
                         </Form.Item>
                         <div className="linea-compra-total lc-total num">
-                          <span className="etiqueta">Total</span>
+                          <span className="etiqueta">{montos.valorReferencial == null ? 'Total' : 'Gratuito'}</span>
                           {montoEnMoneda(moneda, montos.total)}
                         </div>
                         <Button
@@ -607,6 +602,12 @@ export function NuevaCompraPage() {
                 <div>
                   <div className="etiqueta">Inafectas</div>
                   <div className="valor">{montoEnMoneda(moneda, totales.inafecto)}</div>
+                </div>
+              )}
+              {totales.gratuito > 0 && (
+                <div>
+                  <div className="etiqueta">Op. gratuitas</div>
+                  <div className="valor">{montoEnMoneda(moneda, totales.gratuito)}</div>
                 </div>
               )}
               <div>

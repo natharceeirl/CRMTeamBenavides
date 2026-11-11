@@ -261,6 +261,7 @@ class OrdenServicioApi {
     this.subtotalGravado,
     this.subtotalExonerado,
     this.subtotalInafecto,
+    this.subtotalGratuito = 0,
     this.montoIgv,
     this.total,
     this.estadoPresupuestoId = EstadoPresupuesto.pendiente,
@@ -310,6 +311,7 @@ class OrdenServicioApi {
         subtotalGravado: (json['subtotalGravado'] as num?)?.toDouble(),
         subtotalExonerado: (json['subtotalExonerado'] as num?)?.toDouble(),
         subtotalInafecto: (json['subtotalInafecto'] as num?)?.toDouble(),
+        subtotalGratuito: (json['subtotalGratuito'] as num? ?? 0).toDouble(),
         montoIgv: (json['montoIgv'] as num?)?.toDouble(),
         total: (json['total'] as num?)?.toDouble(),
         estadoPresupuestoId:
@@ -369,8 +371,15 @@ class OrdenServicioApi {
   final double? subtotalGravado;
   final double? subtotalExonerado;
   final double? subtotalInafecto;
+
+  /// Op. gratuitas: lo que valen las líneas gratuitas, con IGV. No se suma al total.
+  final double subtotalGratuito;
   final double? montoIgv;
   final double? total;
+
+  /// Lo que tiene el presupuesto: lo que se cobra y lo gratuito. Un presupuesto
+  /// solo de líneas gratuitas también se envía y se responde.
+  double get montoPresupuesto => (total ?? 0) + subtotalGratuito;
   final int estadoPresupuestoId;
   final DateTime? fechaRespuestaCliente;
   final String? observacionesPresupuesto;
@@ -468,6 +477,7 @@ class DetalleServicioApi {
     this.montoIgv,
     this.total,
     this.precioUnitarioConIgv,
+    this.valorReferencial = 0,
   });
 
   factory DetalleServicioApi.desdeJson(Map<String, dynamic> json) => DetalleServicioApi(
@@ -488,11 +498,15 @@ class DetalleServicioApi {
         montoIgv: (json['montoIgv'] as num?)?.toDouble(),
         total: (json['total'] as num?)?.toDouble(),
         precioUnitarioConIgv: (json['precioUnitarioConIgv'] as num?)?.toDouble(),
+        valorReferencial: (json['valorReferencial'] as num? ?? 0).toDouble(),
       );
 
   final String id;
   final String descripcion;
   final int cantidad;
+
+  /// Lo que se habría cobrado si la línea es gratuita; 0 si se cobra.
+  final double valorReferencial;
 
   /// Sin IGV: la base. Si la línea se cobró con IGV, el precio escrito es [precioUnitarioConIgv].
   final double precioUnitario;
@@ -532,6 +546,7 @@ class OrdenServicioDetalleApi {
     this.subtotalGravado,
     this.subtotalExonerado,
     this.subtotalInafecto,
+    this.subtotalGratuito = 0,
     this.montoIgv,
     this.porcentajeIgv,
   });
@@ -560,6 +575,7 @@ class OrdenServicioDetalleApi {
       subtotalGravado: (json['subtotalGravado'] as num?)?.toDouble(),
       subtotalExonerado: (json['subtotalExonerado'] as num?)?.toDouble(),
       subtotalInafecto: (json['subtotalInafecto'] as num?)?.toDouble(),
+      subtotalGratuito: (json['subtotalGratuito'] as num? ?? 0).toDouble(),
       montoIgv: (json['montoIgv'] as num?)?.toDouble(),
       porcentajeIgv: (json['porcentajeIgv'] as num?)?.toDouble(),
     );
@@ -581,6 +597,9 @@ class OrdenServicioDetalleApi {
   final double? subtotalGravado;
   final double? subtotalExonerado;
   final double? subtotalInafecto;
+
+  /// Op. gratuitas: lo que valen las líneas gratuitas, con IGV. No se suma al total.
+  final double subtotalGratuito;
   final double? montoIgv;
   final double? porcentajeIgv;
 }

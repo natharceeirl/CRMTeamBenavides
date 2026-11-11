@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { MONEDA_COMPRA, TIPO_AFECTACION_IGV } from '../api/tipos'
 import { calcularLinea, calcularTotales, montoEnMoneda, redondear } from './compras'
 
-const { gravado, exonerado, inafecto } = TIPO_AFECTACION_IGV
+const { gravado, exonerado, inafecto, bonificaciones } = TIPO_AFECTACION_IGV
 
 // Los mismos casos que se probaron contra la API: la vista previa tiene que dar lo que guarda el backend.
 describe('calcularLinea', () => {
@@ -44,12 +44,35 @@ describe('calcularLinea', () => {
     expect(calcularLinea({ cantidad: 1, precioUnitario: 50, tipoAfectacionIgv: gravado }, 0, false).igv).toBe(0)
   })
 
+  it('una bonificación del proveedor no se paga y vale lo que costaría como gravada', () => {
+    expect(calcularLinea({ cantidad: 10, precioUnitario: 20, tipoAfectacionIgv: bonificaciones }, 18, false)).toEqual({
+      subtotal: 0,
+      igv: 0,
+      total: 0,
+      valorReferencial: 236,
+    })
+    expect(calcularLinea({ cantidad: 2, precioUnitario: 11.8, tipoAfectacionIgv: bonificaciones }, 18, true).valorReferencial).toBe(23.6)
+  })
+
   it('una línea a medio escribir cuenta como 0', () => {
     expect(calcularLinea({ cantidad: Number.NaN, precioUnitario: 10, tipoAfectacionIgv: gravado }, 18, false).total).toBe(0)
   })
 })
 
 describe('calcularTotales', () => {
+  it('lo gratuito va aparte y no se suma al total', () => {
+    expect(
+      calcularTotales(
+        [
+          { cantidad: 1, precioUnitario: 50, tipoAfectacionIgv: gravado },
+          { cantidad: 10, precioUnitario: 20, tipoAfectacionIgv: bonificaciones },
+        ],
+        18,
+        false,
+      ),
+    ).toEqual({ gravado: 50, exonerado: 0, inafecto: 0, gratuito: 236, igv: 9, total: 59 })
+  })
+
   it('suma por afectación: flete gravado y repuesto exonerado', () => {
     expect(
       calcularTotales(
@@ -60,7 +83,7 @@ describe('calcularTotales', () => {
         18,
         false,
       ),
-    ).toEqual({ gravado: 50, exonerado: 30, inafecto: 0, igv: 9, total: 89 })
+    ).toEqual({ gravado: 50, exonerado: 30, inafecto: 0, gratuito: 0, igv: 9, total: 89 })
   })
 })
 

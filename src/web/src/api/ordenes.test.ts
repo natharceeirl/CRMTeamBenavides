@@ -15,6 +15,7 @@ import {
   permiteEditarDetalles,
   esperaRespuestaDelCliente,
   etiquetaPresupuesto,
+  montoPresupuesto,
   respuestasPresupuesto,
   transicionesValidas,
 } from './ordenes'
@@ -164,6 +165,13 @@ describe('etiquetaPresupuesto', () => {
     expect(etiquetaPresupuesto(ESTADO.abierta, PRESUPUESTO.pendiente, 0).texto).toBe('En preparación')
     expect(etiquetaPresupuesto(ESTADO.lista, PRESUPUESTO.pendiente, 120)).toEqual({ texto: 'Sin respuesta', tono: 'apagado' })
     expect(etiquetaPresupuesto(ESTADO.lista, PRESUPUESTO.aprobado, 120).texto).toBe('Aprobado')
+  })
+
+  it('un presupuesto solo de líneas gratuitas también espera la respuesta del cliente', () => {
+    const gratuita = { estadoId: ESTADO.diagnostico, estadoPresupuestoClienteId: PRESUPUESTO.pendiente, total: 0, subtotalGratuito: 180 }
+    expect(montoPresupuesto(gratuita)).toBe(180)
+    expect(esperaRespuestaDelCliente(gratuita)).toBe(true)
+    expect(esperaRespuestaDelCliente({ ...gratuita, subtotalGratuito: 0 })).toBe(false)
   })
 
   it('pide respuesta al cliente con el diagnóstico hecho y el presupuesto armado', () => {

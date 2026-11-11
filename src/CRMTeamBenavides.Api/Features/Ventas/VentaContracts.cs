@@ -42,7 +42,9 @@ public record VentaResponse(
     string EstadoComprobante = "Pendiente",
     int EstadoAprobacionGerenciaId = 0,
     string EstadoAprobacionGerencia = "NoAplica",
-    string? NumeroOrdenServicio = null);
+    string? NumeroOrdenServicio = null,
+    // Op. gratuitas: lo que valen las líneas gratuitas, con IGV. No se suma al total.
+    decimal SubtotalGratuito = 0m);
 
 public record VentaDetalleResponse(
     Guid Id,
@@ -69,7 +71,9 @@ public record VentaDetalleResponse(
     string EstadoComprobante = "Pendiente",
     int EstadoAprobacionGerenciaId = 0,
     string EstadoAprobacionGerencia = "NoAplica",
-    string? NumeroOrdenServicio = null);
+    string? NumeroOrdenServicio = null,
+    // Op. gratuitas: lo que valen las líneas gratuitas, con IGV. No se suma al total.
+    decimal SubtotalGratuito = 0m);
 
 public record DetalleVentaResponse(
     Guid Id,
@@ -91,7 +95,9 @@ public record DetalleVentaResponse(
     decimal Total = 0m,
     decimal? PrecioUnitarioConIgv = null,
     List<Guid>? UnidadesInventarioIds = null,
-    List<string>? Series = null);
+    List<string>? Series = null,
+    // Lo que se habría cobrado si la línea es gratuita; 0 si se cobra.
+    decimal ValorReferencial = 0m);
 
 public record ComprobanteResponse(
     Guid Id,
@@ -110,7 +116,9 @@ public record ComprobanteResponse(
     decimal Total = 0m,
     string? MetodoPagoPrincipal = null,
     string? Observaciones = null,
-    Guid? OrdenServicioId = null);
+    Guid? OrdenServicioId = null,
+    // Op. gratuitas: lo que valen las líneas gratuitas, con IGV. No se suma al total.
+    decimal SubtotalGratuito = 0m);
 
 public record RegistrarComprobanteRequest(
     string Tipo,

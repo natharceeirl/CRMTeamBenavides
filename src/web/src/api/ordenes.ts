@@ -134,8 +134,15 @@ export const nombresPresupuesto: Record<number, string> = {
 }
 
 /**
+ * Lo que tiene el presupuesto: lo que se cobra y lo gratuito. Un presupuesto solo de
+ * líneas gratuitas también se envía y se responde.
+ */
+export const montoPresupuesto = (orden: { total?: number; subtotalGratuito?: number }) =>
+  (orden.total ?? 0) + (orden.subtotalGratuito ?? 0)
+
+/**
  * Qué respuestas al presupuesto se pueden dar todavía, con la regla del backend:
- * con la orden en Diagnóstico y algo que aprobar (total mayor a cero), y nunca
+ * con la orden en Diagnóstico y algo que aprobar (ver `montoPresupuesto`), y nunca
  * después de aprobado. Si se rechazó, el cliente aún puede aprobarlo.
  */
 export function respuestasPresupuesto(estadoOrden: number, presupuesto: number, total: number): number[] {
@@ -170,9 +177,10 @@ export const esperaRespuestaDelCliente = (orden: {
   estadoId: number
   estadoPresupuestoClienteId?: number
   total?: number
+  subtotalGratuito?: number
 }) =>
   (orden.estadoPresupuestoClienteId ?? PRESUPUESTO.pendiente) === PRESUPUESTO.pendiente &&
-  respuestasPresupuesto(orden.estadoId, PRESUPUESTO.pendiente, orden.total ?? 0).length > 0
+  respuestasPresupuesto(orden.estadoId, PRESUPUESTO.pendiente, montoPresupuesto(orden)).length > 0
 
 /** Los estados con los nombres que entiende el cliente, como en la app. */
 export const nombresEstadoCliente: Record<number, string> = {

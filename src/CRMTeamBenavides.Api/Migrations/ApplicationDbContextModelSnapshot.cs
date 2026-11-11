@@ -371,6 +371,10 @@ namespace CRMTeamBenavides.Api.Migrations
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 
+                    b.Property<decimal>("SubtotalGratuito")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
                     b.Property<decimal>("SubtotalGravado")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
@@ -471,6 +475,10 @@ namespace CRMTeamBenavides.Api.Migrations
                         .HasColumnType("text");
 
                     b.Property<decimal>("SubtotalExonerado")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal>("SubtotalGratuito")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 
@@ -1701,6 +1709,10 @@ namespace CRMTeamBenavides.Api.Migrations
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 
+                    b.Property<decimal>("SubtotalGratuito")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
                     b.Property<decimal>("SubtotalGravado")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
@@ -2763,6 +2775,10 @@ namespace CRMTeamBenavides.Api.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<decimal>("SubtotalExonerado")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal>("SubtotalGratuito")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 

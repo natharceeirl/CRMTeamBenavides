@@ -231,6 +231,11 @@ public class PedidoLimaService : IPedidoLimaService
             }
 
             var afectacion = item.TipoAfectacionIgv ?? TipoAfectacionIgv.Gravado;
+            if (!AfectacionIgv.Cobradas.Contains(afectacion))
+            {
+                return ServiceResult<PedidoLimaResponse>.Invalid(
+                    $"«{prod.Nombre}»: un pedido a Lima no lleva líneas gratuitas. Elige gravado, exonerado o inafecto.");
+            }
             var precio = PrecioLista.DeEscrito(precioEscrito, prod.PrecioIncluyeIgv, afectacion, porcentajeIgv);
             var (lineaGravada, lineaIgv, lineaTotal, porcentajeAplicado) =
                 OrdenServicioService.CalcularFinanzasLinea(item.Cantidad, precio.SinIgv, afectacion, porcentajeIgv, precio.ConIgv);

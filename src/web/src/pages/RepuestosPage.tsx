@@ -21,6 +21,7 @@ import {
 } from '../api/inventario'
 import { useEliminarServicio, useServicios } from '../api/servicios'
 import {
+  esAfectacionGratuita,
   nombresTipoAfectacion,
   type CategoriaProductoResponse,
   type MovimientoInventarioResponse,
@@ -284,8 +285,8 @@ export function RepuestosPage() {
       title: 'Afectación IGV',
       dataIndex: 'tipoAfectacionIgv',
       render: (tipo: number) => (
-        <Tag color={tipo === 0 ? 'blue' : 'default'}>
-          {nombresTipoAfectacion[tipo] ?? 'Gravado'}
+        <Tag color={tipo === 0 ? 'blue' : esAfectacionGratuita(tipo) ? 'green' : 'default'}>
+          {esAfectacionGratuita(tipo) ? `Gratuito · ${nombresTipoAfectacion[tipo]}` : (nombresTipoAfectacion[tipo] ?? 'Gravado')}
         </Tag>
       ),
     },

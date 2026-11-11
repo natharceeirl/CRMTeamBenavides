@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { Form, Input, InputNumber, Modal, Select } from 'antd'
 import { useActualizarServicio, useCrearServicio } from '../api/servicios'
 import { AvisoError } from './AvisoError'
-import { TIPO_AFECTACION_IGV, type ServicioResponse, type TipoAfectacionIgv } from '../api/tipos'
+import { TIPO_AFECTACION_IGV, opcionesAfectacionIgv, type ServicioResponse, type TipoAfectacionIgv } from '../api/tipos'
 
 type Props = {
   abierto: boolean
@@ -103,17 +103,11 @@ export function ModalServicio({ abierto, servicio, onCerrar }: Readonly<Props>) 
           <InputNumber min={0} step={0.5} style={{ width: '100%' }} />
         </Form.Item>
         <Form.Item
-          label="Afectación tributaria (IGV)"
+          label="Afectación IGV"
           name="tipoAfectacionIgv"
           rules={[{ required: true, message: 'Selecciona la afectación' }]}
         >
-          <Select
-            options={[
-              { value: TIPO_AFECTACION_IGV.gravado, label: 'Gravado (Aplica IGV)' },
-              { value: TIPO_AFECTACION_IGV.exonerado, label: 'Exonerado (IGV 0%)' },
-              { value: TIPO_AFECTACION_IGV.inafecto, label: 'Inafecto (IGV 0%)' },
-            ]}
-          />
+          <Select options={opcionesAfectacionIgv} />
         </Form.Item>
       </Form>
     </Modal>

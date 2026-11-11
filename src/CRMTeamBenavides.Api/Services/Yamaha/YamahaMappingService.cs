@@ -150,12 +150,18 @@ public sealed class YamahaMappingService : IYamahaMappingService
         }
 
         // Cálculos monetarios e importes con redondeo seguro
-        var montoConIgv = detalle.Total > 0
-            ? Math.Round(detalle.Total, 2, MidpointRounding.AwayFromZero)
-            : Math.Round(detalle.Cantidad * detalle.PrecioUnitario, 2, MidpointRounding.AwayFromZero);
+        // Una línea gratuita se reporta con lo que se cobró: S/ 0.00 (decisión del 10/11, por confirmar con Yamaha).
+        var montoConIgv = detalle.TipoAfectacionIgv.EsGratuita() ? 0m
+            : detalle.Total > 0
+                ? Math.Round(detalle.Total, 2, MidpointRounding.AwayFromZero)
+                : Math.Round(detalle.Cantidad * detalle.PrecioUnitario, 2, MidpointRounding.AwayFromZero);
 
         decimal montoSinIgv;
-        if (detalle.TipoAfectacionIgv == TipoAfectacionIgv.Gravado)
+        if (detalle.TipoAfectacionIgv.EsGratuita())
+        {
+            montoSinIgv = 0m;
+        }
+        else if (detalle.TipoAfectacionIgv == TipoAfectacionIgv.Gravado)
         {
             montoSinIgv = detalle.SubtotalGravado > 0
                 ? Math.Round(detalle.SubtotalGravado, 2, MidpointRounding.AwayFromZero)
@@ -648,12 +654,18 @@ public sealed class YamahaMappingService : IYamahaMappingService
         }
 
         // Totales monetarios de la línea
-        var montoConIgv = detalle.Total > 0
-            ? Math.Round(detalle.Total, 2, MidpointRounding.AwayFromZero)
-            : Math.Round(detalle.Cantidad * detalle.PrecioUnitario, 2, MidpointRounding.AwayFromZero);
+        // Una línea gratuita se reporta con lo que se cobró: S/ 0.00 (decisión del 10/11, por confirmar con Yamaha).
+        var montoConIgv = detalle.TipoAfectacionIgv.EsGratuita() ? 0m
+            : detalle.Total > 0
+                ? Math.Round(detalle.Total, 2, MidpointRounding.AwayFromZero)
+                : Math.Round(detalle.Cantidad * detalle.PrecioUnitario, 2, MidpointRounding.AwayFromZero);
 
         decimal montoSinIgv;
-        if (detalle.TipoAfectacionIgv == TipoAfectacionIgv.Gravado)
+        if (detalle.TipoAfectacionIgv.EsGratuita())
+        {
+            montoSinIgv = 0m;
+        }
+        else if (detalle.TipoAfectacionIgv == TipoAfectacionIgv.Gravado)
         {
             montoSinIgv = detalle.SubtotalGravado > 0
                 ? Math.Round(detalle.SubtotalGravado, 2, MidpointRounding.AwayFromZero)

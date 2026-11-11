@@ -39,7 +39,7 @@ import {
   transicionesValidas,
 } from '../api/ordenes'
 import {
-  nombresTipoAfectacion,
+  etiquetaAfectacion,
   nombresTipoItem,
   type EstadoOrdenServicio,
   type DetalleServicioResponse,
@@ -164,12 +164,12 @@ export function OrdenDetallePage() {
       dataIndex: 'descripcion',
       render: (descripcion: string, detalle) => {
         const tipo = nombresTipoItem[detalle.tipoItem ?? (detalle.esRepuesto ? 0 : 2)] ?? detalle.tipoItemNombre
-        const afectacion = detalle.tipoAfectacionIgv ?? 0
         const rasgos = [
           tipo,
           detalle.productoCodigo,
           // Gravado es lo normal: solo se avisa cuando no lo es.
-          afectacion === 0 ? null : (nombresTipoAfectacion[afectacion] ?? detalle.tipoAfectacionIgvNombre),
+          etiquetaAfectacion(detalle.tipoAfectacionIgv),
+          detalle.valorReferencial > 0 ? `vale ${soles(detalle.valorReferencial)}` : null,
         ].filter(Boolean)
         return (
           <>
@@ -307,7 +307,7 @@ export function OrdenDetallePage() {
             { etiqueta: 'Ingreso', valor: fechaHora(fechaIngresoOrden(datos)) },
             { etiqueta: 'Entrega estimada', valor: fechaHora(datos.fechaEstimadaEntrega) },
             { etiqueta: 'Medidor al ingresar', valor: lecturaIngresoOrden(datos) },
-            { etiqueta: 'Total', valor: datos.total > 0 ? soles(datos.total) : '—' },
+            { etiqueta: 'Total', valor: datos.total > 0 || datos.subtotalGratuito > 0 ? soles(datos.total) : '—' },
           ]}
         />
 
@@ -340,6 +340,12 @@ export function OrdenDetallePage() {
                   <div className="valor">{soles(datos.subtotalInafecto ?? 0)}</div>
                 </div>
               )}
+              {datos.subtotalGratuito > 0 && (
+                <div>
+                  <div className="etiqueta">Op. gratuitas</div>
+                  <div className="valor">{soles(datos.subtotalGratuito)}</div>
+                </div>
+              )}
               <div>
                 <div className="etiqueta">IGV</div>
                 <div className="valor">{soles(datos.montoIgv ?? 0)}</div>
@@ -360,7 +366,7 @@ export function OrdenDetallePage() {
                 </div>
                 {pideAprobacion && (
                   <p className="texto-secundario" style={{ marginTop: 8 }}>
-                    Un precio distinto al de lista deja la orden pendiente hasta que Gerencia lo apruebe.
+                    Un precio distinto al de lista o una línea gratuita dejan la orden pendiente hasta que Gerencia lo apruebe.
                   </p>
                 )}
               </>

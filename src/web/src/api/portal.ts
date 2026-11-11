@@ -28,6 +28,8 @@ export type PortalComprobante = {
   estado: string
   metodoPagoPrincipal: string | null
   observaciones: string | null
+  /** Op. gratuitas: lo que valen las líneas gratuitas. No se suma al total. */
+  subtotalGratuito: number
 }
 
 export type HistorialServicioItem = {
@@ -40,6 +42,8 @@ export type HistorialServicioItem = {
   cantidad: number
   precioUnitario: number
   total: number
+  /** Se cobró S/ 0.00. */
+  esGratuita: boolean
 }
 
 export type AtencionServicioUnidad = {

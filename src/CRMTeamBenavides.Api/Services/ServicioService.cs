@@ -54,6 +54,9 @@ public class ServicioService : IServicioService
         if (request.PrecioSugerido < 0)
             return ServiceResult<ServicioResponse>.Invalid("El precio sugerido no puede ser negativo.");
 
+        if (!Enum.IsDefined(request.TipoAfectacionIgv))
+            return ServiceResult<ServicioResponse>.Invalid("La afectación de IGV no es válida.");
+
         var servicio = new Servicio
         {
             Nombre = request.Nombre.Trim(),
@@ -81,6 +84,9 @@ public class ServicioService : IServicioService
 
         if (request.PrecioSugerido < 0)
             return ServiceResult<ServicioResponse>.Invalid("El precio sugerido no puede ser negativo.");
+
+        if (!Enum.IsDefined(request.TipoAfectacionIgv))
+            return ServiceResult<ServicioResponse>.Invalid("La afectación de IGV no es válida.");
 
         servicio.Nombre = request.Nombre.Trim();
         servicio.PrecioSugerido = request.PrecioSugerido;

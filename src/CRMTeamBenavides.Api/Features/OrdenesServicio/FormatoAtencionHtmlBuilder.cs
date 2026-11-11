@@ -178,7 +178,8 @@ public static class FormatoAtencionHtmlBuilder
             {
                 sb.AppendLine("        <tr>");
                 sb.AppendLine($"          <td>{WebUtility.HtmlEncode(item.TipoItemNombre)}</td>");
-                sb.AppendLine($"          <td>{WebUtility.HtmlEncode(item.Descripcion)}</td>");
+                var gratuito = item.EsGratuita ? " <em>(gratuito)</em>" : string.Empty;
+                sb.AppendLine($"          <td>{WebUtility.HtmlEncode(item.Descripcion)}{gratuito}</td>");
                 sb.AppendLine($"          <td class=\"text-center\">{item.Cantidad}</td>");
                 sb.AppendLine($"          <td class=\"text-right\">{item.PrecioUnitario:N2}</td>");
                 sb.AppendLine($"          <td class=\"text-right\">{item.Total:N2}</td>");
@@ -200,6 +201,8 @@ public static class FormatoAtencionHtmlBuilder
             sb.AppendLine($"        <tr><td>Op. Inafecta:</td><td class=\"text-right\">S/ {data.Financiero.SubtotalInafecto:N2}</td></tr>");
         sb.AppendLine($"        <tr><td>IGV ({data.Financiero.PorcentajeIgv:N0}%):</td><td class=\"text-right\">S/ {data.Financiero.MontoIgv:N2}</td></tr>");
         sb.AppendLine($"        <tr class=\"total-row\"><td>TOTAL:</td><td class=\"text-right\">S/ {data.Financiero.Total:N2}</td></tr>");
+        if (data.Financiero.SubtotalGratuito > 0)
+            sb.AppendLine($"        <tr><td>Op. Gratuitas (no se cobran):</td><td class=\"text-right\">S/ {data.Financiero.SubtotalGratuito:N2}</td></tr>");
         if (data.Financiero.TotalPagado > 0)
             sb.AppendLine($"        <tr><td style=\"color: #059669; font-weight: 600;\">Pagado / Adelanto:</td><td class=\"text-right\" style=\"color: #059669; font-weight: 600;\">S/ {data.Financiero.TotalPagado:N2}</td></tr>");
         sb.AppendLine($"        <tr><td style=\"color: #dc2626; font-weight: 700;\">SALDO PENDIENTE:</td><td class=\"text-right\" style=\"color: #dc2626; font-weight: 700;\">S/ {data.Financiero.SaldoPendiente:N2}</td></tr>");

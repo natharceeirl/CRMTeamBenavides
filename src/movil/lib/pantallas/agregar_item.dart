@@ -41,7 +41,7 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
   ProductoApi? _producto;
   ServicioApi? _servicio;
   int _cantidad = 1;
-  int _afectacion = 0;
+  int _afectacion = TipoAfectacionIgv.gravado;
   bool _guardando = false;
   String? _error;
 
@@ -86,6 +86,7 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
       _producto = null;
       _servicio = null;
       _cantidad = 1;
+      _afectacion = TipoAfectacionIgv.gravado;
       _error = null;
       _precio.clear();
     });
@@ -108,7 +109,7 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
             // Del catálogo solo se envía el precio si cambió: así la API usa el
             // de lista y no abre una solicitud a Gerencia.
             precioUnitario: _esManual || _fueraDeLista ? _precioManual : null,
-            tipoAfectacionIgv: _esManual ? _afectacion : null,
+            tipoAfectacionIgv: _afectacion,
           );
       if (mounted) {
         Navigator.of(context).pop(true);
@@ -238,6 +239,8 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
               helperText: 'De lista: ${soles(_precioCatalogo!)}',
             ),
           ),
+          const SizedBox(height: 8),
+          _selectorAfectacion(),
           if (_fueraDeLista && !ref.watch(sesionProvider).fijaPreciosDeOrdenSinAprobacion)
             Container(
               margin: const EdgeInsets.only(top: 8),
@@ -253,6 +256,39 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
             ),
         ],
       ),
+    );
+  }
+
+  /// Lo que se cobra y, aparte, lo gratuito. Una línea gratuita aparece en la orden
+  /// con su precio y se cobra S/ 0.00; si no la marca quien fija precios, la aprueba Gerencia.
+  Widget _selectorAfectacion() {
+    final gratuita = esAfectacionGratuita(_afectacion);
+    final pideAprobacion = !ref.watch(sesionProvider).fijaPreciosDeOrdenSinAprobacion;
+    const grupo = TextStyle(fontWeight: FontWeight.w600, color: Marca.textoSecundario);
+
+    DropdownMenuItem<int> opcion(int valor) => DropdownMenuItem(
+          value: valor,
+          child: Text(nombresAfectacionIgv[valor]!, overflow: TextOverflow.ellipsis),
+        );
+
+    return DropdownButtonFormField<int>(
+      // La clave lo rehace cuando un servicio trae su afectación del catálogo.
+      key: ValueKey(_afectacion),
+      initialValue: _afectacion,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Afectación IGV',
+        helperText: gratuita
+            ? 'Se cobra S/ 0.00.${pideAprobacion ? ' Gerencia aprueba las líneas gratuitas.' : ''}'
+            : null,
+      ),
+      items: [
+        const DropdownMenuItem(value: -1, enabled: false, child: Text('Cobrado', style: grupo)),
+        for (final valor in afectacionesCobradas) opcion(valor),
+        const DropdownMenuItem(value: -2, enabled: false, child: Text('Gratuito (se cobra S/ 0.00)', style: grupo)),
+        for (final valor in afectacionesGratuitas) opcion(valor),
+      ],
+      onChanged: (valor) => setState(() => _afectacion = valor ?? TipoAfectacionIgv.gravado),
     );
   }
 
@@ -292,11 +328,12 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
           elegido: (servicio) => servicio.id == _servicio?.id,
           alElegir: (servicio) => setState(() {
             _servicio = servicio;
+            _afectacion = servicio.tipoAfectacionIgv;
             _ponerPrecioDeLista(servicio.precioSugerido);
           }),
           disponible: (_) => true,
           titulo: (servicio) => servicio.nombre,
-          detalle: (servicio) => nombresAfectacionIgv[servicio.tipoAfectacionIgv] ?? 'Gravado',
+          detalle: (servicio) => etiquetaAfectacion(servicio.tipoAfectacionIgv) ?? 'Gravado',
           precio: (servicio) => servicio.precioSugerido,
         );
       default:
@@ -319,15 +356,7 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
               decoration: const InputDecoration(labelText: 'Precio unitario (S/)'),
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<int>(
-              initialValue: _afectacion,
-              decoration: const InputDecoration(labelText: 'Afectación de IGV'),
-              items: [
-                for (final entrada in nombresAfectacionIgv.entries)
-                  DropdownMenuItem(value: entrada.key, child: Text(entrada.value)),
-              ],
-              onChanged: (valor) => setState(() => _afectacion = valor ?? 0),
-            ),
+            _selectorAfectacion(),
           ],
         );
     }

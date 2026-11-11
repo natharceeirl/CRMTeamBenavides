@@ -70,6 +70,8 @@ public class Compra : BaseEntity
     public decimal SubtotalGravado { get; set; }
     public decimal SubtotalExonerado { get; set; }
     public decimal SubtotalInafecto { get; set; }
+    /// <summary>Lo que valen las líneas gratuitas (bonificaciones del proveedor), con IGV. No se suma al total.</summary>
+    public decimal SubtotalGratuito { get; set; }
     public decimal MontoIgv { get; set; }
     public decimal Total { get; set; }
 

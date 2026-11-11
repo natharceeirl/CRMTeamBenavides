@@ -52,6 +52,7 @@ class ApiFalsa extends ApiHttp {
       'productoId': productoId,
       'servicioId': servicioId,
       'precioUnitario': precioUnitario,
+      'tipoAfectacionIgv': tipoAfectacionIgv,
     });
   }
 }
@@ -184,8 +185,36 @@ void main() {
         'productoId': 'p1',
         'servicioId': null,
         'precioUnitario': null,
+        'tipoAfectacionIgv': TipoAfectacionIgv.gravado,
       },
     ]);
+  });
+
+  testWidgets('el técnico marca un servicio gratuito: se cobra S/ 0.00 y lo aprueba Gerencia', (tester) async {
+    // Alto para que el menú de afectaciones quepa entero.
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = await montarHoja(tester, sesion: SesionTecnico.new);
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Servicio'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mantenimiento 1000 km'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButtonFormField<int>));
+    await tester.pumpAndSettle();
+    expect(find.text('Gratuito (se cobra S/ 0.00)'), findsOneWidget);
+    await tester.tap(find.text('Gravado – Bonificaciones').last);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Gerencia aprueba las líneas gratuitas'), findsOneWidget);
+
+    await tester.tap(find.text('Agregar'));
+    await tester.pumpAndSettle();
+
+    expect(api.enviados.single['servicioId'], 's1');
+    expect(api.enviados.single['tipoAfectacionIgv'], TipoAfectacionIgv.bonificaciones);
+    // Con el precio de lista: la línea vale lo mismo, solo que no se cobra.
+    expect(api.enviados.single['precioUnitario'], isNull);
   });
 
   testWidgets('Gerencia puede cargar mano de obra con precio propio', (tester) async {

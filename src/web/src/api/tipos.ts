@@ -75,13 +75,56 @@ export const TIPO_AFECTACION_IGV = {
   gravado: 0,
   exonerado: 1,
   inafecto: 2,
+  retiroPorPremio: 3,
+  retiroPorDonacion: 4,
+  retiro: 5,
+  retiroPorPublicidad: 6,
+  bonificaciones: 7,
+  retiroPorEntregaATrabajadores: 8,
 } as const
 
+/** Los nombres del catálogo 07 de SUNAT, como los muestra el selector. */
 export const nombresTipoAfectacion: Record<number, string> = {
-  0: 'Gravado',
+  0: 'Gravado – Operación onerosa',
   1: 'Exonerado',
   2: 'Inafecto',
+  3: 'Gravado – Retiro por premio',
+  4: 'Gravado – Retiro por donación',
+  5: 'Gravado – Retiro',
+  6: 'Gravado – Retiro por publicidad',
+  7: 'Gravado – Bonificaciones',
+  8: 'Gravado – Retiro por entrega a trabajadores',
 }
+
+/** Del 3 al 8: la línea se registra con su valor y se cobra S/ 0.00. */
+export const esAfectacionGratuita = (afectacion: number | null | undefined): boolean =>
+  afectacion != null && afectacion >= TIPO_AFECTACION_IGV.retiroPorPremio && afectacion <= TIPO_AFECTACION_IGV.retiroPorEntregaATrabajadores
+
+/**
+ * Cómo se anota la afectación bajo el concepto de una línea. Gravado es lo normal y no
+ * se anota; una gratuita dice que lo es.
+ */
+export const etiquetaAfectacion = (afectacion: number | null | undefined): string | null => {
+  if (afectacion == null || afectacion === TIPO_AFECTACION_IGV.gravado) return null
+  const nombre = nombresTipoAfectacion[afectacion] ?? null
+  return esAfectacionGratuita(afectacion) ? `Gratuito (${nombre})` : nombre
+}
+
+const opcionesCobradas = [
+  { value: TIPO_AFECTACION_IGV.gravado, label: nombresTipoAfectacion[0] },
+  { value: TIPO_AFECTACION_IGV.exonerado, label: 'Exonerado (IGV 0%)' },
+  { value: TIPO_AFECTACION_IGV.inafecto, label: 'Inafecto (IGV 0%)' },
+]
+
+/** El selector de afectación: lo que se cobra y, aparte, lo gratuito. */
+export const opcionesAfectacionIgv = [
+  { label: 'Cobrado', title: 'Cobrado', options: opcionesCobradas },
+  {
+    label: 'Gratuito (se cobra S/ 0.00)',
+    title: 'Gratuito',
+    options: ([3, 4, 5, 6, 7, 8] as const).map((valor) => ({ value: valor, label: nombresTipoAfectacion[valor] })),
+  },
+]
 
 /** PUT /api/ordenes-servicio/{id}/aprobacion-cliente */
 export type RespuestaPresupuestoRequest = ResolverSolicitudAprobacionRequest

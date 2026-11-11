@@ -72,6 +72,8 @@ public class Venta : BaseEntity
     public decimal SubtotalGravado { get; set; }
     public decimal SubtotalExonerado { get; set; }
     public decimal SubtotalInafecto { get; set; }
+    /// <summary>Lo que valen las líneas gratuitas, con IGV. No se suma al total.</summary>
+    public decimal SubtotalGratuito { get; set; }
     public decimal MontoIgv { get; set; }
     public decimal Total { get; set; }
 
@@ -123,6 +125,10 @@ public class DetalleVenta : BaseEntity
     public decimal Total { get; set; }
 
     public decimal Subtotal => Cantidad * PrecioUnitario;
+
+    /// <summary>Lo que se habría cobrado si la línea es gratuita; 0 si se cobra.</summary>
+    public decimal ValorReferencial =>
+        AfectacionIgv.ValorReferencial(TipoAfectacionIgv, Cantidad, PrecioUnitario, PrecioUnitarioConIgv, PorcentajeIgvAplicado);
 }
 
 public class Comprobante : BaseEntity
@@ -138,6 +144,8 @@ public class Comprobante : BaseEntity
     public decimal SubtotalGravado { get; set; }
     public decimal SubtotalExonerado { get; set; }
     public decimal SubtotalInafecto { get; set; }
+    /// <summary>Lo que valen las líneas gratuitas, con IGV. No se suma al total.</summary>
+    public decimal SubtotalGratuito { get; set; }
     public decimal PorcentajeIgv { get; set; }
     public decimal MontoIgv { get; set; }
     public decimal Total { get; set; }

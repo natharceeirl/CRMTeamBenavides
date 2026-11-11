@@ -13,6 +13,8 @@ import { precioListaSoles, textoPrecioLista } from '../utils/precios'
 import {
   TIPO_AFECTACION_IGV,
   TIPO_ITEM_SERVICIO,
+  esAfectacionGratuita,
+  opcionesAfectacionIgv,
   type TipoAfectacionIgv,
   type TipoItemServicio,
 } from '../api/tipos'
@@ -63,6 +65,7 @@ export function ModalItemOrden({
   const productoId = Form.useWatch('productoId', formulario)
   const servicioId = Form.useWatch('servicioId', formulario)
   const precioUnitario = Form.useWatch('precioUnitario', formulario)
+  const gratuita = esAfectacionGratuita(Form.useWatch('tipoAfectacionIgv', formulario))
 
   const productoElegido = (productos.data ?? []).find((p) => p.id === productoId)
   const servicioElegido = (servicios.data ?? []).find((s) => s.id === servicioId)
@@ -265,17 +268,16 @@ export function ModalItemOrden({
         {conPrecioDeLista && pideAprobacion && <AvisoPrecioGerencia precio={precioUnitario} deLista={precioDeLista} />}
 
         <Form.Item
-          label="Afectación tributaria (SUNAT)"
+          label="Afectación IGV"
           name="tipoAfectacionIgv"
           rules={[{ required: true, message: 'Indica la afectación de IGV' }]}
+          extra={
+            gratuita
+              ? `Aparece en la orden con su precio y se cobra S/ 0.00.${pideAprobacion ? ' Gerencia aprueba las líneas gratuitas.' : ''}`
+              : undefined
+          }
         >
-          <Select
-            options={[
-              { value: TIPO_AFECTACION_IGV.gravado, label: 'Gravado (Aplica IGV)' },
-              { value: TIPO_AFECTACION_IGV.exonerado, label: 'Exonerado (IGV 0%)' },
-              { value: TIPO_AFECTACION_IGV.inafecto, label: 'Inafecto (IGV 0%)' },
-            ]}
-          />
+          <Select options={opcionesAfectacionIgv} />
         </Form.Item>
       </Form>
 

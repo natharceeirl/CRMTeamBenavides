@@ -14,7 +14,7 @@ import {
 import { tieneSaldo, useMetodosPago, useRegistrarPagoVenta } from '../api/pagos'
 import { GERENCIA, nombresGerencia } from '../api/ordenes'
 import { useConfiguracionEmpresa } from '../api/configuracion'
-import { nombresTipoItem, type DetalleVentaResponse, type RegistrarComprobanteRequest } from '../api/tipos'
+import { etiquetaAfectacion, nombresTipoItem, type DetalleVentaResponse, type RegistrarComprobanteRequest } from '../api/tipos'
 import { AvisoError } from './AvisoError'
 import { EtiquetaEstado, type TonoEstado } from './EtiquetaEstado'
 import { ModalEditarCotizacion, esVentaEditable } from './ModalEditarCotizacion'
@@ -40,7 +40,16 @@ const columnas: TableProps<DetalleVentaResponse>['columns'] = [
       return (
         <>
           <div>{detalle.productoNombre}</div>
-          <div className="texto-secundario">{[tipo, detalle.productoCodigo].filter(Boolean).join(' · ')}</div>
+          <div className="texto-secundario">
+            {[
+              tipo,
+              detalle.productoCodigo,
+              etiquetaAfectacion(detalle.tipoAfectacionIgv),
+              detalle.valorReferencial > 0 ? `vale ${soles(detalle.valorReferencial)}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </div>
           {detalle.series && detalle.series.length > 0 && (
             <div className="texto-secundario">Serie {detalle.series.join(', ')}</div>
           )}
@@ -235,6 +244,12 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
               <div>
                 <div className="etiqueta">Inafectas</div>
                 <div className="valor">{soles(datos.subtotalInafecto)}</div>
+              </div>
+            )}
+            {datos.subtotalGratuito > 0 && (
+              <div>
+                <div className="etiqueta">Op. gratuitas</div>
+                <div className="valor">{soles(datos.subtotalGratuito)}</div>
               </div>
             )}
             <div>

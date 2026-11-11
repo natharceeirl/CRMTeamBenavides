@@ -117,7 +117,8 @@ public class PortalService : IPortalService
             Total: c.Total,
             Estado: c.Estado.ToString(),
             MetodoPagoPrincipal: c.MetodoPagoPrincipal,
-            Observaciones: c.Observaciones)).ToList();
+            Observaciones: c.Observaciones,
+            SubtotalGratuito: c.SubtotalGratuito)).ToList();
 
         return ServiceResult<List<PortalComprobanteResponse>>.Success(responses);
     }
@@ -159,7 +160,8 @@ public class PortalService : IPortalService
                 TipoItemNombre: d.TipoItem.ToString(),
                 Cantidad: d.Cantidad,
                 PrecioUnitario: d.PrecioUnitario,
-                Total: d.Total)).ToList();
+                Total: d.Total,
+                EsGratuita: d.TipoAfectacionIgv.EsGratuita())).ToList();
 
             return new AtencionServicioUnidadResponse(
                 OrdenServicioId: o.Id,

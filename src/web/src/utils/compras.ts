@@ -1,4 +1,4 @@
-import { MONEDA_COMPRA, TIPO_AFECTACION_IGV, type MonedaCompra } from '../api/tipos'
+import { MONEDA_COMPRA, TIPO_AFECTACION_IGV, esAfectacionGratuita, type MonedaCompra } from '../api/tipos'
 import { importe } from './formato'
 
 /**
@@ -13,12 +13,15 @@ export type LineaParaCalcular = {
   tipoAfectacionIgv: number
 }
 
-export type MontosLinea = { subtotal: number; igv: number; total: number }
+/** `valorReferencial`: lo que se habría pagado por una línea gratuita, con IGV. */
+export type MontosLinea = { subtotal: number; igv: number; total: number; valorReferencial?: number }
 
 export type TotalesCompra = {
   gravado: number
   exonerado: number
   inafecto: number
+  /** Lo que valen las líneas gratuitas (bonificaciones). No se suma al total. */
+  gratuito: number
   igv: number
   total: number
 }
@@ -40,6 +43,12 @@ export function calcularLinea(
   porcentajeIgv: number,
   preciosIncluyenIgv: boolean,
 ): MontosLinea {
+  // Una bonificación del proveedor no se paga: vale lo que costaría como gravada.
+  if (esAfectacionGratuita(linea.tipoAfectacionIgv)) {
+    const comoGravada = calcularLinea({ ...linea, tipoAfectacionIgv: TIPO_AFECTACION_IGV.gravado }, porcentajeIgv, preciosIncluyenIgv)
+    return { subtotal: 0, igv: 0, total: 0, valorReferencial: comoGravada.total }
+  }
+
   const importeLinea = redondear((linea.cantidad || 0) * (linea.precioUnitario || 0))
 
   if (linea.tipoAfectacionIgv !== TIPO_AFECTACION_IGV.gravado || porcentajeIgv <= 0) {
@@ -60,11 +69,12 @@ export function calcularTotales(
   porcentajeIgv: number,
   preciosIncluyenIgv: boolean,
 ): TotalesCompra {
-  const totales: TotalesCompra = { gravado: 0, exonerado: 0, inafecto: 0, igv: 0, total: 0 }
+  const totales: TotalesCompra = { gravado: 0, exonerado: 0, inafecto: 0, gratuito: 0, igv: 0, total: 0 }
 
   for (const linea of lineas) {
     const montos = calcularLinea(linea, porcentajeIgv, preciosIncluyenIgv)
-    if (linea.tipoAfectacionIgv === TIPO_AFECTACION_IGV.exonerado) totales.exonerado += montos.subtotal
+    if (esAfectacionGratuita(linea.tipoAfectacionIgv)) totales.gratuito += montos.valorReferencial ?? 0
+    else if (linea.tipoAfectacionIgv === TIPO_AFECTACION_IGV.exonerado) totales.exonerado += montos.subtotal
     else if (linea.tipoAfectacionIgv === TIPO_AFECTACION_IGV.inafecto) totales.inafecto += montos.subtotal
     else totales.gravado += montos.subtotal
     totales.igv += montos.igv
@@ -75,6 +85,7 @@ export function calcularTotales(
     gravado: redondear(totales.gravado),
     exonerado: redondear(totales.exonerado),
     inafecto: redondear(totales.inafecto),
+    gratuito: redondear(totales.gratuito),
     igv: redondear(totales.igv),
     total: redondear(totales.total),
   }

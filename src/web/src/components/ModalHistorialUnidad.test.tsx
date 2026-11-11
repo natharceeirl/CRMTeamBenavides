@@ -34,6 +34,7 @@ const atencion: AtencionServicioUnidad = {
       cantidad: 1,
       precioUnitario: 177,
       total: 177,
+      esGratuita: false,
     },
     {
       id: 'i2',
@@ -45,6 +46,7 @@ const atencion: AtencionServicioUnidad = {
       cantidad: 1,
       precioUnitario: 59,
       total: 59,
+      esGratuita: false,
     },
   ],
 }

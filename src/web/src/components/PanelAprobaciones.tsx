@@ -9,6 +9,7 @@ import {
   useEnviarPresupuesto,
   useSolicitarAprobacionGerencia,
   useResponderPresupuesto,
+  montoPresupuesto,
   respuestasPresupuesto,
   etiquetaPresupuesto,
 } from '../api/ordenes'
@@ -67,15 +68,15 @@ export function PanelAprobaciones({ orden, titulo = 'Aprobaciones' }: Readonly<P
   const [observacion, setObservacion] = useState('')
 
   const presupuesto = orden.estadoPresupuestoClienteId ?? PRESUPUESTO.pendiente
-  const respuestas = puedeRegistrarRespuesta ? respuestasPresupuesto(orden.estadoId, presupuesto, orden.total ?? 0) : []
-  const etiqueta = etiquetaPresupuesto(orden.estadoId, presupuesto, orden.total ?? 0)
+  const respuestas = puedeRegistrarRespuesta ? respuestasPresupuesto(orden.estadoId, presupuesto, montoPresupuesto(orden)) : []
+  const etiqueta = etiquetaPresupuesto(orden.estadoId, presupuesto, montoPresupuesto(orden))
   const aprobacion = orden.estadoAprobacionGerenciaId ?? GERENCIA.noAplica
   // Se envía en la misma etapa en que el cliente puede responder. Con precios
   // esperando a Gerencia el backend no lo deja: se explica en vez de ofrecerlo.
   const puedeEnviarPresupuesto =
     !esSoloCliente &&
     tienePermiso(PERMISOS.ordenesEditar) &&
-    respuestasPresupuesto(orden.estadoId, presupuesto, orden.total ?? 0).length > 0
+    respuestasPresupuesto(orden.estadoId, presupuesto, montoPresupuesto(orden)).length > 0
   const preciosPorAprobar = aprobacion === GERENCIA.pendiente || aprobacion === GERENCIA.rechazado
 
   const cerrar = () => {

@@ -53,8 +53,8 @@ class EstadoPresupuesto {
 }
 
 /// Qué respuestas al presupuesto se pueden dar todavía, con la regla del backend:
-/// con la orden en Diagnóstico y algo que aprobar (total mayor a cero), y nunca
-/// después de aprobado. Si se rechazó, el cliente aún puede aprobarlo.
+/// con la orden en Diagnóstico y algo que aprobar (lo cobrado más lo gratuito mayor
+/// a cero), y nunca después de aprobado. Si se rechazó, el cliente aún puede aprobarlo.
 List<int> respuestasPresupuesto(int estadoOrden, int presupuesto, double total) {
   final enEtapa = estadoOrden == EstadoOrden.diagnostico && total > 0;
   if (!enEtapa || presupuesto == EstadoPresupuesto.aprobado) return const [];
@@ -155,8 +155,59 @@ List<int> tiposDeItemPermitidos({required bool puedeFijarPrecios}) => [
       if (puedeFijarPrecios) ...[TipoItem.manoDeObra, TipoItem.terceros],
     ];
 
-/// Enum TipoAfectacionIgv del backend.
-const nombresAfectacionIgv = <int, String>{0: 'Gravado', 1: 'Exonerado', 2: 'Inafecto'};
+/// Enum TipoAfectacionIgv del backend, con los nombres del catálogo 07 de SUNAT.
+/// Del 3 al 8 la línea se registra con su valor y se cobra S/ 0.00.
+const nombresAfectacionIgv = <int, String>{
+  0: 'Gravado – Operación onerosa',
+  1: 'Exonerado',
+  2: 'Inafecto',
+  3: 'Gravado – Retiro por premio',
+  4: 'Gravado – Retiro por donación',
+  5: 'Gravado – Retiro',
+  6: 'Gravado – Retiro por publicidad',
+  7: 'Gravado – Bonificaciones',
+  8: 'Gravado – Retiro por entrega a trabajadores',
+};
+
+class TipoAfectacionIgv {
+  const TipoAfectacionIgv._();
+
+  static const gravado = 0;
+  static const exonerado = 1;
+  static const inafecto = 2;
+  static const retiroPorPremio = 3;
+  static const retiroPorDonacion = 4;
+  static const retiro = 5;
+  static const retiroPorPublicidad = 6;
+  static const bonificaciones = 7;
+  static const retiroPorEntregaATrabajadores = 8;
+}
+
+/// Las que se cobran, en el orden del selector.
+const afectacionesCobradas = [TipoAfectacionIgv.gravado, TipoAfectacionIgv.exonerado, TipoAfectacionIgv.inafecto];
+
+/// Las gratuitas: retiros y bonificaciones.
+const afectacionesGratuitas = [
+  TipoAfectacionIgv.retiroPorPremio,
+  TipoAfectacionIgv.retiroPorDonacion,
+  TipoAfectacionIgv.retiro,
+  TipoAfectacionIgv.retiroPorPublicidad,
+  TipoAfectacionIgv.bonificaciones,
+  TipoAfectacionIgv.retiroPorEntregaATrabajadores,
+];
+
+bool esAfectacionGratuita(int? afectacion) =>
+    afectacion != null &&
+    afectacion >= TipoAfectacionIgv.retiroPorPremio &&
+    afectacion <= TipoAfectacionIgv.retiroPorEntregaATrabajadores;
+
+/// Cómo se anota la afectación bajo el concepto de una línea. Gravado es lo normal y
+/// no se anota; una gratuita dice que lo es.
+String? etiquetaAfectacion(int? afectacion) {
+  if (afectacion == null || afectacion == TipoAfectacionIgv.gravado) return null;
+  final nombre = nombresAfectacionIgv[afectacion];
+  return esAfectacionGratuita(afectacion) ? 'Gratuito ($nombre)' : nombre;
+}
 
 /// La orden admite ítems nuevos salvo en Lista o cerrada, y tampoco liquidada:
 /// la venta tiene que coincidir con la orden.

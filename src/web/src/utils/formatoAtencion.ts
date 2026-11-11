@@ -1,5 +1,5 @@
 import { nombresEstado } from '../api/ordenes'
-import type { FormatoAtencionResponse } from '../api/tipos'
+import type { FormatoAtencionItemDto, FormatoAtencionResponse } from '../api/tipos'
 import { documentoImprimible, filaDato, lineaTotal } from './documento'
 import { escaparHtml } from './impresion'
 import { entero, fechaHoraConAnio, importe, nombreDeEnum, soles } from './formato'
@@ -7,6 +7,19 @@ import { entero, fechaHoraConAnio, importe, nombreDeEnum, soles } from './format
 /** «Mantenimiento completo + Mantenimiento correctivo»; una orden anterior trae solo su tipo. */
 export const nombresTiposAtencion = (orden: { tipoAtencion: string; tiposAtencion?: string[] | null }) =>
   (orden.tiposAtencion?.length ? orden.tiposAtencion : [orden.tipoAtencion]).map(nombreDeEnum).join(' + ')
+
+/** Bajo el concepto: el tipo de ítem y la afectación. Una línea gratuita dice lo que vale. */
+export const rasgosItemFormato = (item: FormatoAtencionItemDto) =>
+  [
+    item.tipoItemNombre,
+    item.esGratuita
+      ? `Gratuito · vale ${soles(item.valorReferencial)}`
+      : item.afectacionIgv === 'Gravado'
+        ? null
+        : item.afectacionIgv,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
 /**
  * Hoja imprimible del formato de atención de una orden, con recuadros para la
@@ -34,9 +47,7 @@ export function htmlFormatoAtencion(datos: FormatoAtencionResponse): string {
       : items
           .map(
             (item) => `<tr>
-        <td>${escaparHtml(item.descripcion)}<div class="sec">${escaparHtml(
-          [item.tipoItemNombre, item.afectacionIgv === 'Gravado' ? null : item.afectacionIgv].filter(Boolean).join(' · '),
-        )}</div></td>
+        <td>${escaparHtml(item.descripcion)}<div class="sec">${escaparHtml(rasgosItemFormato(item))}</div></td>
         <td class="num">${escaparHtml(item.cantidad)}</td>
         <td class="num">${importe(item.precioUnitario)}</td>
         <td class="num">${importe(item.total)}</td>
@@ -131,6 +142,7 @@ export function htmlFormatoAtencion(datos: FormatoAtencionResponse): string {
       ${financiero.subtotalInafecto > 0 ? lineaTotal('Op. inafectas', soles(financiero.subtotalInafecto)) : ''}
       ${lineaTotal(`IGV (${financiero.porcentajeIgv} %)`, soles(financiero.montoIgv))}
       ${lineaTotal('Total', soles(financiero.total), 'total')}
+      ${financiero.subtotalGratuito > 0 ? lineaTotal('Op. gratuitas (no se cobran)', soles(financiero.subtotalGratuito)) : ''}
       ${lineaTotal('Pagado', soles(financiero.totalPagado))}
       ${lineaTotal('Saldo pendiente', soles(financiero.saldoPendiente), 'saldo')}
     </div>
