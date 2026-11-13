@@ -48,6 +48,7 @@ public static class VentaEndpoints
             bool? pendienteComprobante,
             FiltroComprobanteVenta? comprobante,
             string? busqueda,
+            bool? declarada,
             ClaimsPrincipal user,
             IVentaService service,
             ApplicationDbContext dbContext) =>
@@ -61,7 +62,8 @@ public static class VentaEndpoints
             var filtros = new FiltrosVentas(
                 clienteId, estado, ordenServicioId, fechaDesde, fechaHasta,
                 comprobante ?? (pendienteComprobante == true ? FiltroComprobanteVenta.Pendiente : null),
-                busqueda);
+                busqueda,
+                declarada);
             var ventas = await service.GetAllAsync(filtros, isolation.SoloClienteId);
             return Results.Ok(ventas);
         })
@@ -99,6 +101,7 @@ public static class VentaEndpoints
             Guid? ordenServicioId,
             FiltroComprobanteVenta? comprobante,
             string? busqueda,
+            bool? declarada,
             ClaimsPrincipal user,
             IReporteService reporteService,
             ApplicationDbContext dbContext) =>
@@ -111,7 +114,7 @@ public static class VentaEndpoints
 
             var efectivoClienteId = isolation.SoloClienteId ?? clienteId;
             bool incluirFinanciero = !isolation.SoloClienteId.HasValue && (user.IsInRole(RolesDefinidos.GerenciaAdmin) || user.HasClaim("permission", PermisosDefinidos.ReportesVerFinancieros));
-            var filtros = new FiltrosVentas(efectivoClienteId, estado, ordenServicioId, fechaDesde, fechaHasta, comprobante, busqueda);
+            var filtros = new FiltrosVentas(efectivoClienteId, estado, ordenServicioId, fechaDesde, fechaHasta, comprobante, busqueda, declarada);
             var bytes = await reporteService.ExportarVentasExcelAsync(filtros, incluirFinanciero);
             var fileName = $"ventas_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
             return Results.File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
@@ -201,6 +204,60 @@ public static class VentaEndpoints
         })
         .RequireAuthorization(PermisosDefinidos.VentasCrear)
         .WithName("ActualizarVenta");
+
+        group.MapPut("/{id:guid}/declaracion", async (
+            Guid id,
+            ActualizarDeclaracionRequest request,
+            ClaimsPrincipal user,
+            IVentaService service) =>
+        {
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.ActualizarDeclaradaAsync(id, request.Declarada, usuarioId);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                _ => Results.Problem()
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.VentasCrear)
+        .WithName("ActualizarDeclaracionVentaPut");
+
+        group.MapPatch("/{id:guid}/declaracion", async (
+            Guid id,
+            ActualizarDeclaracionRequest request,
+            ClaimsPrincipal user,
+            IVentaService service) =>
+        {
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.ActualizarDeclaradaAsync(id, request.Declarada, usuarioId);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                _ => Results.Problem()
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.VentasCrear)
+        .WithName("ActualizarDeclaracionVentaPatch");
+
+        group.MapPatch("/{id:guid}/reportar-yamaha", async (
+            Guid id,
+            ActualizarReportarYamahaRequest request,
+            ClaimsPrincipal user,
+            IVentaService service) =>
+        {
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.ActualizarReportarYamahaAsync(id, request.ReportarAYamaha, usuarioId);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                _ => Results.Problem()
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.VentasCrear)
+        .WithName("ActualizarReportarYamahaVenta");
 
         group.MapPut("/{id:guid}/confirmar", async (
             Guid id,

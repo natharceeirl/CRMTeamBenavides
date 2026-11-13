@@ -8,6 +8,7 @@ import {
   puedeAnularComprobante,
   puedeRegistrarComprobante,
   useAnularComprobante,
+  useActualizarDeclaracionVenta,
   useRegistrarComprobante,
   useVenta,
 } from '../api/ventas'
@@ -108,6 +109,7 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
   const registrar = useRegistrarComprobante()
   const anular = useAnularComprobante()
   const pagar = useRegistrarPagoVenta()
+  const actualizarDeclaracion = useActualizarDeclaracionVenta()
   const datos = venta.data
   const numeroOrden = datos?.numeroOrdenServicio ?? null
 
@@ -207,6 +209,35 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
               <tr>
                 <td>Orden de servicio</td>
                 <td>{datos.ordenServicioId ? (numeroOrden ?? referenciaOrden(datos.ordenServicioId)) : '—'}</td>
+              </tr>
+              <tr>
+                <td>Declaración</td>
+                <td>
+                  <Space>
+                    <Tag color={datos.declarada ? 'green' : 'default'}>
+                      {datos.declarada ? 'Declarada' : 'No declarada'}
+                    </Tag>
+                    {puedeRegistrar && (
+                      <Popconfirm
+                        title={datos.declarada ? 'Cambiar a no declarada' : 'Marcar como declarada'}
+                        description={
+                          datos.declarada
+                            ? '¿Deseas marcar esta venta como no declarada?'
+                            : '¿Deseas marcar esta venta como declarada?'
+                        }
+                        okText="Confirmar"
+                        cancelText="Cancelar"
+                        onConfirm={() =>
+                          actualizarDeclaracion.mutate({ id: datos.id, declarada: !datos.declarada })
+                        }
+                      >
+                        <Button size="small" type="link">
+                          {datos.declarada ? 'Cambiar a no declarada' : 'Marcar como declarada'}
+                        </Button>
+                      </Popconfirm>
+                    )}
+                  </Space>
+                </td>
               </tr>
             </tbody>
           </table>

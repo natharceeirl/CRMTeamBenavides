@@ -58,6 +58,7 @@ export type FiltrosVentas = {
   comprobante?: FiltroComprobante
   /** Cliente, documento, número de orden, comprobante o referencia de la venta. */
   busqueda?: string
+  declarada?: boolean
 }
 
 export function rutaVentas(filtros: FiltrosVentas = {}): string {
@@ -69,6 +70,7 @@ export function rutaVentas(filtros: FiltrosVentas = {}): string {
   if (filtros.fechaHasta) parametros.set('fechaHasta', filtros.fechaHasta)
   if (filtros.comprobante) parametros.set('comprobante', filtros.comprobante)
   if (filtros.busqueda) parametros.set('busqueda', filtros.busqueda)
+  if (filtros.declarada !== undefined) parametros.set('declarada', String(filtros.declarada))
 
   const consulta = parametros.toString()
   return `/ventas${consulta ? `?${consulta}` : ''}`
@@ -213,6 +215,22 @@ export function useAnularComprobante() {
         consultas.invalidateQueries({ queryKey: clavesVentas.todas }),
         consultas.invalidateQueries({ queryKey: clavesVentas.una(ventaId) }),
         consultas.invalidateQueries({ queryKey: clavesOrdenes.todas }),
+      ])
+    },
+  })
+}
+
+export function useActualizarDeclaracionVenta() {
+  const consultas = useQueryClient()
+
+  return useMutation({
+    meta: { exito: 'Estado de declaración actualizado' },
+    mutationFn: ({ id, declarada }: { id: string; declarada: boolean }) =>
+      solicitar<VentaDetalleResponse>(`/ventas/${id}/declaracion`, { metodo: 'PUT', cuerpo: { declarada } }),
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        consultas.invalidateQueries({ queryKey: clavesVentas.todas }),
+        consultas.invalidateQueries({ queryKey: clavesVentas.una(variables.id) }),
       ])
     },
   })

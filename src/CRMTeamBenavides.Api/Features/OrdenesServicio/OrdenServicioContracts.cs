@@ -24,7 +24,8 @@ public record AperturaOrdenServicioRequest(
     ClienteNuevoRequest? ClienteNuevo = null,
     UnidadNuevaRequest? UnidadNueva = null,
     // Varios tipos de atención; sin la lista, la orden lleva solo TipoAtencion.
-    List<TipoAtencion>? TiposAtencion = null);
+    List<TipoAtencion>? TiposAtencion = null,
+    bool ReportarAYamaha = false);
 
 /// <summary>Cliente que se registra al abrir su primera orden.</summary>
 public record ClienteNuevoRequest(
@@ -72,7 +73,8 @@ public record ActualizarOrdenServicioRequest(
     int? KilometrajeIngreso = null,
     decimal? HorasUsoIngreso = null,
     decimal? LecturaMedidorIngreso = null,
-    Guid? TecnicoAsignadoId = null);
+    Guid? TecnicoAsignadoId = null,
+    bool? ReportarAYamaha = null);
 
 /// <summary>
 /// <c>PrecioIncluyeIgv</c> solo vale para mano de obra y terceros: si el precio escrito
@@ -210,7 +212,8 @@ public record OrdenServicioResponse(
     DateTime? FechaEnvioPresupuesto = null,
     List<int>? TiposAtencionIds = null,
     // Op. gratuitas: lo que valen las líneas gratuitas, con IGV. No se suma al total.
-    decimal SubtotalGratuito = 0m);
+    decimal SubtotalGratuito = 0m,
+    bool ReportarAYamaha = false);
 
 public record OrdenServicioDetalleResponse(
     Guid Id,
@@ -279,4 +282,5 @@ public record OrdenServicioDetalleResponse(
     DateTime? FechaEnvioPresupuesto = null,
     List<int>? TiposAtencionIds = null,
     // Op. gratuitas: lo que valen las líneas gratuitas, con IGV. No se suma al total.
-    decimal SubtotalGratuito = 0m);
+    decimal SubtotalGratuito = 0m,
+    bool ReportarAYamaha = false);

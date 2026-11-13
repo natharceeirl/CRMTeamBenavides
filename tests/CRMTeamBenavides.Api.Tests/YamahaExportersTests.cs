@@ -144,6 +144,7 @@ public class YamahaExportersTests
             ClienteId = clienteId,
             OrdenServicioId = null, // MOSTRADOR
             Estado = EstadoVenta.Confirmada,
+            ReportarAYamaha = true,
             Fecha = DateTime.UtcNow.AddDays(-2),
             SubtotalGravado = 32.20m,
             MontoIgv = 5.80m,
@@ -184,6 +185,7 @@ public class YamahaExportersTests
             ClienteId = clienteId,
             OrdenServicioId = Guid.NewGuid(), // TALLER
             Estado = EstadoVenta.Confirmada,
+            ReportarAYamaha = true,
             Fecha = DateTime.UtcNow.AddDays(-1),
             SubtotalGravado = 32.20m,
             MontoIgv = 5.80m,
@@ -289,6 +291,7 @@ public class YamahaExportersTests
             Id = Guid.NewGuid(),
             ClienteId = cliente.Id,
             Estado = EstadoVenta.Confirmada,
+            ReportarAYamaha = true,
             Fecha = instante,
             SubtotalGravado = 32.20m,
             MontoIgv = 5.80m,
@@ -407,6 +410,7 @@ public class YamahaExportersTests
             KilometrajeIngreso = 4500,
             TipoAtencion = TipoAtencion.MantenimientoPreventivo,
             Estado = EstadoOrdenServicio.Entregada,
+            ReportarAYamaha = true,
             FechaIngreso = DateTime.UtcNow.AddDays(-1),
             Activo = true
         };

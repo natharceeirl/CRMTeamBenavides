@@ -14,6 +14,7 @@ import {
   puedeConfirmar,
   rutaExportarVentas,
   useAnularVenta,
+  useActualizarDeclaracionVenta,
   useConfirmarVenta,
   useVentas,
   useVentasPendientesComprobante,
@@ -68,6 +69,7 @@ export function VentasPage() {
   const [estado, setEstado] = useState<number>()
   const [clienteId, setClienteId] = useState<string>()
   const [comprobante, setComprobante] = useState<FiltroComprobante>()
+  const [filtroDeclaracion, setFiltroDeclaracion] = useState<'declaradas' | 'no_declaradas' | undefined>()
   const [busqueda, setBusqueda] = useState('')
   const [rango, setRango] = useState<[Dayjs | null, Dayjs | null] | null>(null)
   const [vista, setVista] = useState('todas')
@@ -87,6 +89,12 @@ export function VentasPage() {
     estado,
     clienteId,
     comprobante,
+    declarada:
+      filtroDeclaracion === 'declaradas'
+        ? true
+        : filtroDeclaracion === 'no_declaradas'
+          ? false
+          : undefined,
     busqueda: busqueda || undefined,
     fechaDesde: rango?.[0]?.format('YYYY-MM-DD'),
     fechaHasta: rango?.[1]?.format('YYYY-MM-DD'),
@@ -103,6 +111,7 @@ export function VentasPage() {
   }
   const confirmar = useConfirmarVenta()
   const anular = useAnularVenta()
+  const actualizarDeclaracion = useActualizarDeclaracionVenta()
 
   const columnas: TableProps<VentaResponse>['columns'] = [
     {
@@ -117,6 +126,15 @@ export function VentasPage() {
       ),
     },
     { title: 'Cliente', dataIndex: 'clienteNombre' },
+    {
+      title: 'Declaración',
+      key: 'declaracion',
+      render: (_, venta) => (
+        <Tag color={venta.declarada ? 'green' : 'default'}>
+          {venta.declarada ? 'Declarada' : 'No declarada'}
+        </Tag>
+      ),
+    },
     {
       title: 'Fecha',
       dataIndex: 'fecha',
@@ -170,6 +188,25 @@ export function VentasPage() {
           <Button type="link" onClick={() => setVentaVista(venta.id)}>
             Ver
           </Button>
+          {puedeVender && (
+            <Popconfirm
+              title={venta.declarada ? 'Cambiar a no declarada' : 'Marcar como declarada'}
+              description={
+                venta.declarada
+                  ? '¿Deseas marcar esta venta como no declarada?'
+                  : '¿Deseas marcar esta venta como declarada?'
+              }
+              okText="Confirmar"
+              cancelText="Cancelar"
+              onConfirm={() =>
+                actualizarDeclaracion.mutate({ id: venta.id, declarada: !venta.declarada })
+              }
+            >
+              <Button type="link">
+                {venta.declarada ? 'Desmarcar' : 'Declarar'}
+              </Button>
+            </Popconfirm>
+          )}
           {puedeVender && puedeConfirmar(venta.estadoId) && !precioBloqueado(venta) && (
             <Popconfirm
               title="Confirmar la venta"
@@ -254,6 +291,19 @@ export function VentasPage() {
                         onChange={setComprobante}
                         options={opcionesComprobante}
                         style={{ width: 210 }}
+                      />
+                      <Select<string>
+                        id="filtro-declaracion-venta"
+                        aria-label="Filtrar por declaración"
+                        allowClear
+                        placeholder="Declaración: Todas"
+                        value={filtroDeclaracion}
+                        onChange={(valor) => setFiltroDeclaracion(valor as 'declaradas' | 'no_declaradas' | undefined)}
+                        options={[
+                          { value: 'declaradas', label: 'Declaradas' },
+                          { value: 'no_declaradas', label: 'No declaradas' },
+                        ]}
+                        style={{ width: 170 }}
                       />
                       {puedeVerClientes && (
                         <Select<string>

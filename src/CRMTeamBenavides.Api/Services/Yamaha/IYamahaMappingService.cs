@@ -93,6 +93,7 @@ public interface IYamahaMappingService
 {
     /// <summary>
     /// Proyecta una línea de venta (<see cref="DetalleVenta"/>) hacia el DTO de Ventas de Yamaha v3.
+    /// Para vehículos (MC o ATV), puede suministrarse la unidad física individual (<see cref="UnidadInventario"/>).
     /// </summary>
     YamahaMapeoRegistroResultado<YamahaVentaV3Dto> MapearDetalleVenta(
         Venta venta,
@@ -100,38 +101,50 @@ public interface IYamahaMappingService
         YamahaPuntoVentaContexto contexto,
         Comprobante? comprobante = null,
         Cliente? cliente = null,
-        Vehiculo? vehiculo = null);
+        Vehiculo? vehiculo = null,
+        UnidadInventario? unidadFisica = null);
 
     /// <summary>
     /// Proyecta todas las líneas activas de una venta hacia el contrato de Ventas de Yamaha v3.
+    /// Para detalles con unidades físicas de moto o cuatrimoto, genera registros individuales por cada VIN.
     /// </summary>
     YamahaMapeoLoteResultado<YamahaVentaV3Dto> MapearVenta(
         Venta venta,
         YamahaPuntoVentaContexto contexto,
         Comprobante? comprobante = null,
         Cliente? cliente = null,
-        Vehiculo? vehiculo = null);
+        Vehiculo? vehiculo = null,
+        IReadOnlyDictionary<Guid, UnidadInventario>? unidadesFisicas = null);
 
     /// <summary>
     /// Proyecta un lote de ventas hacia el contrato de Ventas de Yamaha v3.
     /// </summary>
     YamahaMapeoLoteResultado<YamahaVentaV3Dto> MapearLoteVentas(
         IEnumerable<Venta> ventas,
-        YamahaPuntoVentaContexto contexto);
+        YamahaPuntoVentaContexto contexto,
+        IReadOnlyDictionary<Guid, UnidadInventario>? unidadesFisicas = null);
 
     /// <summary>
-    /// Proyecta un producto del catálogo hacia el DTO de Stock de Yamaha v3.
+    /// Proyecta un producto del catálogo hacia el DTO de Stock de Yamaha v3 (línea SP).
     /// </summary>
     YamahaMapeoRegistroResultado<YamahaStockV3Dto> MapearProductoStock(
         Producto producto,
         YamahaPuntoVentaContexto contexto);
 
     /// <summary>
-    /// Proyecta un lote de productos hacia el contrato de Stock de Yamaha v3.
+    /// Proyecta una unidad física en stock hacia el DTO de Stock de Yamaha v3 (línea MC o ATV con su VIN individual).
+    /// </summary>
+    YamahaMapeoRegistroResultado<YamahaStockV3Dto> MapearUnidadInventarioStock(
+        UnidadInventario unidad,
+        YamahaPuntoVentaContexto contexto);
+
+    /// <summary>
+    /// Proyecta un lote de productos (SP) y unidades físicas (MC/ATV) hacia el contrato de Stock de Yamaha v3.
     /// </summary>
     YamahaMapeoLoteResultado<YamahaStockV3Dto> MapearLoteStock(
         IEnumerable<Producto> productos,
-        YamahaPuntoVentaContexto contexto);
+        YamahaPuntoVentaContexto contexto,
+        IEnumerable<UnidadInventario>? unidadesStock = null);
 
     /// <summary>
     /// Proyecta una línea de servicio (<see cref="DetalleServicio"/>) hacia el DTO de Servicio Técnico de Yamaha v3.

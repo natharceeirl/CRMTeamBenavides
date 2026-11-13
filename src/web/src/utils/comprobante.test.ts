@@ -74,6 +74,8 @@ const venta = (extra: Partial<VentaDetalleResponse> = {}): VentaDetalleResponse 
   estadoAprobacionGerenciaId: 0,
   estadoAprobacionGerencia: 'NoAplica',
   numeroOrdenServicio: 'OS-000123',
+  reportarAYamaha: false,
+  declarada: false,
   ...extra,
 })
 

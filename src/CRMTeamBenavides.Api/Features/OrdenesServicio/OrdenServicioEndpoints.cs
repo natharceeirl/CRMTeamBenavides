@@ -234,6 +234,24 @@ public static class OrdenServicioEndpoints
         .RequireAuthorization(PermisosDefinidos.OrdenesEditar)
         .WithName("ActualizarOrdenServicio");
 
+        group.MapPatch("/{id:guid}/reportar-yamaha", async (
+            Guid id,
+            CRMTeamBenavides.Api.Features.Ventas.ActualizarReportarYamahaRequest request,
+            ClaimsPrincipal user,
+            IOrdenServicioService service) =>
+        {
+            var usuarioId = ObtenerUsuarioId(user);
+            var result = await service.ActualizarReportarYamahaAsync(id, request.ReportarAYamaha, usuarioId);
+            return result.Status switch
+            {
+                ServiceResultStatus.Success => Results.Ok(result.Data),
+                ServiceResultStatus.NotFound => Results.NotFound(),
+                _ => Results.Problem()
+            };
+        })
+        .RequireAuthorization(PermisosDefinidos.OrdenesEditar)
+        .WithName("ActualizarReportarYamahaOrdenServicio");
+
         group.MapPut("/{id:guid}/diagnostico", async (
             Guid id,
             RegistrarDiagnosticoRequest request,

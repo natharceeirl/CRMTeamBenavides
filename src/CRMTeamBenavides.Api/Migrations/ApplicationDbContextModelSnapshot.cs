@@ -1702,6 +1702,11 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Property<string>("ObservacionesPresupuestoCliente")
                         .HasColumnType("text");
 
+                    b.Property<bool>("ReportarAYamaha")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("Solucion")
                         .HasColumnType("text");
 
@@ -1758,6 +1763,8 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.HasIndex("UsuarioAprobacionGerenciaId");
 
                     b.HasIndex("VehiculoId");
+
+                    b.HasIndex("ReportarAYamaha", "Activo");
 
                     b.ToTable("OrdenesServicio");
                 });
@@ -2777,6 +2784,16 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Property<Guid?>("OrdenServicioId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("Declarada")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("ReportarAYamaha")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<decimal>("SubtotalExonerado")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
@@ -2807,6 +2824,10 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.HasIndex("OrdenServicioId");
 
                     b.HasIndex("UsuarioAprobacionGerenciaId");
+
+                    b.HasIndex("Declarada", "Activo");
+
+                    b.HasIndex("ReportarAYamaha", "Activo");
 
                     b.ToTable("Ventas");
                 });

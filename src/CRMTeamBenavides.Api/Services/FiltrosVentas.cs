@@ -23,7 +23,8 @@ public sealed record FiltrosVentas(
     DateTime? FechaDesde = null,
     DateTime? FechaHasta = null,
     FiltroComprobanteVenta? Comprobante = null,
-    string? Busqueda = null)
+    string? Busqueda = null,
+    bool? Declarada = null)
 {
     public IQueryable<Venta> Aplicar(IQueryable<Venta> query)
     {
@@ -35,6 +36,9 @@ public sealed record FiltrosVentas(
 
         if (OrdenServicioId.HasValue)
             query = query.Where(v => v.OrdenServicioId == OrdenServicioId.Value);
+
+        if (Declarada.HasValue)
+            query = query.Where(v => v.Declarada == Declarada.Value);
 
         // Los días son los del taller: una venta de las 20:00 en Arequipa ya es del día
         // siguiente en UTC, y con el día UTC se contaba en otra fecha. «Hasta» incluye el día.

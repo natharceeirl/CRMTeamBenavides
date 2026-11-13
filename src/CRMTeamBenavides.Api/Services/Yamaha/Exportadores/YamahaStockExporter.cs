@@ -1,5 +1,6 @@
 using CRMTeamBenavides.Api.Features.Yamaha;
 using CRMTeamBenavides.Data;
+using CRMTeamBenavides.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -36,13 +37,20 @@ public sealed class YamahaStockExporter : IYamahaStockExporter
 
         var contexto = YamahaPuntoVentaContexto.Crear(empresa, _settings);
 
-        var query = _context.Productos
+        var queryProductos = _context.Productos
             .AsNoTracking()
-            .Where(p => p.Activo && !string.IsNullOrWhiteSpace(p.Codigo));
+            .Where(p => p.Activo && !string.IsNullOrWhiteSpace(p.Codigo) && p.Tipo != TipoProducto.Vehiculo);
+
+        var queryUnidades = _context.UnidadesInventario
+            .AsNoTracking()
+            .Include(u => u.Producto)
+            .Include(u => u.Vehiculo)
+            .Where(u => u.Activo && u.Estado == EstadoUnidadInventario.EnStock && !string.IsNullOrWhiteSpace(u.NumeroSerieVIN));
 
         if (soloMarcaYamaha)
         {
-            query = query.Where(p => p.Marca != null && p.Marca.ToUpper() == "YAMAHA");
+            queryProductos = queryProductos.Where(p => p.Marca != null && p.Marca.ToUpper() == "YAMAHA");
+            queryUnidades = queryUnidades.Where(u => u.Producto.Marca != null && u.Producto.Marca.ToUpper() == "YAMAHA");
         }
 
         int tamanioLote = _settings.TamanioLoteExportacion > 0 ? _settings.TamanioLoteExportacion : 500;
@@ -53,9 +61,10 @@ public sealed class YamahaStockExporter : IYamahaStockExporter
         var dtosValidos = new List<YamahaStockV3Dto>();
         var observaciones = new HashSet<string>();
 
+        // 1. Exportar Repuestos (Línea SP)
         while (true)
         {
-            var paginaProductos = await query
+            var paginaProductos = await queryProductos
                 .OrderBy(p => p.Codigo)
                 .ThenBy(p => p.Id)
                 .Skip(offset)
@@ -80,6 +89,40 @@ public sealed class YamahaStockExporter : IYamahaStockExporter
 
             offset += paginaProductos.Count;
             if (paginaProductos.Count < tamanioLote)
+            {
+                break;
+            }
+        }
+
+        // 2. Exportar Unidades Físicas de Vehículos en Stock (Líneas MC y ATV)
+        offset = 0;
+        while (true)
+        {
+            var paginaUnidades = await queryUnidades
+                .OrderBy(u => u.NumeroSerieVIN)
+                .ThenBy(u => u.Id)
+                .Skip(offset)
+                .Take(tamanioLote)
+                .ToListAsync(cancellationToken);
+
+            if (paginaUnidades.Count == 0)
+            {
+                break;
+            }
+
+            totalLeidos += paginaUnidades.Count;
+            var resultadoMapeo = _mappingService.MapearLoteStock(Enumerable.Empty<Producto>(), contexto, paginaUnidades);
+            dtosValidos.AddRange(resultadoMapeo.DtosProyectados);
+            totalValidos += resultadoMapeo.TotalValidos;
+            totalOmitidos += resultadoMapeo.TotalNoProyectables;
+
+            foreach (var obs in resultadoMapeo.Registros.SelectMany(r => r.Observaciones))
+            {
+                observaciones.Add(obs);
+            }
+
+            offset += paginaUnidades.Count;
+            if (paginaUnidades.Count < tamanioLote)
             {
                 break;
             }

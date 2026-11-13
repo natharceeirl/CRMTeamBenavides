@@ -363,4 +363,103 @@ public static partial class YamahaCatalogMapper
 
         return ResultadoMapeo<string>.Exitoso(limpio);
     }
+
+    // -------------------------------------------------------------------------
+    // 9. Determinación de Línea de Negocio Vehicular: MC vs ATV (Sección 3.3)
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Determina determinísticamente la línea de negocio vehicular conforme a los catálogos oficiales de Yamaha v3 (Sección 3.3):
+    /// - "MC": Motocicletas
+    /// - "ATV": Cuatrimotos
+    /// - "OM": Motores fuera de borda y motos acuáticas (Outboard Motors / Marine)
+    /// Regla taxativa: Jamás retorna "MV", ya que dicho código no existe en Yamaha v3.
+    /// </summary>
+    public static string DeterminarLineaNegocioVehiculo(Producto? producto, Vehiculo? vehiculo)
+    {
+        if (vehiculo is not null)
+        {
+            if (vehiculo.TipoUnidad == TipoUnidad.Cuatrimoto)
+            {
+                return YamahaV3Catalogos.LineaCuatrimotos; // "ATV"
+            }
+
+            if (vehiculo.TipoUnidad == TipoUnidad.MotoAcuatica)
+            {
+                return YamahaV3Catalogos.LineaMotoresFueraDeBorda; // "OM"
+            }
+
+            if (vehiculo.TipoUnidad == TipoUnidad.Motocicleta)
+            {
+                return YamahaV3Catalogos.LineaMotocicletas; // "MC"
+            }
+        }
+
+        if (producto?.Categoria is not null)
+        {
+            var cat = producto.Categoria.Nombre;
+            if (cat.Contains("Acuatica", StringComparison.OrdinalIgnoreCase) ||
+                cat.Contains("Acuática", StringComparison.OrdinalIgnoreCase) ||
+                cat.Contains("Marino", StringComparison.OrdinalIgnoreCase) ||
+                cat.Contains("Fuera de Borda", StringComparison.OrdinalIgnoreCase) ||
+                cat.Contains("Outboard", StringComparison.OrdinalIgnoreCase) ||
+                cat.Contains("OM", StringComparison.OrdinalIgnoreCase))
+            {
+                return YamahaV3Catalogos.LineaMotoresFueraDeBorda; // "OM"
+            }
+
+            if (cat.Contains("Cuatrimoto", StringComparison.OrdinalIgnoreCase) ||
+                cat.Contains("ATV", StringComparison.OrdinalIgnoreCase) ||
+                cat.Contains("Quad", StringComparison.OrdinalIgnoreCase))
+            {
+                return YamahaV3Catalogos.LineaCuatrimotos; // "ATV"
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(producto?.Nombre))
+        {
+            var nom = producto.Nombre;
+            if (nom.Contains("Fuera de borda", StringComparison.OrdinalIgnoreCase) ||
+                nom.Contains("Outboard", StringComparison.OrdinalIgnoreCase) ||
+                nom.Contains("Motor marino", StringComparison.OrdinalIgnoreCase) ||
+                nom.Contains("WaveRunner", StringComparison.OrdinalIgnoreCase) ||
+                nom.Contains("Moto acuática", StringComparison.OrdinalIgnoreCase) ||
+                nom.Contains("Moto acuatica", StringComparison.OrdinalIgnoreCase))
+            {
+                return YamahaV3Catalogos.LineaMotoresFueraDeBorda; // "OM"
+            }
+
+            if (nom.Contains("Cuatrimoto", StringComparison.OrdinalIgnoreCase) ||
+                nom.Contains("ATV", StringComparison.OrdinalIgnoreCase) ||
+                nom.Contains("Grizzly", StringComparison.OrdinalIgnoreCase) ||
+                nom.Contains("Kodiak", StringComparison.OrdinalIgnoreCase) ||
+                nom.Contains("Raptor", StringComparison.OrdinalIgnoreCase) ||
+                nom.Contains("YFZ", StringComparison.OrdinalIgnoreCase))
+            {
+                return YamahaV3Catalogos.LineaCuatrimotos; // "ATV"
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(producto?.Descripcion))
+        {
+            var desc = producto.Descripcion;
+            if (desc.Contains("Fuera de borda", StringComparison.OrdinalIgnoreCase) ||
+                desc.Contains("Outboard", StringComparison.OrdinalIgnoreCase) ||
+                desc.Contains("Motor marino", StringComparison.OrdinalIgnoreCase) ||
+                desc.Contains("WaveRunner", StringComparison.OrdinalIgnoreCase) ||
+                desc.Contains("Moto acuática", StringComparison.OrdinalIgnoreCase) ||
+                desc.Contains("Moto acuatica", StringComparison.OrdinalIgnoreCase))
+            {
+                return YamahaV3Catalogos.LineaMotoresFueraDeBorda; // "OM"
+            }
+
+            if (desc.Contains("Cuatrimoto", StringComparison.OrdinalIgnoreCase) ||
+                desc.Contains("ATV", StringComparison.OrdinalIgnoreCase))
+            {
+                return YamahaV3Catalogos.LineaCuatrimotos; // "ATV"
+            }
+        }
+
+        return YamahaV3Catalogos.LineaMotocicletas; // "MC"
+    }
 }

@@ -146,6 +146,14 @@ public class OrdenServicio : BaseEntity
     public EstadoAprobacionGerencia EstadoAprobacionGerencia { get; set; } = EstadoAprobacionGerencia.NoAplica;
     public DateTime? FechaRespuestaCliente { get; set; }
 
+    /// <summary>
+    /// Metadato de integración con Yamaha Motor del Perú v3.
+    /// Exclusivamente true si el usuario marcó expresamente la orden para reportar a Yamaha.
+    /// Default false para todas las órdenes, incluyendo históricas.
+    /// No afecta facturación, contabilidad, almacén ni flujo del taller.
+    /// </summary>
+    public bool ReportarAYamaha { get; set; }
+
     /// <summary>Última vez que se avisó al cliente que su presupuesto está listo para revisar.</summary>
     public DateTime? FechaEnvioPresupuesto { get; set; }
     public string? ObservacionesPresupuestoCliente { get; set; }

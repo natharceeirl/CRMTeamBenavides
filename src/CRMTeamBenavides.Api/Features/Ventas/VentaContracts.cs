@@ -6,7 +6,9 @@ public record CreateVentaRequest(
     Guid ClienteId,
     Guid? OrdenServicioId = null,
     List<CreateDetalleVentaRequest>? Detalles = null,
-    bool EsCotizacion = false);
+    bool EsCotizacion = false,
+    bool ReportarAYamaha = false,
+    bool Declarada = false);
 
 public record CreateDetalleVentaRequest(
     Guid ProductoId,
@@ -19,7 +21,15 @@ public record CreateDetalleVentaRequest(
 
 public record ActualizarVentaRequest(
     List<CreateDetalleVentaRequest> Detalles,
-    string? Observaciones = null);
+    string? Observaciones = null,
+    bool? ReportarAYamaha = null,
+    bool? Declarada = null);
+
+public record ActualizarReportarYamahaRequest(
+    bool ReportarAYamaha);
+
+public record ActualizarDeclaracionRequest(
+    bool Declarada);
 
 public record VentaResponse(
     Guid Id,
@@ -44,7 +54,9 @@ public record VentaResponse(
     string EstadoAprobacionGerencia = "NoAplica",
     string? NumeroOrdenServicio = null,
     // Op. gratuitas: lo que valen las líneas gratuitas, con IGV. No se suma al total.
-    decimal SubtotalGratuito = 0m);
+    decimal SubtotalGratuito = 0m,
+    bool ReportarAYamaha = false,
+    bool Declarada = false);
 
 public record VentaDetalleResponse(
     Guid Id,
@@ -73,7 +85,9 @@ public record VentaDetalleResponse(
     string EstadoAprobacionGerencia = "NoAplica",
     string? NumeroOrdenServicio = null,
     // Op. gratuitas: lo que valen las líneas gratuitas, con IGV. No se suma al total.
-    decimal SubtotalGratuito = 0m);
+    decimal SubtotalGratuito = 0m,
+    bool ReportarAYamaha = false,
+    bool Declarada = false);
 
 public record DetalleVentaResponse(
     Guid Id,

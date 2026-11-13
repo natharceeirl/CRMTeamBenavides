@@ -16,7 +16,9 @@ type Linea = {
   /** Las motos elegidas de la línea: se conservan, la cantidad es la de motos. */
   unidadesInventarioIds?: string[] | null
 }
-type Campos = { lineas: Linea[] }
+type Campos = {
+  lineas: Linea[]
+}
 
 /**
  * Se editan las ventas de mostrador (todas sus líneas son productos) sin pagos ni
@@ -61,11 +63,11 @@ export function ModalEditarCotizacion({
     onCerrar()
   }
 
-  const enviar = async ({ lineas: editadas }: Campos) => {
+  const enviar = async (campos: Campos) => {
     await actualizar.mutateAsync({
       id: venta.id,
       datos: {
-        detalles: editadas.map((linea) => ({
+        detalles: campos.lineas.map((linea) => ({
           productoId: linea.productoId,
           cantidad: linea.cantidad,
           precioUnitario: linea.precioUnitario,

@@ -37,6 +37,11 @@ public interface IOrdenServicioService
         Guid? soloTecnicoId = null,
         Guid? usuarioId = null);
 
+    Task<ServiceResult<OrdenServicioResponse>> ActualizarReportarYamahaAsync(
+        Guid id,
+        bool reportar,
+        Guid? usuarioId = null);
+
     Task<ServiceResult<List<HistorialEstadoOrdenResponse>>> GetHistorialAsync(
         Guid id,
         Guid? soloTecnicoId = null,

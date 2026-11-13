@@ -1131,6 +1131,7 @@ export type ActualizarOrdenServicioRequest = {
   horasUsoIngreso?: number | null
   lecturaMedidorIngreso?: number | null
   tecnicoAsignadoId?: string | null
+  reportarAYamaha?: boolean | null
 }
 
 export type AgregarDetalleServicioRequest = {
@@ -1160,6 +1161,7 @@ export type AperturaOrdenServicioRequest = {
   clienteNuevo?: ClienteNuevoRequest | null
   unidadNueva?: UnidadNuevaRequest | null
   tiposAtencion?: TipoAtencion[] | null
+  reportarAYamaha?: boolean
 }
 
 export type AprobacionGerenciaRequest = {
@@ -1388,6 +1390,7 @@ export type OrdenServicioDetalleResponse = {
   fechaEnvioPresupuesto: string | null
   tiposAtencionIds: number[] | null
   subtotalGratuito: number
+  reportarAYamaha: boolean
 }
 
 export type OrdenServicioResponse = {
@@ -1446,6 +1449,7 @@ export type OrdenServicioResponse = {
   fechaEnvioPresupuesto: string | null
   tiposAtencionIds: number[] | null
   subtotalGratuito: number
+  reportarAYamaha: boolean
 }
 
 export type RegistrarDiagnosticoRequest = {
@@ -1928,9 +1932,15 @@ export type VehiculoResponse = {
 
 // ── Ventas ──────────────────────────────────────────────────────────────────
 
+export type ActualizarReportarYamahaRequest = {
+  reportarAYamaha: boolean
+}
+
 export type ActualizarVentaRequest = {
   detalles: CreateDetalleVentaRequest[]
   observaciones?: string | null
+  reportarAYamaha?: boolean | null
+  declarada?: boolean | null
 }
 
 export type ComprobanteResponse = {
@@ -1968,6 +1978,8 @@ export type CreateVentaRequest = {
   ordenServicioId?: string | null
   detalles?: CreateDetalleVentaRequest[] | null
   esCotizacion?: boolean
+  reportarAYamaha?: boolean
+  declarada?: boolean
 }
 
 export type DetalleVentaResponse = {
@@ -2061,6 +2073,12 @@ export type VentaDetalleResponse = {
   estadoAprobacionGerencia: string
   numeroOrdenServicio: string | null
   subtotalGratuito: number
+  reportarAYamaha: boolean
+  declarada: boolean
+}
+
+export type ActualizarDeclaracionRequest = {
+  declarada: boolean
 }
 
 export type VentaResponse = {
@@ -2086,6 +2104,8 @@ export type VentaResponse = {
   estadoAprobacionGerencia: string
   numeroOrdenServicio: string | null
   subtotalGratuito: number
+  reportarAYamaha: boolean
+  declarada: boolean
 }
 
 // ── Yamaha ──────────────────────────────────────────────────────────────────

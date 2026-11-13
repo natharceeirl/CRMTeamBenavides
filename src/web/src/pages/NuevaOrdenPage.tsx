@@ -188,6 +188,7 @@ export function NuevaOrdenPage() {
   const vehiculoId = Form.useWatch('vehiculoId', formulario)
   const medidorUnidadNueva = Form.useWatch(['unidadNueva', 'tipoMedidor'], formulario)
   const unidad = registraUnidadNueva ? undefined : (vehiculos.data ?? []).find((vehiculo) => vehiculo.id === vehiculoId)
+
   const historial = useHistorialServicioUnidad(unidad ? unidad.id : null)
   const atencionesAnteriores = (historial.data ?? []).slice(0, ATENCIONES_A_MOSTRAR)
   let enHoras = false

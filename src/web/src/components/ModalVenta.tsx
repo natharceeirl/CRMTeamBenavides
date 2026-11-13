@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Form, InputNumber, Modal, Radio, Select, Space } from 'antd'
+import { Button, Form, InputNumber, Modal, Radio, Select, Space, Switch } from 'antd'
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons'
 import { esMoto, useProductos } from '../api/inventario'
 import { useCrearVenta } from '../api/ventas'
@@ -33,6 +33,7 @@ type Campos = {
   clienteId: string
   esCotizacion: boolean
   detalles: Linea[]
+  declarada?: boolean
 }
 
 export function ModalVenta({ abierto, onCerrar, onCreada }: Readonly<Props>) {
@@ -67,6 +68,7 @@ export function ModalVenta({ abierto, onCerrar, onCreada }: Readonly<Props>) {
       clienteId: campos.clienteId,
       ordenServicioId: null,
       esCotizacion: campos.esCotizacion,
+      declarada: Boolean(campos.declarada),
       detalles: campos.detalles.map((linea) => {
         const motos = esMoto(productoDe(linea.productoId)) ? (linea.unidadesInventarioIds ?? []) : []
         return {
@@ -102,7 +104,7 @@ export function ModalVenta({ abierto, onCerrar, onCreada }: Readonly<Props>) {
         layout="vertical"
         requiredMark={false}
         onFinish={enviar}
-        initialValues={{ esCotizacion: true, detalles: [{}] }}
+        initialValues={{ esCotizacion: true, detalles: [{}], declarada: false }}
       >
         <CampoCliente />
 
@@ -119,6 +121,15 @@ export function ModalVenta({ abierto, onCerrar, onCreada }: Readonly<Props>) {
           La cotización no toca el stock. La venta directa lo descuenta al guardarse, igual que al confirmar una
           cotización.
         </p>
+
+        <Form.Item
+          label="Declaración"
+          name="declarada"
+          valuePropName="checked"
+          extra="Indica si esta venta se registra inicialmente como declarada (opcional, por defecto No declarada)."
+        >
+          <Switch checkedChildren="Declarada" unCheckedChildren="No declarada" />
+        </Form.Item>
 
         <Form.List name="detalles">
           {(campos, { add, remove }) => (

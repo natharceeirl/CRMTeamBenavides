@@ -88,7 +88,27 @@ public sealed class YamahaVentasExporter : IYamahaVentasExporter
             }
 
             totalLeidas += paginaVentas.Count;
-            var resultadoMapeo = _mappingService.MapearLoteVentas(paginaVentas, contexto);
+
+            var idsUnidades = paginaVentas
+                .SelectMany(v => v.Detalles)
+                .SelectMany(d => d.UnidadesInventarioIds)
+                .Distinct()
+                .ToList();
+
+            var ventaIds = paginaVentas.Select(v => v.Id).ToList();
+
+            var unidades = await _context.UnidadesInventario
+                .AsNoTracking()
+                .Include(u => u.Producto)
+                .Include(u => u.Vehiculo)
+                .Where(u => idsUnidades.Contains(u.Id) || (u.VentaId.HasValue && ventaIds.Contains(u.VentaId.Value)))
+                .ToListAsync(cancellationToken);
+
+            var dictUnidades = unidades
+                .GroupBy(u => u.Id)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            var resultadoMapeo = _mappingService.MapearLoteVentas(paginaVentas, contexto, dictUnidades);
             dtosValidos.AddRange(resultadoMapeo.DtosProyectados);
             totalValidos += resultadoMapeo.TotalValidos;
             totalOmitidos += resultadoMapeo.TotalNoProyectables;

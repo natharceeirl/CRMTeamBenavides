@@ -67,7 +67,9 @@ public class VentaService : IVentaService
                 (int)v.EstadoAprobacionGerencia,
                 v.EstadoAprobacionGerencia.ToString(),
                 v.OrdenServicio?.NumeroOrden,
-                v.SubtotalGratuito);
+                v.SubtotalGratuito,
+                v.ReportarAYamaha,
+                v.Declarada);
         }).ToList();
     }
 
@@ -200,6 +202,7 @@ public class VentaService : IVentaService
                 OrdenServicioId = ordenServicio.Id,
                 OrdenServicio   = ordenServicio,
                 Estado          = request.EsCotizacion ? EstadoVenta.Cotizacion : EstadoVenta.Confirmada,
+                ReportarAYamaha = ordenServicio.ReportarAYamaha,
                 Fecha           = DateTime.UtcNow,
                 FechaCreacion   = DateTime.UtcNow,
                 Activo          = true
@@ -421,6 +424,8 @@ public class VentaService : IVentaService
                 Cliente         = cliente,
                 OrdenServicioId = null,
                 Estado          = EstadoVenta.Cotizacion,
+                ReportarAYamaha = request.ReportarAYamaha,
+                Declarada       = request.Declarada,
                 Fecha           = DateTime.UtcNow,
                 FechaCreacion   = DateTime.UtcNow,
                 Activo          = true
@@ -575,6 +580,8 @@ public class VentaService : IVentaService
                 Cliente         = cliente,
                 OrdenServicioId = null,
                 Estado          = EstadoVenta.Confirmada,
+                ReportarAYamaha = request.ReportarAYamaha,
+                Declarada       = request.Declarada,
                 Fecha           = DateTime.UtcNow,
                 FechaCreacion   = DateTime.UtcNow,
                 Activo          = true
@@ -1019,6 +1026,16 @@ public class VentaService : IVentaService
                     sol.FechaRespuesta = DateTime.UtcNow;
                     sol.FechaModificacion = DateTime.UtcNow;
                 }
+            }
+
+            if (request.ReportarAYamaha.HasValue)
+            {
+                venta.ReportarAYamaha = request.ReportarAYamaha.Value;
+            }
+
+            if (request.Declarada.HasValue)
+            {
+                venta.Declarada = request.Declarada.Value;
             }
 
             await _context.SaveChangesAsync();
@@ -1685,7 +1702,73 @@ public class VentaService : IVentaService
             (int)v.EstadoAprobacionGerencia,
             v.EstadoAprobacionGerencia.ToString(),
             v.OrdenServicio?.NumeroOrden,
-            v.SubtotalGratuito);
+            v.SubtotalGratuito,
+            v.ReportarAYamaha,
+            v.Declarada);
+    }
+
+    public async Task<ServiceResult<VentaDetalleResponse>> ActualizarDeclaradaAsync(
+        Guid id,
+        bool declarada,
+        Guid? usuarioId = null)
+    {
+        var venta = await _context.Ventas
+            .Include(v => v.Cliente)
+            .Include(v => v.OrdenServicio)
+            .Include(v => v.Comprobante)
+            .Include(v => v.Detalles.Where(d => d.Activo))
+                .ThenInclude(d => d.Producto)
+            .Include(v => v.Detalles.Where(d => d.Activo))
+                .ThenInclude(d => d.Servicio)
+            .Include(v => v.Pagos.Where(p => p.Activo))
+                .ThenInclude(p => p.MetodoPago)
+            .Include(v => v.Pagos.Where(p => p.Activo))
+                .ThenInclude(p => p.Usuario)
+            .FirstOrDefaultAsync(v => v.Id == id && v.Activo);
+
+        if (venta is null)
+        {
+            return ServiceResult<VentaDetalleResponse>.NotFound();
+        }
+
+        venta.Declarada = declarada;
+        venta.FechaModificacion = DateTime.UtcNow;
+        if (usuarioId.HasValue) venta.ModificadoPorId = usuarioId;
+
+        await _context.SaveChangesAsync();
+        return ServiceResult<VentaDetalleResponse>.Success(MapToDetalleResponse(venta));
+    }
+
+    public async Task<ServiceResult<VentaDetalleResponse>> ActualizarReportarYamahaAsync(
+        Guid id,
+        bool reportar,
+        Guid? usuarioId = null)
+    {
+        var venta = await _context.Ventas
+            .Include(v => v.Cliente)
+            .Include(v => v.OrdenServicio)
+            .Include(v => v.Comprobante)
+            .Include(v => v.Detalles.Where(d => d.Activo))
+                .ThenInclude(d => d.Producto)
+            .Include(v => v.Detalles.Where(d => d.Activo))
+                .ThenInclude(d => d.Servicio)
+            .Include(v => v.Pagos.Where(p => p.Activo))
+                .ThenInclude(p => p.MetodoPago)
+            .Include(v => v.Pagos.Where(p => p.Activo))
+                .ThenInclude(p => p.Usuario)
+            .FirstOrDefaultAsync(v => v.Id == id && v.Activo);
+
+        if (venta is null)
+        {
+            return ServiceResult<VentaDetalleResponse>.NotFound();
+        }
+
+        venta.ReportarAYamaha = reportar;
+        venta.FechaModificacion = DateTime.UtcNow;
+        if (usuarioId.HasValue) venta.ModificadoPorId = usuarioId;
+
+        await _context.SaveChangesAsync();
+        return ServiceResult<VentaDetalleResponse>.Success(MapToDetalleResponse(venta));
     }
 
     private static ComprobanteResponse MapToComprobanteResponse(Comprobante c) => new(

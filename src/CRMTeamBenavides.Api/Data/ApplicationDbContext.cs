@@ -319,6 +319,11 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
                 .IsUnique();
             entity.HasIndex(o => o.FechaIngreso);
             entity.HasIndex(o => o.ClienteId);
+
+            entity.Property(o => o.ReportarAYamaha)
+                .HasDefaultValue(false)
+                .IsRequired();
+            entity.HasIndex(o => new { o.ReportarAYamaha, o.Activo });
         });
 
         modelBuilder.Entity<HistorialEstadoOrden>(entity =>
@@ -417,6 +422,16 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
                 .WithMany(o => o.Ventas)
                 .HasForeignKey(v => v.OrdenServicioId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.Property(v => v.Declarada)
+                .HasDefaultValue(false)
+                .IsRequired();
+            entity.HasIndex(v => new { v.Declarada, v.Activo });
+
+            entity.Property(v => v.ReportarAYamaha)
+                .HasDefaultValue(false)
+                .IsRequired();
+            entity.HasIndex(v => new { v.ReportarAYamaha, v.Activo });
         });
 
         modelBuilder.Entity<DetalleVenta>(entity =>

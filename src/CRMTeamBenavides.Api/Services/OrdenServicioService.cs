@@ -345,6 +345,7 @@ public class OrdenServicioService : IOrdenServicioService
                 HorasUsoIngreso        = request.HorasUsoIngreso ?? vehiculoOrden.HorasUso,
                 LecturaMedidorIngreso  = request.LecturaMedidorIngreso ?? lecturaIngreso ?? vehiculoOrden.LecturaMedidorActual,
                 Estado                 = EstadoOrdenServicio.Abierta,
+                ReportarAYamaha        = request.ReportarAYamaha,
                 FechaApertura          = ahora,
                 FechaIngreso           = ahora,
                 FechaCreacion          = DateTime.UtcNow,
@@ -706,11 +707,40 @@ public class OrdenServicioService : IOrdenServicioService
         if (request.KilometrajeIngreso.HasValue) orden.KilometrajeIngreso = request.KilometrajeIngreso.Value;
         if (request.HorasUsoIngreso.HasValue) orden.HorasUsoIngreso = request.HorasUsoIngreso.Value;
         if (request.LecturaMedidorIngreso.HasValue) orden.LecturaMedidorIngreso = request.LecturaMedidorIngreso.Value;
+        if (request.ReportarAYamaha.HasValue) orden.ReportarAYamaha = request.ReportarAYamaha.Value;
 
         orden.FechaModificacion = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
 
+        return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
+    }
+
+    public async Task<ServiceResult<OrdenServicioResponse>> ActualizarReportarYamahaAsync(
+        Guid id,
+        bool reportar,
+        Guid? usuarioId = null)
+    {
+        var orden = await _context.OrdenesServicio
+            .Include(o => o.Vehiculo)
+                .ThenInclude(v => v.Cliente)
+            .Include(o => o.Cliente)
+            .Include(o => o.TecnicoAsignado)
+            .Include(o => o.Ventas)
+                .ThenInclude(v => v.Comprobante)
+            .Include(o => o.Pagos)
+            .FirstOrDefaultAsync(o => o.Id == id && o.Activo);
+
+        if (orden is null)
+        {
+            return ServiceResult<OrdenServicioResponse>.NotFound();
+        }
+
+        orden.ReportarAYamaha = reportar;
+        orden.FechaModificacion = DateTime.UtcNow;
+        if (usuarioId.HasValue) orden.ModificadoPorId = usuarioId;
+
+        await _context.SaveChangesAsync();
         return ServiceResult<OrdenServicioResponse>.Success(MapToResponse(orden));
     }
 
@@ -2767,7 +2797,8 @@ public class OrdenServicioService : IOrdenServicioService
             estadoPago,
             orden.FechaEnvioPresupuesto,
             TiposAtencionOrden.DeLaOrden(orden).Select(tipo => (int)tipo).ToList(),
-            orden.SubtotalGratuito);
+            orden.SubtotalGratuito,
+            orden.ReportarAYamaha);
     }
 
     private static OrdenServicioDetalleResponse MapToDetalleResponse(OrdenServicio orden)
@@ -2902,7 +2933,8 @@ public class OrdenServicioService : IOrdenServicioService
              pagos,
             orden.FechaEnvioPresupuesto,
             TiposAtencionOrden.DeLaOrden(orden).Select(tipo => (int)tipo).ToList(),
-            orden.SubtotalGratuito);
+            orden.SubtotalGratuito,
+            orden.ReportarAYamaha);
     }
 
     public async Task<ServiceResult<FormatoAtencionResponse>> GenerarFormatoAtencionAsync(

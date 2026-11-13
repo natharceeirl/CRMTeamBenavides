@@ -68,6 +68,22 @@ public class Venta : BaseEntity
     public EstadoVenta Estado { get; set; } = EstadoVenta.Cotizacion;
     public DateTime Fecha { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// Marca comercial interna que indica si la venta ha sido declarada contable/fiscalmente.
+    /// Funcionalidad estrictamente interna del CRM: independiente de Yamaha, de comprobantes,
+    /// pagos, caja e inventario.
+    /// Default: false (toda venta nueva o histórica inicia como no declarada).
+    /// </summary>
+    public bool Declarada { get; set; }
+
+    /// <summary>
+    /// Metadato de integración con Yamaha Motor del Perú v3.
+    /// Exclusivamente true si el usuario marcó expresamente la venta para reportar a Yamaha.
+    /// Default false para todas las ventas, incluyendo históricas.
+    /// No afecta facturación electrónica SUNAT, cobranzas ni movimientos de inventario.
+    /// </summary>
+    public bool ReportarAYamaha { get; set; }
+
     // Desglose financiero tributario
     public decimal SubtotalGravado { get; set; }
     public decimal SubtotalExonerado { get; set; }
