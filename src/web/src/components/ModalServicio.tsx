@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Form, Input, InputNumber, Modal, Select } from 'antd'
+import { Checkbox, Form, Input, InputNumber, Modal, Select } from 'antd'
 import { useActualizarServicio, useCrearServicio } from '../api/servicios'
 import { AvisoError } from './AvisoError'
 import { TIPO_AFECTACION_IGV, opcionesAfectacionIgv, type ServicioResponse, type TipoAfectacionIgv } from '../api/tipos'
@@ -13,6 +13,7 @@ type Props = {
 type Campos = {
   nombre: string
   precioSugerido: number
+  precioIncluyeIgv: boolean
   tipoAfectacionIgv: TipoAfectacionIgv
 }
 
@@ -31,6 +32,7 @@ export function ModalServicio({ abierto, servicio, onCerrar }: Readonly<Props>) 
         formulario.setFieldsValue({
           nombre: servicio.nombre,
           precioSugerido: servicio.precioSugerido,
+          precioIncluyeIgv: servicio.precioIncluyeIgv,
           tipoAfectacionIgv: servicio.tipoAfectacionIgv,
         })
       } else {
@@ -38,6 +40,8 @@ export function ModalServicio({ abierto, servicio, onCerrar }: Readonly<Props>) 
         formulario.setFieldsValue({
           tipoAfectacionIgv: TIPO_AFECTACION_IGV.gravado,
           precioSugerido: 0,
+          // Como el repuesto: un servicio nuevo va con IGV incluido.
+          precioIncluyeIgv: true,
         })
       }
     }
@@ -56,6 +60,7 @@ export function ModalServicio({ abierto, servicio, onCerrar }: Readonly<Props>) 
         datos: {
           nombre: campos.nombre,
           precioSugerido: campos.precioSugerido,
+          precioIncluyeIgv: campos.precioIncluyeIgv,
           tipoAfectacionIgv: campos.tipoAfectacionIgv,
         },
       })
@@ -63,6 +68,7 @@ export function ModalServicio({ abierto, servicio, onCerrar }: Readonly<Props>) 
       await crear.mutateAsync({
         nombre: campos.nombre,
         precioSugerido: campos.precioSugerido,
+        precioIncluyeIgv: campos.precioIncluyeIgv,
         tipoAfectacionIgv: campos.tipoAfectacionIgv,
       })
     }
@@ -95,13 +101,18 @@ export function ModalServicio({ abierto, servicio, onCerrar }: Readonly<Props>) 
         >
           <Input placeholder="Ej. Cambio de aceite y filtro" autoFocus />
         </Form.Item>
-        <Form.Item
-          label="Precio sugerido (PEN)"
-          name="precioSugerido"
-          rules={[{ required: true, message: 'Indica el precio sugerido' }]}
-        >
-          <InputNumber min={0} step={0.5} style={{ width: '100%' }} />
-        </Form.Item>
+        <div className="precio-con-igv">
+          <Form.Item
+            label="Precio sugerido (S/)"
+            name="precioSugerido"
+            rules={[{ required: true, message: 'Indica el precio sugerido' }]}
+          >
+            <InputNumber min={0} step={0.5} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="precioIncluyeIgv" valuePropName="checked" label=" ">
+            <Checkbox>Incluye IGV</Checkbox>
+          </Form.Item>
+        </div>
         <Form.Item
           label="Afectación IGV"
           name="tipoAfectacionIgv"

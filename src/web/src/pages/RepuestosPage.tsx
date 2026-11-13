@@ -30,7 +30,7 @@ import {
 } from '../api/tipos'
 import { colores } from '../theme/tokens'
 import { entero, fechaHora, soles } from '../utils/formato'
-import { MONEDA_PRECIO, textoPrecioLista, textoPrecioRegistrado } from '../utils/precios'
+import { MONEDA_PRECIO, textoPrecioLista, textoPrecioRegistrado, textoPrecioServicio } from '../utils/precios'
 import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
 
@@ -279,7 +279,7 @@ export function RepuestosPage() {
       dataIndex: 'precioSugerido',
       align: 'right',
       className: 'num',
-      render: (precio: number) => soles(precio),
+      render: (_, servicio) => textoPrecioServicio(servicio),
     },
     {
       title: 'Afectación IGV',

@@ -713,6 +713,7 @@ class ServicioApi {
     required this.nombre,
     required this.precioSugerido,
     required this.tipoAfectacionIgv,
+    this.precioIncluyeIgv = false,
   });
 
   factory ServicioApi.desdeJson(Map<String, dynamic> json) => ServicioApi(
@@ -720,12 +721,18 @@ class ServicioApi {
         nombre: json['nombre'] as String? ?? '',
         precioSugerido: (json['precioSugerido'] as num? ?? 0).toDouble(),
         tipoAfectacionIgv: json['tipoAfectacionIgv'] as int? ?? 0,
+        precioIncluyeIgv: json['precioIncluyeIgv'] as bool? ?? false,
       );
 
   final String id;
   final String nombre;
+
+  /// En soles y con IGV si [precioIncluyeIgv], igual que se escribe en la orden.
   final double precioSugerido;
   final int tipoAfectacionIgv;
+
+  /// Los servicios anteriores al 12/11/2026 quedaron sin IGV.
+  final bool precioIncluyeIgv;
 }
 
 class CategoriaProductoApi {

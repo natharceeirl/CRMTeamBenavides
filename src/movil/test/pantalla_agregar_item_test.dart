@@ -44,6 +44,7 @@ class ApiFalsa extends ApiHttp {
     String? descripcion,
     double? precioUnitario,
     int? tipoAfectacionIgv,
+    bool? precioIncluyeIgv,
   }) async {
     enviados.add({
       'ordenId': ordenId,
@@ -53,6 +54,7 @@ class ApiFalsa extends ApiHttp {
       'servicioId': servicioId,
       'precioUnitario': precioUnitario,
       'tipoAfectacionIgv': tipoAfectacionIgv,
+      'precioIncluyeIgv': precioIncluyeIgv,
     });
   }
 }
@@ -133,8 +135,8 @@ void main() {
 
     await tester.tap(find.text('Filtro de aceite'));
     await tester.pumpAndSettle();
-    // Arranca con el precio de lista y sin aviso.
-    final precio = find.widgetWithText(TextField, 'Precio unitario (S/)');
+    // Arranca con el precio de lista y sin aviso; el repuesto se registró sin IGV.
+    final precio = find.widgetWithText(TextField, 'Precio unitario (S/, sin IGV)');
     expect(precio, findsOneWidget);
     expect(find.textContaining('hasta que Gerencia'), findsNothing);
 
@@ -186,6 +188,7 @@ void main() {
         'servicioId': null,
         'precioUnitario': null,
         'tipoAfectacionIgv': TipoAfectacionIgv.gravado,
+        'precioIncluyeIgv': null,
       },
     ]);
   });
@@ -217,18 +220,49 @@ void main() {
     expect(api.enviados.single['precioUnitario'], isNull);
   });
 
-  testWidgets('Gerencia puede cargar mano de obra con precio propio', (tester) async {
+  testWidgets('Gerencia puede cargar mano de obra con precio propio, con IGV por defecto', (tester) async {
     final api = await montarHoja(tester, sesion: SesionAbierta.new);
 
     await tester.tap(find.widgetWithText(ChoiceChip, 'Mano de obra'));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Trabajo realizado'), 'Regulación de válvulas');
-    await tester.enterText(find.widgetWithText(TextField, 'Precio unitario (S/)'), '80,50');
+    await tester.enterText(find.widgetWithText(TextField, 'Precio unitario (S/, con IGV)'), '80,50');
     await tester.pump();
     await tester.tap(find.text('Agregar'));
     await tester.pumpAndSettle();
 
     expect(api.enviados.single['tipoItem'], TipoItem.manoDeObra);
     expect(api.enviados.single['precioUnitario'], 80.5);
+    expect(api.enviados.single['precioIncluyeIgv'], isTrue);
+  });
+
+  testWidgets('al desmarcar «Incluye IGV» la mano de obra va sin IGV', (tester) async {
+    final api = await montarHoja(tester, sesion: SesionAbierta.new);
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Terceros'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Servicio de terceros'), 'Tornería del eje');
+    await tester.tap(find.text('Incluye IGV'));
+    await tester.pump();
+    await tester.enterText(find.widgetWithText(TextField, 'Precio unitario (S/, sin IGV)'), '50');
+    await tester.pump();
+    await tester.tap(find.text('Agregar'));
+    await tester.pumpAndSettle();
+
+    expect(api.enviados.single['tipoItem'], TipoItem.terceros);
+    expect(api.enviados.single['precioIncluyeIgv'], isFalse);
+  });
+
+  testWidgets('un servicio registrado con IGV pide el precio con IGV', (tester) async {
+    await montarHoja(tester, sesion: SesionTecnico.new, servicios: const [
+      ServicioApi(id: 's2', nombre: 'Mantenimiento 5000 km', precioSugerido: 180, tipoAfectacionIgv: 0, precioIncluyeIgv: true),
+    ]);
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Servicio'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mantenimiento 5000 km'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(TextField, 'Precio unitario (S/, con IGV)'), findsOneWidget);
   });
 }

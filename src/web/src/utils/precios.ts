@@ -1,4 +1,4 @@
-import type { MonedaPrecio, ProductoResponse } from '../api/tipos'
+import type { MonedaPrecio, ProductoResponse, ServicioResponse } from '../api/tipos'
 import { importe, soles } from './formato'
 
 /** La moneda en que se registra el precio de un repuesto (enum MonedaPrecio de la API). */
@@ -32,6 +32,10 @@ export function textoPrecioLista(producto: Pick<ProductoResponse, 'precioListaSo
   if (lista == null) return 'sin tipo de cambio'
   return producto.precioIncluyeIgv ? soles(lista) : `${soles(lista)} + IGV`
 }
+
+/** «S/ 180,00», o «S/ 152,54 + IGV» si el servicio se registró sin IGV. */
+export const textoPrecioServicio = (servicio: Pick<ServicioResponse, 'precioSugerido' | 'precioIncluyeIgv'>) =>
+  servicio.precioIncluyeIgv ? soles(servicio.precioSugerido) : `${soles(servicio.precioSugerido)} + IGV`
 
 /** El total de una línea con el precio escrito en los términos del repuesto. */
 export const totalDeLinea = (precio: number, cantidad: number, incluyeIgv: boolean, porcentajeIgv = 18) =>

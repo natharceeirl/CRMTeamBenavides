@@ -21,8 +21,8 @@ Future<bool?> abrirAgregarItem(BuildContext context, String ordenId) {
 
 /// Repuestos y servicios salen del catálogo con su precio, que se puede
 /// cambiar: otro precio, suba o baje, deja la orden pendiente hasta que
-/// Gerencia lo apruebe. La mano de obra y los terceros llevan precio libre y
-/// solo aparecen con `precios.modificar`.
+/// Gerencia lo apruebe. La mano de obra y los terceros llevan precio libre, con
+/// o sin IGV, y solo aparecen con `precios.modificar`.
 class HojaAgregarItem extends ConsumerStatefulWidget {
   const HojaAgregarItem({required this.ordenId, super.key});
 
@@ -42,6 +42,9 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
   ServicioApi? _servicio;
   int _cantidad = 1;
   int _afectacion = TipoAfectacionIgv.gravado;
+
+  /// Solo mano de obra y terceros: el repuesto y el servicio lo traen de su catálogo.
+  bool _incluyeIgv = true;
   bool _guardando = false;
   String? _error;
 
@@ -73,6 +76,18 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
 
   void _ponerPrecioDeLista(double precio) => _precio.text = precio.toStringAsFixed(2);
 
+  /// Como en la web: con IGV si el repuesto o servicio lo incluye, o si se eligió así
+  /// para la mano de obra. Exonerado o inafecto no lleva IGV.
+  String get _etiquetaPrecio {
+    if (!esAfectacionGravada(_afectacion)) return 'Precio unitario (S/)';
+    final conIgv = switch (_tipo) {
+      TipoItem.repuesto => _producto?.precioIncluyeIgv ?? false,
+      TipoItem.servicio => _servicio?.precioIncluyeIgv ?? false,
+      _ => _incluyeIgv,
+    };
+    return conIgv ? 'Precio unitario (S/, con IGV)' : 'Precio unitario (S/, sin IGV)';
+  }
+
   bool get _listo => switch (_tipo) {
         TipoItem.repuesto => _producto != null && (_precioManual ?? -1) >= 0,
         TipoItem.servicio => _servicio != null && (_precioManual ?? -1) >= 0,
@@ -87,6 +102,7 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
       _servicio = null;
       _cantidad = 1;
       _afectacion = TipoAfectacionIgv.gravado;
+      _incluyeIgv = true;
       _error = null;
       _precio.clear();
     });
@@ -110,6 +126,7 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
             // de lista y no abre una solicitud a Gerencia.
             precioUnitario: _esManual || _fueraDeLista ? _precioManual : null,
             tipoAfectacionIgv: _afectacion,
+            precioIncluyeIgv: _esManual ? _incluyeIgv : null,
           );
       if (mounted) {
         Navigator.of(context).pop(true);
@@ -235,7 +252,7 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
             onChanged: (_) => setState(() {}),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(
-              labelText: 'Precio unitario (S/)',
+              labelText: _etiquetaPrecio,
               helperText: 'De lista: ${soles(_precioCatalogo!)}',
             ),
           ),
@@ -353,8 +370,16 @@ class _HojaAgregarItemState extends ConsumerState<HojaAgregarItem> {
               controller: _precio,
               onChanged: (_) => setState(() {}),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Precio unitario (S/)'),
+              decoration: InputDecoration(labelText: _etiquetaPrecio),
             ),
+            if (esAfectacionGravada(_afectacion))
+              CheckboxListTile(
+                value: _incluyeIgv,
+                onChanged: (valor) => setState(() => _incluyeIgv = valor ?? true),
+                title: const Text('Incluye IGV'),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+              ),
             const SizedBox(height: 12),
             _selectorAfectacion(),
           ],

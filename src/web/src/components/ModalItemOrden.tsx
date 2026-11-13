@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Form, Input, InputNumber, Modal, Radio, Select } from 'antd'
+import { Button, Checkbox, Form, Input, InputNumber, Modal, Radio, Select } from 'antd'
 import { TIPO_PRODUCTO, useProductos } from '../api/inventario'
 import { useServicios } from '../api/servicios'
 import { useAgregarDetalle } from '../api/ordenes'
@@ -8,12 +8,12 @@ import { AvisoPrecioGerencia } from './AvisoPrecioGerencia'
 import { ModalAltaRapidaRepuesto, ModalAltaRapidaServicio } from './ModalesAltaRapida'
 import { useSesion } from '../auth/sesion'
 import { PERMISOS } from '../auth/acceso'
-import { soles } from '../utils/formato'
-import { precioListaSoles, textoPrecioLista } from '../utils/precios'
+import { precioListaSoles, textoPrecioLista, textoPrecioServicio } from '../utils/precios'
 import {
   TIPO_AFECTACION_IGV,
   TIPO_ITEM_SERVICIO,
   esAfectacionGratuita,
+  esAfectacionGravada,
   opcionesAfectacionIgv,
   type TipoAfectacionIgv,
   type TipoItemServicio,
@@ -40,6 +40,8 @@ type Campos = {
   descripcion?: string
   cantidad: number
   precioUnitario?: number
+  /** Solo mano de obra y terceros: el repuesto y el servicio lo traen de su catálogo. */
+  precioIncluyeIgv: boolean
   tipoAfectacionIgv: TipoAfectacionIgv
 }
 
@@ -65,7 +67,9 @@ export function ModalItemOrden({
   const productoId = Form.useWatch('productoId', formulario)
   const servicioId = Form.useWatch('servicioId', formulario)
   const precioUnitario = Form.useWatch('precioUnitario', formulario)
-  const gratuita = esAfectacionGratuita(Form.useWatch('tipoAfectacionIgv', formulario))
+  const afectacion = Form.useWatch('tipoAfectacionIgv', formulario)
+  const gratuita = esAfectacionGratuita(afectacion)
+  const manualIncluyeIgv = Form.useWatch('precioIncluyeIgv', formulario) ?? true
 
   const productoElegido = (productos.data ?? []).find((p) => p.id === productoId)
   const servicioElegido = (servicios.data ?? []).find((s) => s.id === servicioId)
@@ -76,8 +80,20 @@ export function ModalItemOrden({
         ? servicioElegido?.precioSugerido
         : undefined
   const conPrecioDeLista = tipoItem === TIPO_ITEM_SERVICIO.repuesto || tipoItem === TIPO_ITEM_SERVICIO.servicio
-  // Un repuesto registrado con IGV se escribe con IGV, igual que su precio de lista.
-  const precioConIgv = tipoItem === TIPO_ITEM_SERVICIO.repuesto && Boolean(productoElegido?.precioIncluyeIgv)
+  // Un repuesto o servicio registrado con IGV se escribe con IGV, igual que su precio de lista;
+  // la mano de obra y los terceros, como se elija. Exonerado o inafecto no lleva IGV.
+  const precioConIgv =
+    tipoItem === TIPO_ITEM_SERVICIO.repuesto
+      ? Boolean(productoElegido?.precioIncluyeIgv)
+      : tipoItem === TIPO_ITEM_SERVICIO.servicio
+        ? Boolean(servicioElegido?.precioIncluyeIgv)
+        : manualIncluyeIgv
+  const gravada = esAfectacionGravada(afectacion ?? TIPO_AFECTACION_IGV.gravado)
+  const etiquetaPrecio = !gravada
+    ? 'Precio unitario (S/)'
+    : precioConIgv
+      ? 'Precio unitario (S/, con IGV)'
+      : 'Precio unitario (S/, sin IGV)'
 
   const cerrar = () => {
     agregar.reset()
@@ -86,6 +102,7 @@ export function ModalItemOrden({
   }
 
   const enviar = async (campos: Campos) => {
+    const esManual = campos.tipoItem === TIPO_ITEM_SERVICIO.manoDeObra || campos.tipoItem === TIPO_ITEM_SERVICIO.terceros
     await agregar.mutateAsync({
       id: ordenId,
       datos: {
@@ -100,6 +117,7 @@ export function ModalItemOrden({
             : (campos.descripcion ?? null),
         cantidad: campos.cantidad,
         precioUnitario: campos.precioUnitario ?? null,
+        precioIncluyeIgv: esManual ? campos.precioIncluyeIgv : null,
         tipoAfectacionIgv: campos.tipoAfectacionIgv,
       },
     })
@@ -127,6 +145,7 @@ export function ModalItemOrden({
         initialValues={{
           tipoItem: TIPO_ITEM_SERVICIO.repuesto,
           cantidad: 1,
+          precioIncluyeIgv: true,
           tipoAfectacionIgv: TIPO_AFECTACION_IGV.gravado,
         }}
       >
@@ -222,13 +241,13 @@ export function ModalItemOrden({
                 }}
                 options={(servicios.data ?? []).map((servicio) => ({
                   value: servicio.id,
-                  label: `${servicio.nombre} · Sugerido: ${soles(servicio.precioSugerido)}`,
+                  label: `${servicio.nombre} · Sugerido: ${textoPrecioServicio(servicio)}`,
                 }))}
               />
             </Form.Item>
             {servicioElegido && (
               <p className="texto-secundario" style={{ marginTop: -8, marginBottom: 12 }}>
-                Precio sugerido: {soles(servicioElegido.precioSugerido)}
+                Precio sugerido: {textoPrecioServicio(servicioElegido)}
               </p>
             )}
           </>
@@ -260,10 +279,26 @@ export function ModalItemOrden({
           <InputNumber min={1} style={{ width: '100%' }} />
         </Form.Item>
 
-        {(conPrecioDeLista || puedeModificarPrecios) && (
-          <Form.Item label={precioConIgv ? 'Precio unitario (S/, con IGV)' : 'Precio unitario (S/, sin IGV)'} name="precioUnitario">
+        {conPrecioDeLista && (
+          <Form.Item label={etiquetaPrecio} name="precioUnitario">
             <InputNumber min={0} step={0.5} style={{ width: '100%' }} placeholder="Opcional: toma el precio de lista si se deja vacío" />
           </Form.Item>
+        )}
+        {!conPrecioDeLista && puedeModificarPrecios && (
+          <div className="precio-con-igv">
+            <Form.Item
+              label={etiquetaPrecio}
+              name="precioUnitario"
+              rules={[{ required: true, message: 'Indica el precio' }]}
+            >
+              <InputNumber min={0} step={0.5} style={{ width: '100%' }} />
+            </Form.Item>
+            {gravada && (
+              <Form.Item name="precioIncluyeIgv" valuePropName="checked" label=" ">
+                <Checkbox>Incluye IGV</Checkbox>
+              </Form.Item>
+            )}
+          </div>
         )}
         {conPrecioDeLista && pideAprobacion && <AvisoPrecioGerencia precio={precioUnitario} deLista={precioDeLista} />}
 

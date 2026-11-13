@@ -2312,6 +2312,9 @@ namespace CRMTeamBenavides.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("PrecioIncluyeIgv")
+                        .HasColumnType("boolean");
+
                     b.Property<decimal>("PrecioSugerido")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");

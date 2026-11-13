@@ -79,7 +79,15 @@ public enum EstadoAprobacionGerencia
 public class Servicio : BaseEntity
 {
     public string Nombre { get; set; } = string.Empty;
+    /// <summary>Precio de lista en soles, con IGV si <see cref="PrecioIncluyeIgv"/>.</summary>
     public decimal PrecioSugerido { get; set; }
+
+    /// <summary>
+    /// Si el precio sugerido ya incluye IGV: se cobra tal cual y la base se separa de él.
+    /// Los servicios registrados antes del 12/11/2026 quedan sin IGV, como se escribieron.
+    /// </summary>
+    public bool PrecioIncluyeIgv { get; set; }
+
     public TipoAfectacionIgv TipoAfectacionIgv { get; set; } = TipoAfectacionIgv.Gravado;
 }
 

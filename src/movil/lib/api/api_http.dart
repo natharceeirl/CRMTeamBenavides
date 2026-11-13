@@ -272,6 +272,7 @@ class ApiHttp {
     String? descripcion,
     double? precioUnitario,
     int? tipoAfectacionIgv,
+    bool? precioIncluyeIgv,
   }) async {
     try {
       await _dio.post<Map<String, dynamic>>(
@@ -284,6 +285,7 @@ class ApiHttp {
           'descripcion': descripcion,
           'precioUnitario': precioUnitario,
           'tipoAfectacionIgv': tipoAfectacionIgv,
+          'precioIncluyeIgv': precioIncluyeIgv,
         },
       );
     } on DioException catch (fallo) {

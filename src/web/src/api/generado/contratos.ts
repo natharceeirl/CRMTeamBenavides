@@ -1141,6 +1141,7 @@ export type AgregarDetalleServicioRequest = {
   servicioId?: string | null
   tipoItem?: TipoItemServicio | null
   tipoAfectacionIgv?: TipoAfectacionIgv | null
+  precioIncluyeIgv?: boolean | null
 }
 
 export type AperturaOrdenServicioRequest = {
@@ -1795,18 +1796,21 @@ export type ActualizarServicioRequest = {
   precioSugerido: number
   tipoAfectacionIgv?: TipoAfectacionIgv
   activo?: boolean | null
+  precioIncluyeIgv?: boolean | null
 }
 
 export type CrearServicioRequest = {
   nombre: string
   precioSugerido: number
   tipoAfectacionIgv?: TipoAfectacionIgv
+  precioIncluyeIgv?: boolean
 }
 
 export type ServicioResponse = {
   id: string
   nombre: string
   precioSugerido: number
+  precioIncluyeIgv: boolean
   tipoAfectacionIgv: TipoAfectacionIgv
   activo: boolean
   fechaCreacion: string

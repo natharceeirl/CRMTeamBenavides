@@ -572,6 +572,14 @@ h4 {
   }
 }
 
+/* Precio de mano de obra o terceros con «Incluye IGV» al lado. */
+.precio-con-igv {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 12px;
+  align-items: start;
+}
+
 .ancho-completo {
   grid-column: 1 / -1;
 }

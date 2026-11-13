@@ -26,6 +26,7 @@ public class ServicioService : IServicioService
                 s.Id,
                 s.Nombre,
                 s.PrecioSugerido,
+                s.PrecioIncluyeIgv,
                 s.TipoAfectacionIgv,
                 s.Activo,
                 s.FechaCreacion))
@@ -35,15 +36,7 @@ public class ServicioService : IServicioService
     public async Task<ServicioResponse?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         var s = await _context.Servicios.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
-        if (s == null) return null;
-
-        return new ServicioResponse(
-            s.Id,
-            s.Nombre,
-            s.PrecioSugerido,
-            s.TipoAfectacionIgv,
-            s.Activo,
-            s.FechaCreacion);
+        return s == null ? null : Respuesta(s);
     }
 
     public async Task<ServiceResult<ServicioResponse>> CreateAsync(CrearServicioRequest request, CancellationToken ct = default)
@@ -61,6 +54,7 @@ public class ServicioService : IServicioService
         {
             Nombre = request.Nombre.Trim(),
             PrecioSugerido = request.PrecioSugerido,
+            PrecioIncluyeIgv = request.PrecioIncluyeIgv,
             TipoAfectacionIgv = request.TipoAfectacionIgv,
             Activo = true,
             FechaCreacion = DateTime.UtcNow
@@ -69,8 +63,7 @@ public class ServicioService : IServicioService
         _context.Servicios.Add(servicio);
         await _context.SaveChangesAsync(ct);
 
-        return ServiceResult<ServicioResponse>.Success(
-            new ServicioResponse(servicio.Id, servicio.Nombre, servicio.PrecioSugerido, servicio.TipoAfectacionIgv, servicio.Activo, servicio.FechaCreacion));
+        return ServiceResult<ServicioResponse>.Success(Respuesta(servicio));
     }
 
     public async Task<ServiceResult<ServicioResponse>> UpdateAsync(Guid id, ActualizarServicioRequest request, CancellationToken ct = default)
@@ -91,14 +84,15 @@ public class ServicioService : IServicioService
         servicio.Nombre = request.Nombre.Trim();
         servicio.PrecioSugerido = request.PrecioSugerido;
         servicio.TipoAfectacionIgv = request.TipoAfectacionIgv;
+        if (request.PrecioIncluyeIgv.HasValue)
+            servicio.PrecioIncluyeIgv = request.PrecioIncluyeIgv.Value;
         if (request.Activo.HasValue)
             servicio.Activo = request.Activo.Value;
         servicio.FechaModificacion = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(ct);
 
-        return ServiceResult<ServicioResponse>.Success(
-            new ServicioResponse(servicio.Id, servicio.Nombre, servicio.PrecioSugerido, servicio.TipoAfectacionIgv, servicio.Activo, servicio.FechaCreacion));
+        return ServiceResult<ServicioResponse>.Success(Respuesta(servicio));
     }
 
     public async Task<ServiceResult<bool>> DeleteAsync(Guid id, CancellationToken ct = default)
@@ -113,4 +107,7 @@ public class ServicioService : IServicioService
 
         return ServiceResult<bool>.Success(true);
     }
+
+    private static ServicioResponse Respuesta(Servicio s) =>
+        new(s.Id, s.Nombre, s.PrecioSugerido, s.PrecioIncluyeIgv, s.TipoAfectacionIgv, s.Activo, s.FechaCreacion);
 }

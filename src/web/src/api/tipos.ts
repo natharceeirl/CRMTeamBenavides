@@ -100,6 +100,10 @@ export const nombresTipoAfectacion: Record<number, string> = {
 export const esAfectacionGratuita = (afectacion: number | null | undefined): boolean =>
   afectacion != null && afectacion >= TIPO_AFECTACION_IGV.retiroPorPremio && afectacion <= TIPO_AFECTACION_IGV.retiroPorEntregaATrabajadores
 
+/** Gravada, cobrada o gratuita: el precio de la línea se puede escribir con IGV incluido. */
+export const esAfectacionGravada = (afectacion: number | null | undefined): boolean =>
+  afectacion === TIPO_AFECTACION_IGV.gravado || esAfectacionGratuita(afectacion)
+
 /**
  * Cómo se anota la afectación bajo el concepto de una línea. Gravado es lo normal y no
  * se anota; una gratuita dice que lo es.

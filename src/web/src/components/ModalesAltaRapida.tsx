@@ -1,4 +1,4 @@
-import { AutoComplete, Form, Input, InputNumber, Modal, Select } from 'antd'
+import { AutoComplete, Checkbox, Form, Input, InputNumber, Modal, Select } from 'antd'
 import { useAltaRapidaProducto, useMarcasProductos } from '../api/inventario'
 import { useAltaRapidaServicio } from '../api/servicios'
 import {
@@ -123,6 +123,7 @@ export function ModalAltaRapidaRepuesto({
 type CamposServicio = {
   nombre: string
   precioSugerido: number
+  precioIncluyeIgv: boolean
   tipoAfectacionIgv: TipoAfectacionIgv
 }
 
@@ -144,6 +145,7 @@ export function ModalAltaRapidaServicio({
     const servicio = await registrar.mutateAsync({
       nombre: campos.nombre.trim(),
       precioSugerido: campos.precioSugerido,
+      precioIncluyeIgv: campos.precioIncluyeIgv,
       tipoAfectacionIgv: campos.tipoAfectacionIgv,
     })
     registrar.reset()
@@ -167,7 +169,7 @@ export function ModalAltaRapidaServicio({
         layout="vertical"
         requiredMark={false}
         onFinish={enviar}
-        initialValues={{ tipoAfectacionIgv: TIPO_AFECTACION_IGV.gravado }}
+        initialValues={{ tipoAfectacionIgv: TIPO_AFECTACION_IGV.gravado, precioIncluyeIgv: true }}
       >
         <Form.Item
           label="Nombre"
@@ -176,18 +178,21 @@ export function ModalAltaRapidaServicio({
         >
           <Input placeholder="Ej. Mantenimiento de 5 000 km" />
         </Form.Item>
-        <div className="formulario-grid">
+        <div className="precio-con-igv">
           <Form.Item
-            label="Precio sugerido (sin IGV)"
+            label="Precio sugerido (S/)"
             name="precioSugerido"
             rules={[{ required: true, message: 'Ingresa el precio' }]}
           >
             <InputNumber min={0} precision={2} style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item label="Afectación IGV" name="tipoAfectacionIgv">
-            <Select options={opcionesAfectacionIgv} />
+          <Form.Item name="precioIncluyeIgv" valuePropName="checked" label=" ">
+            <Checkbox>Incluye IGV</Checkbox>
           </Form.Item>
         </div>
+        <Form.Item label="Afectación IGV" name="tipoAfectacionIgv">
+          <Select options={opcionesAfectacionIgv} />
+        </Form.Item>
       </Form>
     </Modal>
   )

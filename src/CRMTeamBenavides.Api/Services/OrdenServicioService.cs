@@ -1023,8 +1023,10 @@ public class OrdenServicioService : IOrdenServicioService
 
             costoHistorico = 0m;
 
+            // Como el repuesto: un servicio con IGV incluido se escribe y se cobra con IGV.
+            var precioServ = PrecioLista.DeEscrito(precioFinal, servicio.PrecioIncluyeIgv, tipoAfectacion, porcentajeIgvVigente);
             var (subtotalGravado, igvCalculado, totalCalculado, porcIgv) =
-                CalcularFinanzasLinea(request.Cantidad, precioFinal, tipoAfectacion, porcentajeIgvVigente);
+                CalcularFinanzasLinea(request.Cantidad, precioServ.SinIgv, tipoAfectacion, porcentajeIgvVigente, precioServ.ConIgv);
 
             var detalle = new DetalleServicio
             {
@@ -1035,7 +1037,8 @@ public class OrdenServicioService : IOrdenServicioService
                 Servicio               = servicio,
                 Descripcion            = descripcion,
                 Cantidad               = request.Cantidad,
-                PrecioUnitario         = precioFinal,
+                PrecioUnitario         = precioServ.SinIgv,
+                PrecioUnitarioConIgv   = precioServ.ConIgv,
                 CostoUnitarioHistorico = costoHistorico,
                 TipoAfectacionIgv      = tipoAfectacion,
                 SubtotalGravado        = subtotalGravado,
@@ -1111,8 +1114,11 @@ public class OrdenServicioService : IOrdenServicioService
             precioFinal = request.PrecioUnitario.Value;
             costoHistorico = 0m;
 
+            // Quien registra la línea elige si el precio que escribió ya incluye IGV.
+            var precioManual = PrecioLista.DeEscrito(
+                precioFinal, request.PrecioIncluyeIgv ?? false, tipoAfectacion, porcentajeIgvVigente);
             var (subtotalGravado, igvCalculado, totalCalculado, porcIgv) =
-                CalcularFinanzasLinea(request.Cantidad, precioFinal, tipoAfectacion, porcentajeIgvVigente);
+                CalcularFinanzasLinea(request.Cantidad, precioManual.SinIgv, tipoAfectacion, porcentajeIgvVigente, precioManual.ConIgv);
 
             var detalle = new DetalleServicio
             {
@@ -1120,7 +1126,8 @@ public class OrdenServicioService : IOrdenServicioService
                 TipoItem               = tipoItem,
                 Descripcion            = descripcion,
                 Cantidad               = request.Cantidad,
-                PrecioUnitario         = precioFinal,
+                PrecioUnitario         = precioManual.SinIgv,
+                PrecioUnitarioConIgv   = precioManual.ConIgv,
                 CostoUnitarioHistorico = costoHistorico,
                 TipoAfectacionIgv      = tipoAfectacion,
                 SubtotalGravado        = subtotalGravado,
@@ -1310,7 +1317,7 @@ public class OrdenServicioService : IOrdenServicioService
         var parametros = await PrecioLista.ParametrosAsync(_context);
         decimal precioBase = 0m;
         string nombreItem = detalle.Descripcion;
-        // Un repuesto registrado con IGV se escribe y se compara con IGV.
+        // Un repuesto o servicio registrado con IGV se escribe y se compara con IGV.
         var incluyeIgv = false;
         if (detalle.TipoItem == TipoItemServicio.Repuesto && detalle.ProductoId.HasValue)
         {
@@ -1329,14 +1336,17 @@ public class OrdenServicioService : IOrdenServicioService
             var serv = await _context.Servicios.FirstOrDefaultAsync(s => s.Id == detalle.ServicioId.Value);
             if (serv != null)
             {
+                incluyeIgv = serv.PrecioIncluyeIgv;
                 precioBase = serv.PrecioSugerido;
                 nombreItem = serv.Nombre;
             }
         }
         else if (detalle.TipoItem == TipoItemServicio.ManoDeObra || detalle.TipoItem == TipoItemServicio.Terceros)
         {
-            // Para mano de obra y terceros, la referencia base es el precio unitario acordado previamente
-            precioBase = detalle.PrecioUnitario;
+            // Sin catálogo, se edita en los términos en que se cobró (con IGV si se eligió así)
+            // y la referencia es el precio que ya tenía.
+            incluyeIgv = detalle.PrecioUnitarioConIgv.HasValue;
+            precioBase = PrecioLista.Referencia(detalle.PrecioUnitario, detalle.PrecioUnitarioConIgv);
         }
 
         if (request.PrecioUnitario.HasValue)
@@ -2400,7 +2410,7 @@ public class OrdenServicioService : IOrdenServicioService
         var servIds = servicios.Select(s => s.ServicioId!.Value).Distinct().ToList();
 
         // El precio de lista de hoy, en los términos en que se escribe la línea (con IGV si
-        // el repuesto lo incluye). Uno en dólares sin tipo de cambio no se puede comparar.
+        // el repuesto o el servicio lo incluye). Uno en dólares sin tipo de cambio no se puede comparar.
         var parametros = await PrecioLista.ParametrosAsync(_context);
         var prodPrecios = (await _context.Productos.Where(p => prodIds.Contains(p.Id)).ToListAsync())
             .Select(p => (p.Id, Lista: PrecioLista.Calcular(p, parametros.TipoCambio, parametros.PorcentajeIgv)))
@@ -2436,7 +2446,8 @@ public class OrdenServicioService : IOrdenServicioService
 
         foreach (var s in servicios)
         {
-            if (servPrecios.TryGetValue(s.ServicioId!.Value, out var basePrice) && Math.Abs(s.PrecioUnitario - basePrice) > 0.001m)
+            if (servPrecios.TryGetValue(s.ServicioId!.Value, out var basePrice)
+                && Math.Abs(PrecioLista.Referencia(s.PrecioUnitario, s.PrecioUnitarioConIgv) - basePrice) > 0.001m)
             {
                 detallesConPrecioModificado.Add(s.Id);
                 if (servNombres.TryGetValue(s.ServicioId!.Value, out var nombre))
@@ -2468,7 +2479,8 @@ public class OrdenServicioService : IOrdenServicioService
                 if (dId.HasValue)
                 {
                     var dItem = manoDeObraYTerceros.FirstOrDefault(m => m.Id == dId.Value);
-                    if (dItem != null && sol.ValorAnterior.HasValue && Math.Abs(dItem.PrecioUnitario - sol.ValorAnterior.Value) > 0.001m)
+                    if (dItem != null && sol.ValorAnterior.HasValue
+                        && Math.Abs(PrecioLista.Referencia(dItem.PrecioUnitario, dItem.PrecioUnitarioConIgv) - sol.ValorAnterior.Value) > 0.001m)
                     {
                         detallesConPrecioModificado.Add(dItem.Id);
                         if (!string.IsNullOrWhiteSpace(dItem.Descripcion))
@@ -2480,9 +2492,10 @@ public class OrdenServicioService : IOrdenServicioService
                 else if (sol.ValorAnterior.HasValue && sol.ValorSolicitado.HasValue)
                 {
                     var itemCorrespondiente = manoDeObraYTerceros
-                        .FirstOrDefault(m => Math.Abs(m.PrecioUnitario - sol.ValorSolicitado.Value) < 0.001m);
+                        .FirstOrDefault(m => Math.Abs(PrecioLista.Referencia(m.PrecioUnitario, m.PrecioUnitarioConIgv) - sol.ValorSolicitado.Value) < 0.001m);
 
-                    if (itemCorrespondiente != null && Math.Abs(itemCorrespondiente.PrecioUnitario - sol.ValorAnterior.Value) > 0.001m)
+                    if (itemCorrespondiente != null
+                        && Math.Abs(PrecioLista.Referencia(itemCorrespondiente.PrecioUnitario, itemCorrespondiente.PrecioUnitarioConIgv) - sol.ValorAnterior.Value) > 0.001m)
                     {
                         detallesConPrecioModificado.Add(itemCorrespondiente.Id);
                         var nombreMo = AprobacionService.ObtenerNombreItem(sol);

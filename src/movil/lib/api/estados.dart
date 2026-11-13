@@ -201,6 +201,10 @@ bool esAfectacionGratuita(int? afectacion) =>
     afectacion >= TipoAfectacionIgv.retiroPorPremio &&
     afectacion <= TipoAfectacionIgv.retiroPorEntregaATrabajadores;
 
+/// Gravada, cobrada o gratuita: el precio de la línea se puede escribir con IGV incluido.
+bool esAfectacionGravada(int? afectacion) =>
+    afectacion == TipoAfectacionIgv.gravado || esAfectacionGratuita(afectacion);
+
 /// Cómo se anota la afectación bajo el concepto de una línea. Gravado es lo normal y
 /// no se anota; una gratuita dice que lo es.
 String? etiquetaAfectacion(int? afectacion) {

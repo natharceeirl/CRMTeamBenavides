@@ -74,6 +74,11 @@ public record ActualizarOrdenServicioRequest(
     decimal? LecturaMedidorIngreso = null,
     Guid? TecnicoAsignadoId = null);
 
+/// <summary>
+/// <c>PrecioIncluyeIgv</c> solo vale para mano de obra y terceros: si el precio escrito
+/// ya incluye IGV. Sin él, va sin IGV, como antes. El repuesto y el servicio lo toman
+/// de su catálogo.
+/// </summary>
 public record AgregarDetalleServicioRequest(
     Guid? ProductoId = null,
     string? Descripcion = null,
@@ -81,7 +86,8 @@ public record AgregarDetalleServicioRequest(
     decimal? PrecioUnitario = null,
     Guid? ServicioId = null,
     TipoItemServicio? TipoItem = null,
-    TipoAfectacionIgv? TipoAfectacionIgv = null);
+    TipoAfectacionIgv? TipoAfectacionIgv = null,
+    bool? PrecioIncluyeIgv = null);
 
 public record ActualizarDetalleServicioRequest(
     decimal? PrecioUnitario = null,

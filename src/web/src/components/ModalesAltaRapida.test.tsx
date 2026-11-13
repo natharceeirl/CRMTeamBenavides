@@ -3,7 +3,7 @@ import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { apiFalsa, montar } from '../test/pantalla'
-import { ModalAltaRapidaRepuesto } from './ModalesAltaRapida'
+import { ModalAltaRapidaRepuesto, ModalAltaRapidaServicio } from './ModalesAltaRapida'
 
 const registrarCon = (llamadas: { ruta: string; cuerpo: unknown }[]) =>
   JSON.parse(String(llamadas.find((llamada) => llamada.ruta === '/productos/alta-rapida')?.cuerpo))
@@ -44,5 +44,22 @@ describe('registrar un repuesto rápido', () => {
 
     await vi.waitFor(() => expect(llamadas.some((llamada) => llamada.ruta === '/productos/alta-rapida')).toBe(true))
     expect(registrarCon(llamadas)).toMatchObject({ precioVenta: 25, monedaPrecio: 1, precioIncluyeIgv: false })
+  })
+})
+
+describe('registrar un servicio rápido', () => {
+  it('por defecto el precio sugerido va con IGV', async () => {
+    const usuario = userEvent.setup()
+    const { llamadas } = apiFalsa({ 'POST /servicios/alta-rapida': () => ({ id: 's1' }) })
+    montar(<ModalAltaRapidaServicio abierto onCerrar={vi.fn()} onRegistrado={vi.fn()} />)
+
+    await usuario.type(screen.getByLabelText('Nombre'), 'Mantenimiento de 5 000 km')
+    await usuario.type(screen.getByLabelText('Precio sugerido (S/)'), '180')
+    expect((screen.getByRole('checkbox', { name: 'Incluye IGV' }) as HTMLInputElement).checked).toBe(true)
+    await usuario.click(screen.getByRole('button', { name: 'Registrar' }))
+
+    await vi.waitFor(() => expect(llamadas.some((llamada) => llamada.ruta === '/servicios/alta-rapida')).toBe(true))
+    const cuerpo = JSON.parse(String(llamadas.find((llamada) => llamada.ruta === '/servicios/alta-rapida')?.cuerpo))
+    expect(cuerpo).toMatchObject({ precioSugerido: 180, precioIncluyeIgv: true })
   })
 })
