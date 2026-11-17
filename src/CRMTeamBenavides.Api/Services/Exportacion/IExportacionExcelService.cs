@@ -36,6 +36,7 @@ public record VentaExcelDto(
     string Estado,
     string EstadoPago,
     string EstadoComprobante,
+    string Declarada,
     int CantidadItems,
     decimal Total,
     decimal TotalPagado,

@@ -220,7 +220,7 @@ public static class VentaEndpoints
                 _ => Results.Problem()
             };
         })
-        .RequireAuthorization(PermisosDefinidos.VentasCrear)
+        .RequireAuthorization(PermisosDefinidos.VentasDeclarar)
         .WithName("ActualizarDeclaracionVentaPut");
 
         group.MapPatch("/{id:guid}/declaracion", async (
@@ -238,7 +238,7 @@ public static class VentaEndpoints
                 _ => Results.Problem()
             };
         })
-        .RequireAuthorization(PermisosDefinidos.VentasCrear)
+        .RequireAuthorization(PermisosDefinidos.VentasDeclarar)
         .WithName("ActualizarDeclaracionVentaPatch");
 
         group.MapPatch("/{id:guid}/reportar-yamaha", async (

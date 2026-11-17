@@ -425,7 +425,7 @@ public class VentaService : IVentaService
                 OrdenServicioId = null,
                 Estado          = EstadoVenta.Cotizacion,
                 ReportarAYamaha = request.ReportarAYamaha,
-                Declarada       = request.Declarada,
+                Declarada       = false,
                 Fecha           = DateTime.UtcNow,
                 FechaCreacion   = DateTime.UtcNow,
                 Activo          = true
@@ -545,10 +545,13 @@ public class VentaService : IVentaService
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
-            foreach (var prodId in orderedProductIds)
+            if (_context.Database.IsRelational())
             {
-                await _context.Database.ExecuteSqlInterpolatedAsync(
-                    $"SELECT \"Id\" FROM \"Productos\" WHERE \"Id\" = {prodId} FOR UPDATE");
+                foreach (var prodId in orderedProductIds)
+                {
+                    await _context.Database.ExecuteSqlInterpolatedAsync(
+                        $"SELECT \"Id\" FROM \"Productos\" WHERE \"Id\" = {prodId} FOR UPDATE");
+                }
             }
 
             var productos = await _context.Productos
@@ -581,7 +584,7 @@ public class VentaService : IVentaService
                 OrdenServicioId = null,
                 Estado          = EstadoVenta.Confirmada,
                 ReportarAYamaha = request.ReportarAYamaha,
-                Declarada       = request.Declarada,
+                Declarada       = false,
                 Fecha           = DateTime.UtcNow,
                 FechaCreacion   = DateTime.UtcNow,
                 Activo          = true
@@ -1033,11 +1036,6 @@ public class VentaService : IVentaService
                 venta.ReportarAYamaha = request.ReportarAYamaha.Value;
             }
 
-            if (request.Declarada.HasValue)
-            {
-                venta.Declarada = request.Declarada.Value;
-            }
-
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
@@ -1126,10 +1124,13 @@ public class VentaService : IVentaService
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
-            foreach (var prodId in orderedProductIds)
+            if (_context.Database.IsRelational())
             {
-                await _context.Database.ExecuteSqlInterpolatedAsync(
-                    $"SELECT \"Id\" FROM \"Productos\" WHERE \"Id\" = {prodId} FOR UPDATE");
+                foreach (var prodId in orderedProductIds)
+                {
+                    await _context.Database.ExecuteSqlInterpolatedAsync(
+                        $"SELECT \"Id\" FROM \"Productos\" WHERE \"Id\" = {prodId} FOR UPDATE");
+                }
             }
 
             var productos = await _context.Productos
@@ -1266,10 +1267,13 @@ public class VentaService : IVentaService
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
-            foreach (var prodId in orderedProductIds)
+            if (_context.Database.IsRelational())
             {
-                await _context.Database.ExecuteSqlInterpolatedAsync(
-                    $"SELECT \"Id\" FROM \"Productos\" WHERE \"Id\" = {prodId} FOR UPDATE");
+                foreach (var prodId in orderedProductIds)
+                {
+                    await _context.Database.ExecuteSqlInterpolatedAsync(
+                        $"SELECT \"Id\" FROM \"Productos\" WHERE \"Id\" = {prodId} FOR UPDATE");
+                }
             }
 
             var productos = await _context.Productos
@@ -1731,11 +1735,47 @@ public class VentaService : IVentaService
             return ServiceResult<VentaDetalleResponse>.NotFound();
         }
 
-        venta.Declarada = declarada;
-        venta.FechaModificacion = DateTime.UtcNow;
-        if (usuarioId.HasValue) venta.ModificadoPorId = usuarioId;
+        var valorAnterior = venta.Declarada;
+        // Si el valor no cambia, no registrar modificaciones ficticias
+        if (valorAnterior == declarada)
+        {
+            return ServiceResult<VentaDetalleResponse>.Success(MapToDetalleResponse(venta));
+        }
 
-        await _context.SaveChangesAsync();
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+        try
+        {
+            venta.Declarada = declarada;
+            venta.FechaModificacion = DateTime.UtcNow;
+            if (usuarioId.HasValue) venta.ModificadoPorId = usuarioId;
+
+            await _context.SaveChangesAsync();
+
+            await _auditoriaService.RegistrarEventoAsync(
+                usuarioId,
+                EventoAuditoriaTipo.Modificacion,
+                "Venta",
+                venta.Id.ToString(),
+                new
+                {
+                    VentaId = venta.Id,
+                    Campo = "Declarada",
+                    ValorAnterior = valorAnterior,
+                    ValorNuevo = declarada,
+                    ValoresAnteriores = new { Declarada = valorAnterior },
+                    ValoresNuevos = new { Declarada = declarada },
+                    Fecha = DateTime.UtcNow
+                });
+
+            await transaction.CommitAsync();
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            venta.Declarada = valorAnterior;
+            throw;
+        }
+
         return ServiceResult<VentaDetalleResponse>.Success(MapToDetalleResponse(venta));
     }
 

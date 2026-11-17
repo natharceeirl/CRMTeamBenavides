@@ -7,8 +7,7 @@ public record CreateVentaRequest(
     Guid? OrdenServicioId = null,
     List<CreateDetalleVentaRequest>? Detalles = null,
     bool EsCotizacion = false,
-    bool ReportarAYamaha = false,
-    bool Declarada = false);
+    bool ReportarAYamaha = false);
 
 public record CreateDetalleVentaRequest(
     Guid ProductoId,
@@ -22,8 +21,7 @@ public record CreateDetalleVentaRequest(
 public record ActualizarVentaRequest(
     List<CreateDetalleVentaRequest> Detalles,
     string? Observaciones = null,
-    bool? ReportarAYamaha = null,
-    bool? Declarada = null);
+    bool? ReportarAYamaha = null);
 
 public record ActualizarReportarYamahaRequest(
     bool ReportarAYamaha);

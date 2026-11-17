@@ -80,6 +80,7 @@ export function VentasPage() {
   const { tienePermiso } = useSesion()
   const puedeVender = tienePermiso(PERMISOS.ventasCrear)
   const puedeAnularVentas = tienePermiso(PERMISOS.ventasAnular)
+  const puedeDeclararVentas = tienePermiso(PERMISOS.ventasDeclarar)
 
   const puedeVerClientes = tienePermiso(PERMISOS.clientesVer)
   const clientes = useClientes(puedeVerClientes)
@@ -188,7 +189,7 @@ export function VentasPage() {
           <Button type="link" onClick={() => setVentaVista(venta.id)}>
             Ver
           </Button>
-          {puedeVender && (
+          {puedeDeclararVentas && (
             <Popconfirm
               title={venta.declarada ? 'Cambiar a no declarada' : 'Marcar como declarada'}
               description={

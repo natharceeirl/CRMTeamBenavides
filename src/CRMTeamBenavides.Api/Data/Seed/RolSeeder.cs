@@ -58,6 +58,7 @@ public static class RolSeeder
             [PermisosDefinidos.VentasVer] = "Consultar ventas y cotizaciones",
             [PermisosDefinidos.VentasCrear] = "Registrar cotizaciones y ventas directas",
             [PermisosDefinidos.VentasAnular] = "Anular ventas emitidas",
+            [PermisosDefinidos.VentasDeclarar] = "Modificar el estado de declaración de ventas",
             [PermisosDefinidos.DescuentosAplicar] = "Aplicar descuentos comerciales sobre ventas",
             [PermisosDefinidos.CajaConsultar] = "Consultar saldo y movimientos de caja chica",
             [PermisosDefinidos.CajaRegistrarIngreso] = "Registrar ingresos a la caja chica",

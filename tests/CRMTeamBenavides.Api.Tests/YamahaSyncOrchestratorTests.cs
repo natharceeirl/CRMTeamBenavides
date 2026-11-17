@@ -23,6 +23,7 @@ namespace CRMTeamBenavides.Api.Tests;
 /// Valida el ciclo de vida completo de sincronización, auditoría append-only,
 /// cálculo determinista de hash SHA-256, manejo de errores y simulación segura.
 /// </summary>
+[Collection("PostgresIntegrationTests")]
 public class YamahaSyncOrchestratorTests
 {
     private static ApplicationDbContext CrearDbContextMemoria()

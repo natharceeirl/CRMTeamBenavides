@@ -52,6 +52,7 @@ public static class PermisosDefinidos
     public const string VentasVer = "ventas.ver";
     public const string VentasCrear = "ventas.crear";
     public const string VentasAnular = "ventas.anular";
+    public const string VentasDeclarar = "ventas.declarar";
     public const string DescuentosAplicar = "descuentos.aplicar";
 
     // Caja
@@ -101,7 +102,7 @@ public static class PermisosDefinidos
         PreciosModificar,
         InventarioVer, InventarioCrear, InventarioEditar, InventarioAjustar, InventarioEliminar,
         ServiciosVer, ServiciosCrear, ServiciosEditar, ServiciosEliminar,
-        VentasVer, VentasCrear, VentasAnular, DescuentosAplicar,
+        VentasVer, VentasCrear, VentasAnular, VentasDeclarar, DescuentosAplicar,
         CajaConsultar, CajaRegistrarIngreso, CajaRegistrarEgreso, CajaAperturar, CajaCerrar,
         ReportesVerOperativos, ReportesVerFinancieros,
         ConfiguracionEditar, AuditoriaVer,

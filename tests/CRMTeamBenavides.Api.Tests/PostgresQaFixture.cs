@@ -134,7 +134,7 @@ public class PostgresQaFixture : IAsyncLifetime
     }
 }
 
-[CollectionDefinition("PostgresIntegrationTests")]
+[CollectionDefinition("PostgresIntegrationTests", DisableParallelization = true)]
 public class PostgresIntegrationCollection : ICollectionFixture<PostgresQaFixture>
 {
 }

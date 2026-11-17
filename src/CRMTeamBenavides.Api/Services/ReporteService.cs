@@ -369,6 +369,7 @@ public class ReporteService : IReporteService
                 Estado: v.Estado.ToString(),
                 EstadoPago: estadoPago,
                 EstadoComprobante: estadoComprobante,
+                Declarada: v.Declarada ? "SÍ" : "NO",
                 CantidadItems: v.Detalles.Sum(d => d.Cantidad),
                 Total: v.Total,
                 TotalPagado: totalPagado,

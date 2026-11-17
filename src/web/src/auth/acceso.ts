@@ -43,6 +43,7 @@ export const PERMISOS = {
   ventasVer: 'ventas.ver',
   ventasCrear: 'ventas.crear',
   ventasAnular: 'ventas.anular',
+  ventasDeclarar: 'ventas.declarar',
   descuentosAplicar: 'descuentos.aplicar',
   cajaConsultar: 'caja.consultar',
   cajaRegistrarIngreso: 'caja.registrar_ingreso',

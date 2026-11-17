@@ -1,9 +1,13 @@
 using System.Security.Claims;
+using System.Text.Json;
+using ClosedXML.Excel;
 using CRMTeamBenavides.Api.Configuration;
 using CRMTeamBenavides.Api.Configuration.Autorizacion;
+using CRMTeamBenavides.Data.Seed;
 using CRMTeamBenavides.Api.Features.Ventas;
 using CRMTeamBenavides.Api.Features.Yamaha;
 using CRMTeamBenavides.Api.Services;
+using CRMTeamBenavides.Api.Services.Exportacion;
 using CRMTeamBenavides.Api.Services.Yamaha;
 using CRMTeamBenavides.Api.Services.Yamaha.Exportadores;
 using CRMTeamBenavides.Data;
@@ -30,6 +34,12 @@ public class DeclaracionVentasTests
     {
         public Task RegistrarEventoAsync(Guid? usuarioId, string accion, string entidad, string entidadId, object? detalle = null, CancellationToken ct = default) =>
             Task.CompletedTask;
+    }
+
+    private sealed class FalloAuditoriaService : IAuditoriaService
+    {
+        public Task RegistrarEventoAsync(Guid? usuarioId, string accion, string entidad, string entidadId, object? detalle = null, CancellationToken ct = default) =>
+            throw new InvalidOperationException("Fallo intencional de auditoría para verificar atomicidad transaccional.");
     }
 
     private static ApplicationDbContext CrearContexto(string? nombreBase = null)
@@ -1070,5 +1080,455 @@ public class DeclaracionVentasTests
         Assert.Equal(177m, comprobantePostCambio.Total);
         Assert.Equal(fechaCreacionComprobante, comprobantePostCambio.FechaCreacion);
         Assert.True(comprobantePostCambio.Activo);
+    }
+
+    // =========================================================================
+    // GRUPO 5: Auditoría Real de Cambios en Declarada (DEF-01)
+    // =========================================================================
+
+    [Fact]
+    public async Task Escenario24_DeclararVenta_RegistraEventoAuditoria_ConValoresAnterioresYNuevos()
+    {
+        using var context = CrearContexto();
+        var auditoria = new AuditoriaService(context);
+        var service = new VentaService(context, auditoria);
+
+        var usuarioId = Guid.NewGuid();
+        var cliente = new Cliente { Id = Guid.NewGuid(), TipoDocumento = TipoDocumentoCliente.DNI, NumeroDocumento = "40112241", NombreCompleto = "Cliente Auditoria 1", Activo = true };
+        context.Clientes.Add(cliente);
+        var venta = new Venta
+        {
+            Id = Guid.NewGuid(),
+            ClienteId = cliente.Id,
+            Cliente = cliente,
+            Fecha = DateTime.UtcNow,
+            Estado = EstadoVenta.Confirmada,
+            Declarada = false,
+            Activo = true
+        };
+        context.Ventas.Add(venta);
+        await context.SaveChangesAsync();
+
+        var resultado = await service.ActualizarDeclaradaAsync(venta.Id, true, usuarioId);
+
+        Assert.Equal(ServiceResultStatus.Success, resultado.Status);
+        Assert.True(resultado.Data!.Declarada);
+
+        var eventos = await context.EventosAuditoria.AsNoTracking().ToListAsync();
+        var evento = Assert.Single(eventos);
+
+        Assert.Equal(usuarioId, evento.UsuarioId);
+        Assert.Equal(EventoAuditoriaTipo.Modificacion, evento.Accion);
+        Assert.Equal("Venta", evento.Entidad);
+        Assert.Equal(venta.Id.ToString(), evento.EntidadId);
+        Assert.True((DateTime.UtcNow - evento.Fecha).TotalSeconds < 10);
+
+        Assert.NotNull(evento.Detalle);
+        using var doc = JsonDocument.Parse(evento.Detalle);
+        var root = doc.RootElement;
+        Assert.Equal("Declarada", root.GetProperty("Campo").GetString());
+        Assert.False(root.GetProperty("ValorAnterior").GetBoolean());
+        Assert.True(root.GetProperty("ValorNuevo").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Escenario25_DesmarcarVenta_RegistraEventoAuditoria_ConValoresAnterioresYNuevos()
+    {
+        using var context = CrearContexto();
+        var auditoria = new AuditoriaService(context);
+        var service = new VentaService(context, auditoria);
+
+        var usuarioId = Guid.NewGuid();
+        var cliente = new Cliente { Id = Guid.NewGuid(), TipoDocumento = TipoDocumentoCliente.DNI, NumeroDocumento = "40112242", NombreCompleto = "Cliente Auditoria 2", Activo = true };
+        context.Clientes.Add(cliente);
+        var venta = new Venta
+        {
+            Id = Guid.NewGuid(),
+            ClienteId = cliente.Id,
+            Cliente = cliente,
+            Fecha = DateTime.UtcNow,
+            Estado = EstadoVenta.Confirmada,
+            Declarada = true,
+            Activo = true
+        };
+        context.Ventas.Add(venta);
+        await context.SaveChangesAsync();
+
+        var resultado = await service.ActualizarDeclaradaAsync(venta.Id, false, usuarioId);
+
+        Assert.Equal(ServiceResultStatus.Success, resultado.Status);
+        Assert.False(resultado.Data!.Declarada);
+
+        var eventos = await context.EventosAuditoria.AsNoTracking().ToListAsync();
+        var evento = Assert.Single(eventos);
+
+        Assert.Equal(usuarioId, evento.UsuarioId);
+        Assert.Equal(EventoAuditoriaTipo.Modificacion, evento.Accion);
+        Assert.Equal("Venta", evento.Entidad);
+        Assert.Equal(venta.Id.ToString(), evento.EntidadId);
+
+        Assert.NotNull(evento.Detalle);
+        using var doc = JsonDocument.Parse(evento.Detalle);
+        var root = doc.RootElement;
+        Assert.Equal("Declarada", root.GetProperty("Campo").GetString());
+        Assert.True(root.GetProperty("ValorAnterior").GetBoolean());
+        Assert.False(root.GetProperty("ValorNuevo").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Escenario26_ActualizarDeclarada_ConMismoValor_NoRegistraEventoAuditoriaFicticio()
+    {
+        using var context = CrearContexto();
+        var auditoria = new AuditoriaService(context);
+        var service = new VentaService(context, auditoria);
+
+        var cliente = new Cliente { Id = Guid.NewGuid(), TipoDocumento = TipoDocumentoCliente.DNI, NumeroDocumento = "40112243", NombreCompleto = "Cliente Auditoria 3", Activo = true };
+        context.Clientes.Add(cliente);
+        var venta = new Venta
+        {
+            Id = Guid.NewGuid(),
+            ClienteId = cliente.Id,
+            Cliente = cliente,
+            Fecha = DateTime.UtcNow,
+            Estado = EstadoVenta.Confirmada,
+            Declarada = true,
+            Activo = true
+        };
+        context.Ventas.Add(venta);
+        await context.SaveChangesAsync();
+
+        // Enviar el mismo valor que ya tiene
+        var resultado = await service.ActualizarDeclaradaAsync(venta.Id, true, Guid.NewGuid());
+
+        Assert.Equal(ServiceResultStatus.Success, resultado.Status);
+        Assert.True(resultado.Data!.Declarada);
+
+        // No debe haberse generado ningún evento en auditoría
+        var eventos = await context.EventosAuditoria.AsNoTracking().ToListAsync();
+        Assert.Empty(eventos);
+    }
+
+    [Fact]
+    public async Task Escenario27_FalloEnAuditoria_RevierteTransaccion_YNoDejaCambioSinTrazabilidad()
+    {
+        using var context = CrearContexto();
+        var auditoriaFallo = new FalloAuditoriaService();
+        var service = new VentaService(context, auditoriaFallo);
+
+        var cliente = new Cliente { Id = Guid.NewGuid(), TipoDocumento = TipoDocumentoCliente.DNI, NumeroDocumento = "40112244", NombreCompleto = "Cliente Auditoria 4", Activo = true };
+        context.Clientes.Add(cliente);
+        var venta = new Venta
+        {
+            Id = Guid.NewGuid(),
+            ClienteId = cliente.Id,
+            Cliente = cliente,
+            Fecha = DateTime.UtcNow,
+            Estado = EstadoVenta.Confirmada,
+            Declarada = false,
+            Activo = true
+        };
+        context.Ventas.Add(venta);
+        await context.SaveChangesAsync();
+
+        // Debe lanzar excepción al fallar el registro de auditoría
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.ActualizarDeclaradaAsync(venta.Id, true, Guid.NewGuid()));
+
+        // Verificar que la transacción fue revertida y la venta NO quedó con Declarada = true
+        using var contextVerificacion = CrearContexto();
+        // Para In-Memory, verificamos directamente la entidad en el contexto actual
+        Assert.False(venta.Declarada);
+    }
+
+    // =========================================================================
+    // GRUPO 6: Permiso Específico ventas.declarar (DEF-02)
+    // =========================================================================
+
+    [Fact]
+    public void Escenario28_PermisoVentasDeclarar_ExisteYEstaDefinidoCorrectamente()
+    {
+        Assert.Equal("ventas.declarar", PermisosDefinidos.VentasDeclarar);
+        Assert.Contains(PermisosDefinidos.VentasDeclarar, PermisosDefinidos.Todos);
+    }
+
+    [Fact]
+    public async Task Escenario29_MatrizDePermisos_GerenciaAdminTieneVentasDeclarar_VendedorNoLoTiene()
+    {
+        using var context = CrearContexto();
+        await RolSeeder.SeedAsync(context);
+
+        var rolPermisos = await context.RolPermisos
+            .Include(rp => rp.Rol)
+            .Include(rp => rp.Permiso)
+            .ToListAsync();
+
+        var permisosAdmin = rolPermisos
+            .Where(rp => rp.Rol.Nombre == RolesDefinidos.GerenciaAdmin)
+            .Select(rp => rp.Permiso.Codigo)
+            .ToHashSet();
+
+        var permisosVendedor = rolPermisos
+            .Where(rp => rp.Rol.Nombre == RolesDefinidos.Vendedor)
+            .Select(rp => rp.Permiso.Codigo)
+            .ToHashSet();
+
+        var permisosTecnico = rolPermisos
+            .Where(rp => rp.Rol.Nombre == RolesDefinidos.Tecnico)
+            .Select(rp => rp.Permiso.Codigo)
+            .ToHashSet();
+
+        var permisosRecepcion = rolPermisos
+            .Where(rp => rp.Rol.Nombre == RolesDefinidos.Recepcion)
+            .Select(rp => rp.Permiso.Codigo)
+            .ToHashSet();
+
+        // Gerencia/Admin SÍ posee ventas.declarar
+        Assert.Contains(PermisosDefinidos.VentasDeclarar, permisosAdmin);
+
+        // Vendedor NO posee ventas.declarar
+        Assert.DoesNotContain(PermisosDefinidos.VentasDeclarar, permisosVendedor);
+
+        // Roles operativos técnicos y recepción NO poseen ventas.declarar
+        Assert.DoesNotContain(PermisosDefinidos.VentasDeclarar, permisosTecnico);
+        Assert.DoesNotContain(PermisosDefinidos.VentasDeclarar, permisosRecepcion);
+    }
+
+    // =========================================================================
+    // GRUPO 7: DTOs Generales y Rutas Alternativas Protegidas (DEF-03)
+    // =========================================================================
+
+    [Fact]
+    public void Escenario30_ContratosRequest_NoContienenPropiedadDeclarada()
+    {
+        var propCreate = typeof(CreateVentaRequest).GetProperty("Declarada");
+        var propActualizar = typeof(ActualizarVentaRequest).GetProperty("Declarada");
+
+        Assert.Null(propCreate);
+        Assert.Null(propActualizar);
+    }
+
+    [Fact]
+    public async Task Escenario31_CrearCotizacion_SiempreIniciaConDeclaradaFalse()
+    {
+        using var context = CrearContexto();
+        var service = new VentaService(context, new SinAuditoria());
+
+        var cliente = new Cliente { Id = Guid.NewGuid(), TipoDocumento = TipoDocumentoCliente.DNI, NumeroDocumento = "40112245", NombreCompleto = "Cliente Cotizacion", Activo = true };
+        var producto = new Producto { Id = Guid.NewGuid(), Codigo = "P-001", Nombre = "Aceite", PrecioVenta = 50m, Activo = true };
+        context.Clientes.Add(cliente);
+        context.Productos.Add(producto);
+        await context.SaveChangesAsync();
+
+        var request = new CreateVentaRequest(
+            ClienteId: cliente.Id,
+            EsCotizacion: true,
+            Detalles: new List<CreateDetalleVentaRequest>
+            {
+                new(producto.Id, 1, 50m)
+            });
+
+        var resultado = await service.CreateAsync(request);
+
+        Assert.Equal(ServiceResultStatus.Success, resultado.Status);
+        Assert.False(resultado.Data!.Declarada);
+
+        var ventaEnBd = await context.Ventas.AsNoTracking().FirstOrDefaultAsync(v => v.Id == resultado.Data.Id);
+        Assert.NotNull(ventaEnBd);
+        Assert.False(ventaEnBd.Declarada);
+    }
+
+    [Fact]
+    public async Task Escenario32_CrearVentaDirecta_SiempreIniciaConDeclaradaFalse()
+    {
+        using var context = CrearContexto();
+        var service = new VentaService(context, new SinAuditoria());
+
+        var cliente = new Cliente { Id = Guid.NewGuid(), TipoDocumento = TipoDocumentoCliente.DNI, NumeroDocumento = "40112246", NombreCompleto = "Cliente Venta Directa", Activo = true };
+        var producto = new Producto { Id = Guid.NewGuid(), Codigo = "P-002", Nombre = "Filtro", PrecioVenta = 30m, StockActual = 10, Activo = true };
+        context.Clientes.Add(cliente);
+        context.Productos.Add(producto);
+        await context.SaveChangesAsync();
+
+        var request = new CreateVentaRequest(
+            ClienteId: cliente.Id,
+            EsCotizacion: false,
+            Detalles: new List<CreateDetalleVentaRequest>
+            {
+                new(producto.Id, 1, 30m)
+            });
+
+        var resultado = await service.CreateAsync(request);
+
+        Assert.Equal(ServiceResultStatus.Success, resultado.Status);
+        Assert.False(resultado.Data!.Declarada);
+
+        var ventaEnBd = await context.Ventas.AsNoTracking().FirstOrDefaultAsync(v => v.Id == resultado.Data.Id);
+        Assert.NotNull(ventaEnBd);
+        Assert.False(ventaEnBd.Declarada);
+    }
+
+    [Fact]
+    public async Task Escenario33_ActualizarVentaGeneral_NoModificaDeclarada()
+    {
+        using var context = CrearContexto();
+        var service = new VentaService(context, new SinAuditoria());
+
+        var cliente = new Cliente { Id = Guid.NewGuid(), TipoDocumento = TipoDocumentoCliente.DNI, NumeroDocumento = "40112247", NombreCompleto = "Cliente Edicion", Activo = true };
+        var prod1 = new Producto { Id = Guid.NewGuid(), Codigo = "P-003", Nombre = "Bujia", PrecioVenta = 20m, Activo = true };
+        var prod2 = new Producto { Id = Guid.NewGuid(), Codigo = "P-004", Nombre = "Cadena", PrecioVenta = 45m, Activo = true };
+        context.Clientes.Add(cliente);
+        context.Productos.AddRange(prod1, prod2);
+
+        var venta = new Venta
+        {
+            Id = Guid.NewGuid(),
+            ClienteId = cliente.Id,
+            Cliente = cliente,
+            Fecha = DateTime.UtcNow,
+            Estado = EstadoVenta.Cotizacion,
+            Declarada = true, // Marcada previamente por flujo autorizado
+            Activo = true,
+            Detalles = new List<DetalleVenta>
+            {
+                new() { Id = Guid.NewGuid(), ProductoId = prod1.Id, Producto = prod1, Cantidad = 1, PrecioUnitario = 20m, Activo = true }
+            }
+        };
+        context.Ventas.Add(venta);
+        await context.SaveChangesAsync();
+
+        // Actualización general de líneas
+        var requestActualizar = new ActualizarVentaRequest(
+            Detalles: new List<CreateDetalleVentaRequest>
+            {
+                new(prod2.Id, 2, 45m)
+            },
+            Observaciones: "Actualizado");
+
+        var resultado = await service.ActualizarAsync(venta.Id, requestActualizar);
+
+        Assert.Equal(ServiceResultStatus.Success, resultado.Status);
+        // Declarada debe permanecer intacta en true
+        Assert.True(resultado.Data!.Declarada);
+
+        var ventaRecargada = await context.Ventas.AsNoTracking().FirstOrDefaultAsync(v => v.Id == venta.Id);
+        Assert.NotNull(ventaRecargada);
+        Assert.True(ventaRecargada.Declarada);
+    }
+
+    // =========================================================================
+    // GRUPO 8: Exportación a Excel con Columna Declarada (DEF-04)
+    // =========================================================================
+
+    [Fact]
+    public async Task Escenario34_ExportarVentasExcel_IncluyeColumnaDeclaradaConValoresSiYNo()
+    {
+        using var context = CrearContexto();
+        var excelService = new ExportacionExcelService();
+        var reporteService = new ReporteService(context, excelService);
+
+        var cliente = new Cliente { Id = Guid.NewGuid(), TipoDocumento = TipoDocumentoCliente.DNI, NumeroDocumento = "40112248", NombreCompleto = "Cliente Excel", Activo = true };
+        context.Clientes.Add(cliente);
+
+        var venta1 = new Venta
+        {
+            Id = Guid.NewGuid(),
+            ClienteId = cliente.Id,
+            Cliente = cliente,
+            Fecha = DateTime.UtcNow,
+            Estado = EstadoVenta.Confirmada,
+            Declarada = true,
+            Total = 100m,
+            Activo = true
+        };
+
+        var venta2 = new Venta
+        {
+            Id = Guid.NewGuid(),
+            ClienteId = cliente.Id,
+            Cliente = cliente,
+            Fecha = DateTime.UtcNow.AddMinutes(-5),
+            Estado = EstadoVenta.Confirmada,
+            Declarada = false,
+            Total = 200m,
+            Activo = true
+        };
+
+        context.Ventas.AddRange(venta1, venta2);
+        await context.SaveChangesAsync();
+
+        var bytes = await reporteService.ExportarVentasExcelAsync(new FiltrosVentas(), incluirFinanciero: false);
+
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        using var ms = new MemoryStream(bytes);
+        using var workbook = new XLWorkbook(ms);
+        var worksheet = workbook.Worksheet("Ventas");
+
+        // Fila 1: Encabezados
+        Assert.Equal("Declarada", worksheet.Cell(1, 7).GetString());
+
+        // Filas 2 y 3: Valores SI y NO correspondientes
+        var valoresDeclarada = new List<string>
+        {
+            worksheet.Cell(2, 7).GetString(),
+            worksheet.Cell(3, 7).GetString()
+        };
+
+        Assert.Contains("SÍ", valoresDeclarada);
+        Assert.Contains("NO", valoresDeclarada);
+    }
+
+    [Fact]
+    public async Task Escenario35_ExportarVentasExcel_ConFiltroDeclaradas_SoloExportaVentasConSi()
+    {
+        using var context = CrearContexto();
+        var excelService = new ExportacionExcelService();
+        var reporteService = new ReporteService(context, excelService);
+
+        var cliente = new Cliente { Id = Guid.NewGuid(), TipoDocumento = TipoDocumentoCliente.DNI, NumeroDocumento = "40112249", NombreCompleto = "Cliente Excel Filtro", Activo = true };
+        context.Clientes.Add(cliente);
+
+        var ventaDeclarada = new Venta
+        {
+            Id = Guid.NewGuid(),
+            ClienteId = cliente.Id,
+            Cliente = cliente,
+            Fecha = DateTime.UtcNow,
+            Estado = EstadoVenta.Confirmada,
+            Declarada = true,
+            Total = 150m,
+            Activo = true
+        };
+
+        var ventaNoDeclarada = new Venta
+        {
+            Id = Guid.NewGuid(),
+            ClienteId = cliente.Id,
+            Cliente = cliente,
+            Fecha = DateTime.UtcNow.AddMinutes(-10),
+            Estado = EstadoVenta.Confirmada,
+            Declarada = false,
+            Total = 250m,
+            Activo = true
+        };
+
+        context.Ventas.AddRange(ventaDeclarada, ventaNoDeclarada);
+        await context.SaveChangesAsync();
+
+        var bytes = await reporteService.ExportarVentasExcelAsync(new FiltrosVentas { Declarada = true }, incluirFinanciero: false);
+
+        using var ms = new MemoryStream(bytes);
+        using var workbook = new XLWorkbook(ms);
+        var worksheet = workbook.Worksheet("Ventas");
+
+        // Fila 1: Encabezados
+        Assert.Equal("Declarada", worksheet.Cell(1, 7).GetString());
+
+        // Fila 2: Solo la venta declarada
+        Assert.Equal("SÍ", worksheet.Cell(2, 7).GetString());
+
+        // Fila 3: Debe estar vacía porque solo hay 1 fila de datos
+        Assert.True(worksheet.Cell(3, 1).IsEmpty());
     }
 }

@@ -1940,7 +1940,6 @@ export type ActualizarVentaRequest = {
   detalles: CreateDetalleVentaRequest[]
   observaciones?: string | null
   reportarAYamaha?: boolean | null
-  declarada?: boolean | null
 }
 
 export type ComprobanteResponse = {
@@ -1979,7 +1978,6 @@ export type CreateVentaRequest = {
   detalles?: CreateDetalleVentaRequest[] | null
   esCotizacion?: boolean
   reportarAYamaha?: boolean
-  declarada?: boolean
 }
 
 export type DetalleVentaResponse = {

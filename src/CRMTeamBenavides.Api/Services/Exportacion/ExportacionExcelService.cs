@@ -272,6 +272,7 @@ public class ExportacionExcelService : IExportacionExcelService
             "Estado",
             "Estado Pago",
             "Estado Comprobante",
+            "Declarada",
             "Cant. Ítems",
             "Total (S/)",
             "Total Pagado (S/)",
@@ -307,31 +308,32 @@ public class ExportacionExcelService : IExportacionExcelService
             ws.Cell(row, 4).Value = v.Estado;
             ws.Cell(row, 5).Value = v.EstadoPago;
             ws.Cell(row, 6).Value = v.EstadoComprobante;
-            ws.Cell(row, 7).Value = v.CantidadItems;
+            ws.Cell(row, 7).Value = v.Declarada;
+            ws.Cell(row, 8).Value = v.CantidadItems;
 
-            var cTotal = ws.Cell(row, 8);
+            var cTotal = ws.Cell(row, 9);
             cTotal.Value = v.Total;
             cTotal.Style.NumberFormat.Format = "S/ #,##0.00";
 
-            var cPagado = ws.Cell(row, 9);
+            var cPagado = ws.Cell(row, 10);
             cPagado.Value = v.TotalPagado;
             cPagado.Style.NumberFormat.Format = "S/ #,##0.00";
 
-            var cSaldo = ws.Cell(row, 10);
+            var cSaldo = ws.Cell(row, 11);
             cSaldo.Value = v.Saldo;
             cSaldo.Style.NumberFormat.Format = "S/ #,##0.00";
 
             if (incluirFinanciero)
             {
-                var cCosto = ws.Cell(row, 11);
+                var cCosto = ws.Cell(row, 12);
                 cCosto.Value = v.CostoTotal ?? 0m;
                 cCosto.Style.NumberFormat.Format = "S/ #,##0.00";
 
-                var cUtilidad = ws.Cell(row, 12);
+                var cUtilidad = ws.Cell(row, 13);
                 cUtilidad.Value = v.Utilidad ?? 0m;
                 cUtilidad.Style.NumberFormat.Format = "S/ #,##0.00";
 
-                var cMargen = ws.Cell(row, 13);
+                var cMargen = ws.Cell(row, 14);
                 cMargen.Value = (v.MargenPorcentaje ?? 0m) / 100m;
                 cMargen.Style.NumberFormat.Format = "0.00%";
             }
@@ -348,7 +350,8 @@ public class ExportacionExcelService : IExportacionExcelService
             ws.Cell(row, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             ws.Cell(row, 5).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             ws.Cell(row, 6).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-            ws.Cell(row, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+            ws.Cell(row, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Cell(row, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
 
             row++;
         }

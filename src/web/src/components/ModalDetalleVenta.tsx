@@ -98,6 +98,7 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
   const { tienePermiso } = useSesion()
   const puedeRegistrar = tienePermiso(PERMISOS.ventasCrear)
   const puedeAnular = tienePermiso(PERMISOS.ventasAnular)
+  const puedeDeclarar = tienePermiso(PERMISOS.ventasDeclarar)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [modalPago, setModalPago] = useState(false)
   const [editandoCotizacion, setEditandoCotizacion] = useState(false)
@@ -217,7 +218,7 @@ export function ModalDetalleVenta({ abierto, ventaId, onCerrar }: Readonly<Props
                     <Tag color={datos.declarada ? 'green' : 'default'}>
                       {datos.declarada ? 'Declarada' : 'No declarada'}
                     </Tag>
-                    {puedeRegistrar && (
+                    {puedeDeclarar && (
                       <Popconfirm
                         title={datos.declarada ? 'Cambiar a no declarada' : 'Marcar como declarada'}
                         description={
