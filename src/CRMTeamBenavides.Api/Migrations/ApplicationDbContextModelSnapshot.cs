@@ -645,6 +645,83 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.ToTable("ConsultasChatbot");
                 });
 
+            modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.ConversacionWhatsApp", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("AgenteAsignadoId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("AsociacionClienteAmbigua")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("ClienteId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CreadoPorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Estado")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("FechaCambioModoHumano")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaModificacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaUltimoMensaje")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaUltimoMensajeEntrante")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ModificadoPorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ModoAtencion")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("NombrePerfilWhatsApp")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("TelefonoE164")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("WhatsAppId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgenteAsignadoId");
+
+                    b.HasIndex("ClienteId");
+
+                    b.HasIndex("FechaUltimoMensaje");
+
+                    b.HasIndex("TelefonoE164")
+                        .IsUnique()
+                        .HasFilter("\"Activo\" = true");
+
+                    b.HasIndex("WhatsAppId");
+
+                    b.HasIndex("Estado", "ModoAtencion", "FechaUltimoMensaje");
+
+                    b.ToTable("ConversacionesWhatsApp", (string)null);
+                });
+
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.DetalleCompra", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1040,6 +1117,68 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.ToTable("EventosAuditoria");
                 });
 
+            modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.EventoWebhookWhatsApp", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("CantidadEstados")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CantidadMensajes")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("CreadoPorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExternalMessageId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaModificacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("FechaRecepcionUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ModificadoPorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PayloadHashSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("ProcesadoConExito")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Resumen")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("TipoEvento")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExternalMessageId");
+
+                    b.HasIndex("FechaRecepcionUtc");
+
+                    b.HasIndex("PayloadHashSha256");
+
+                    b.ToTable("EventosWebhookWhatsApp", (string)null);
+                });
+
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.FaqItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1356,6 +1495,108 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.HasIndex("UsuarioId");
 
                     b.ToTable("HistorialTiposCambio");
+                });
+
+            modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.MensajeWhatsApp", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ContenidoTexto")
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)");
+
+                    b.Property<Guid>("ConversacionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CreadoPorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Direccion")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("EnviadoPorUsuarioId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ErrorDetalle")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("Estado")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ExternalMessageId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("FechaEventoUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaModificacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("FechaRecepcionUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaUltimoEstadoUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("MediaId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("MediaMimeType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("MediaNombreArchivo")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("MediaSha256")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("MetadataTecnicaJson")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid?>("ModificadoPorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EnviadoPorUsuarioId");
+
+                    b.HasIndex("Estado");
+
+                    b.HasIndex("ExternalMessageId")
+                        .IsUnique()
+                        .HasFilter("\"ExternalMessageId\" IS NOT NULL");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasFilter("\"IdempotencyKey\" IS NOT NULL");
+
+                    b.HasIndex("ConversacionId", "FechaEventoUtc");
+
+                    b.HasIndex("ConversacionId", "FechaRecepcionUtc");
+
+                    b.ToTable("MensajesWhatsApp", (string)null);
                 });
 
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.MetodoPago", b =>
@@ -1767,6 +2008,92 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.HasIndex("ReportarAYamaha", "Activo");
 
                     b.ToTable("OrdenesServicio");
+                });
+
+            modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.OutboxMensajeWhatsApp", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ContenidoTexto")
+                        .IsRequired()
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)");
+
+                    b.Property<Guid>("ConversacionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CreadoPorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DestinatarioE164")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("Estado")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaModificacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaProcesadoUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("HistorialIntentosJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("Intentos")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MaxIntentos")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("MensajeWhatsAppId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ModificadoPorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ProximoIntentoUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ReservadoHastaUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("UltimoCodigoHttp")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UltimoError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversacionId");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex("MensajeWhatsAppId")
+                        .IsUnique();
+
+                    b.HasIndex("Estado", "ProximoIntentoUtc", "ReservadoHastaUtc");
+
+                    b.ToTable("OutboxMensajesWhatsApp", (string)null);
                 });
 
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.Pago", b =>
@@ -2753,6 +3080,11 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Property<Guid?>("CreadoPorId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("Declarada")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<int>("Estado")
                         .HasColumnType("integer");
 
@@ -2783,11 +3115,6 @@ namespace CRMTeamBenavides.Api.Migrations
 
                     b.Property<Guid?>("OrdenServicioId")
                         .HasColumnType("uuid");
-
-                    b.Property<bool>("Declarada")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
 
                     b.Property<bool>("ReportarAYamaha")
                         .ValueGeneratedOnAdd()
@@ -3102,6 +3429,23 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Navigation("FaqItem");
                 });
 
+            modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.ConversacionWhatsApp", b =>
+                {
+                    b.HasOne("CRMTeamBenavides.Domain.Entities.Usuario", "AgenteAsignado")
+                        .WithMany()
+                        .HasForeignKey("AgenteAsignadoId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("CRMTeamBenavides.Domain.Entities.Cliente", "Cliente")
+                        .WithMany()
+                        .HasForeignKey("ClienteId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("AgenteAsignado");
+
+                    b.Navigation("Cliente");
+                });
+
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.DetalleCompra", b =>
                 {
                     b.HasOne("CRMTeamBenavides.Domain.Entities.Compra", "Compra")
@@ -3283,6 +3627,24 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Navigation("Usuario");
                 });
 
+            modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.MensajeWhatsApp", b =>
+                {
+                    b.HasOne("CRMTeamBenavides.Domain.Entities.ConversacionWhatsApp", "Conversacion")
+                        .WithMany("Mensajes")
+                        .HasForeignKey("ConversacionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CRMTeamBenavides.Domain.Entities.Usuario", "EnviadoPorUsuario")
+                        .WithMany()
+                        .HasForeignKey("EnviadoPorUsuarioId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Conversacion");
+
+                    b.Navigation("EnviadoPorUsuario");
+                });
+
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.MovimientoCajaChica", b =>
                 {
                     b.HasOne("CRMTeamBenavides.Domain.Entities.CajaChica", "CajaChica")
@@ -3374,6 +3736,17 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Navigation("UsuarioAprobacionGerencia");
 
                     b.Navigation("Vehiculo");
+                });
+
+            modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.OutboxMensajeWhatsApp", b =>
+                {
+                    b.HasOne("CRMTeamBenavides.Domain.Entities.MensajeWhatsApp", "MensajeWhatsApp")
+                        .WithOne()
+                        .HasForeignKey("CRMTeamBenavides.Domain.Entities.OutboxMensajeWhatsApp", "MensajeWhatsAppId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MensajeWhatsApp");
                 });
 
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.Pago", b =>
@@ -3673,6 +4046,11 @@ namespace CRMTeamBenavides.Api.Migrations
                     b.Navigation("Detalles");
 
                     b.Navigation("Pagos");
+                });
+
+            modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.ConversacionWhatsApp", b =>
+                {
+                    b.Navigation("Mensajes");
                 });
 
             modelBuilder.Entity("CRMTeamBenavides.Domain.Entities.OrdenServicio", b =>

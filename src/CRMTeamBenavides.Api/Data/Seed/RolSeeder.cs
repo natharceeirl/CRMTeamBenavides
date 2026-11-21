@@ -81,7 +81,9 @@ public static class RolSeeder
             [PermisosDefinidos.PedidosLimaCancelar] = "Cancelar pedidos de repuestos de Lima",
             [PermisosDefinidos.ComprasVer] = "Consultar compras, pagos a proveedores y costos",
             [PermisosDefinidos.ComprasRegistrar] = "Registrar compras, pagar a proveedores y administrar proveedores",
-            [PermisosDefinidos.ComprasAnular] = "Anular compras y pagos a proveedores"
+            [PermisosDefinidos.ComprasAnular] = "Anular compras y pagos a proveedores",
+            [PermisosDefinidos.WhatsAppVer] = "Consultar conversaciones e historial de mensajes de WhatsApp",
+            [PermisosDefinidos.WhatsAppGestionar] = "Asignar conversaciones de WhatsApp, cambiar modo de atención y enviar mensajes manuales"
         };
 
         var nuevosPermisos = new List<Permiso>();
@@ -195,7 +197,8 @@ public static class RolSeeder
                 PermisosDefinidos.ReportesVerOperativos,
                 PermisosDefinidos.CitasVer, PermisosDefinidos.CitasCrear, PermisosDefinidos.CitasEditar, PermisosDefinidos.CitasCancelar,
                 PermisosDefinidos.PedidosLimaVer, PermisosDefinidos.PedidosLimaCrear, PermisosDefinidos.PedidosLimaEditar,
-                PermisosDefinidos.PedidosLimaDespachar, PermisosDefinidos.PedidosLimaCancelar
+                PermisosDefinidos.PedidosLimaDespachar, PermisosDefinidos.PedidosLimaCancelar,
+                PermisosDefinidos.WhatsAppVer, PermisosDefinidos.WhatsAppGestionar
             },
 
             // Técnico: Sólo sus OS asignadas, diagnóstico, agregar repuestos/mano de obra, y transiciones operativas.

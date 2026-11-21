@@ -27,6 +27,7 @@ using CRMTeamBenavides.Api.Features.Portal;
 using CRMTeamBenavides.Api.Features.Ventas;
 using CRMTeamBenavides.Api.Features.Fotos;
 using CRMTeamBenavides.Api.Features.Yamaha;
+using CRMTeamBenavides.Api.Features.WhatsApp;
 using CRMTeamBenavides.Api.Features.Citas;
 using CRMTeamBenavides.Api.Features.PedidosLima;
 using CRMTeamBenavides.Api.Features.Aprobaciones;
@@ -37,6 +38,7 @@ using CRMTeamBenavides.Api.Services.Importacion;
 using CRMTeamBenavides.Api.Services.Notificaciones;
 using CRMTeamBenavides.Api.Services.Yamaha;
 using CRMTeamBenavides.Api.Services.Yamaha.Exportadores;
+using CRMTeamBenavides.Api.Services.WhatsApp;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Data.Seed;
 using CRMTeamBenavides.Api.Health;
@@ -297,6 +299,38 @@ builder.Services
     // Evita que LoggingHttpMessageHandler escriba la URI cruda con ?code={Function_Key} en los logs.
     .RemoveAllLoggers();
 
+// ---------------------------------------------------------------------------
+// WhatsApp Business Cloud API — infraestructura desacoplada (deshabilitada por defecto)
+// ---------------------------------------------------------------------------
+builder.Services
+    .AddOptions<WhatsAppSettings>()
+    .Bind(builder.Configuration.GetSection(WhatsAppSettings.SectionName));
+
+builder.Services.AddSingleton<MockWhatsAppProvider>();
+builder.Services
+    .AddHttpClient<MetaWhatsAppProvider>((serviceProvider, client) =>
+    {
+        var settings = serviceProvider.GetRequiredService<IOptions<WhatsAppSettings>>().Value;
+        client.Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds > 0 ? settings.TimeoutSeconds : 30);
+    })
+    // Evita que LoggingHttpMessageHandler registre encabezados Authorization Bearer o URLs sensibles.
+    .RemoveAllLoggers();
+
+builder.Services.AddScoped<IWhatsAppProvider>(sp =>
+{
+    var settings = sp.GetRequiredService<IOptionsMonitor<WhatsAppSettings>>().CurrentValue;
+    // Si Provider=Meta, siempre resuelve MetaWhatsAppProvider (que rechaza en fail-closed si Enabled=false o faltan credenciales);
+    // jamás cae silenciosamente a Mock cuando se pidió Meta.
+    return settings.UsaProveedorMeta
+        ? sp.GetRequiredService<MetaWhatsAppProvider>()
+        : sp.GetRequiredService<MockWhatsAppProvider>();
+});
+builder.Services.AddScoped<IWhatsAppAutoResponder, NoOpWhatsAppAutoResponder>();
+builder.Services.AddScoped<IWhatsAppOutboxService, WhatsAppOutboxService>();
+builder.Services.AddScoped<IWhatsAppWebhookService, WhatsAppWebhookService>();
+builder.Services.AddScoped<IWhatsAppService, WhatsAppService>();
+builder.Services.AddHostedService<WhatsAppOutboxBackgroundService>();
+
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
@@ -361,6 +395,7 @@ app.MapAuditoriaEndpoints();
 app.MapPortalEndpoints();
 app.MapFotoEndpoints();
 app.MapYamahaEndpoints();
+app.MapWhatsAppEndpoints();
 app.MapCitaEndpoints();
 app.MapPedidoLimaEndpoints();
 app.MapAprobacionEndpoints();

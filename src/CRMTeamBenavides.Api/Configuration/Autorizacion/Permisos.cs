@@ -91,6 +91,10 @@ public static class PermisosDefinidos
     public const string ComprasRegistrar = "compras.registrar";
     public const string ComprasAnular = "compras.anular";
 
+    // WhatsApp Business Cloud API
+    public const string WhatsAppVer = "whatsapp.ver";
+    public const string WhatsAppGestionar = "whatsapp.gestionar";
+
     public static readonly IReadOnlyList<string> Todos = new[]
     {
         UsuariosVer, UsuariosCrear, UsuariosEditar, UsuariosEliminar, UsuariosResetPassword,
@@ -109,7 +113,8 @@ public static class PermisosDefinidos
         PortalAcceso,
         CitasVer, CitasCrear, CitasEditar, CitasCancelar,
         PedidosLimaVer, PedidosLimaCrear, PedidosLimaEditar, PedidosLimaDespachar, PedidosLimaCancelar,
-        ComprasVer, ComprasRegistrar, ComprasAnular
+        ComprasVer, ComprasRegistrar, ComprasAnular,
+        WhatsAppVer, WhatsAppGestionar
     };
 }
 

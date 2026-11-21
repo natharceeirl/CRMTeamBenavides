@@ -75,6 +75,16 @@ services:
       YamahaApi__HoraCierreStockPeru: ${YAMAHA_HORA_CIERRE_STOCK_PERU:-22:00}
       YamahaApi__HoraLimiteRecuperacionStockPeru: ${YAMAHA_HORA_LIMITE_RECUPERACION_STOCK_PERU:-08:00}
       YamahaApi__TimeoutSeconds: ${YAMAHA_TIMEOUT_SECONDS:-60}
+      # WhatsApp Business Cloud API: deshabilitado por defecto (Enabled=false, Provider=Mock).
+      # GraphApiVersion es provisional; confirmar vigencia en Meta antes de habilitar Provider=Meta.
+      WhatsApp__Enabled: ${WHATSAPP_ENABLED:-false}
+      WhatsApp__Provider: ${WHATSAPP_PROVIDER:-Mock}
+      WhatsApp__PhoneNumberId: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WhatsApp__BusinessAccountId: ${WHATSAPP_BUSINESS_ACCOUNT_ID:-}
+      WhatsApp__AccessToken: ${WHATSAPP_ACCESS_TOKEN:-}
+      WhatsApp__AppSecret: ${WHATSAPP_APP_SECRET:-}
+      WhatsApp__WebhookVerifyToken: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
+      WhatsApp__GraphApiVersion: ${WHATSAPP_GRAPH_API_VERSION:-v21.0}
       # Sin cada consulta SQL ni URLs de HttpClient (con ?code=...) en el log.
       Logging__LogLevel__Microsoft.EntityFrameworkCore: Warning
       Logging__LogLevel__System.Net.Http.HttpClient: Warning

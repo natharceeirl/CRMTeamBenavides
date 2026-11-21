@@ -783,6 +783,8 @@ export type VentasResumenResponse = {
 
 // ── Dominio ─────────────────────────────────────────────────────────────────
 
+export type DireccionMensajeWhatsApp = 'Entrante' | 'Saliente'
+
 /** NoAplica = 0 · Pendiente = 1 · Aprobado = 2 · Rechazado = 3 */
 export type EstadoAprobacionGerencia = 0 | 1 | 2 | 3
 
@@ -796,6 +798,10 @@ export type EstadoCita = 'Pendiente' | 'Confirmada' | 'EnTaller' | 'Completada' 
 
 /** Registrada = 0 · Anulada = 1 */
 export type EstadoCompra = 0 | 1
+
+export type EstadoConversacionWhatsApp = 'Abierta' | 'EnAtencion' | 'Cerrada'
+
+export type EstadoMensajeWhatsApp = 'Pendiente' | 'Enviado' | 'Entregado' | 'Leido' | 'Fallido' | 'Recibido' | 'Indeterminado'
 
 /** Abierta = 0 · Diagnostico = 1 · Aprobada = 2 · EnProceso = 3 · Lista = 4 · Entregada = 5 · Cancelada = 6 */
 export type EstadoOrdenServicio = 0 | 1 | 2 | 3 | 4 | 5 | 6
@@ -816,6 +822,8 @@ export type MetodoCosteo = 0 | 1
 
 /** EnTaller = 0 · EnSitio = 1 */
 export type ModalidadAtencion = 0 | 1
+
+export type ModoAtencionWhatsApp = 'Bot' | 'Humano'
 
 /** PEN = 0 · USD = 1 */
 export type MonedaCompra = 0 | 1
@@ -847,6 +855,8 @@ export type TipoItemServicio = 0 | 1 | 2 | 3
 /** Kilometraje = 0 · Horas = 1 */
 export type TipoMedidor = 0 | 1
 
+export type TipoMensajeWhatsApp = 'Texto' | 'Imagen' | 'Documento' | 'Audio' | 'Video' | 'Ubicacion' | 'Sticker' | 'Interactivo' | 'Reaccion' | 'Desconocido'
+
 /** Ingreso = 0 · Egreso = 1 */
 export type TipoMovimientoCaja = 0 | 1
 
@@ -856,8 +866,8 @@ export type TipoNotificacion = 0 | 1 | 2 | 3 | 4 | 5
 /** Repuesto = 0 · Vehiculo = 1 */
 export type TipoProducto = 0 | 1
 
-/** Motocicleta = 0 · Cuatrimoto = 1 · MotoAcuatica = 2 · Generador = 3 · Otro = 4 */
-export type TipoUnidad = 0 | 1 | 2 | 3 | 4
+/** Motocicleta = 0 · Cuatrimoto = 1 · MotoAcuatica = 2 · Generador = 3 · Otro = 4 · MotorFueraDeBorda = 5 */
+export type TipoUnidad = 0 | 1 | 2 | 3 | 4 | 5
 
 // ── Fotos ───────────────────────────────────────────────────────────────────
 
@@ -1932,6 +1942,10 @@ export type VehiculoResponse = {
 
 // ── Ventas ──────────────────────────────────────────────────────────────────
 
+export type ActualizarDeclaracionRequest = {
+  declarada: boolean
+}
+
 export type ActualizarReportarYamahaRequest = {
   reportarAYamaha: boolean
 }
@@ -2075,10 +2089,6 @@ export type VentaDetalleResponse = {
   declarada: boolean
 }
 
-export type ActualizarDeclaracionRequest = {
-  declarada: boolean
-}
-
 export type VentaResponse = {
   id: string
   clienteId: string
@@ -2104,6 +2114,112 @@ export type VentaResponse = {
   subtotalGratuito: number
   reportarAYamaha: boolean
   declarada: boolean
+}
+
+// ── WhatsApp ────────────────────────────────────────────────────────────────
+
+export type WhatsAppAsignarAgenteRequest = {
+  agenteId?: string | null
+}
+
+export type WhatsAppCambiarEstadoRequest = {
+  estado: EstadoConversacionWhatsApp
+}
+
+export type WhatsAppCambiarModoRequest = {
+  modoAtencion: ModoAtencionWhatsApp
+}
+
+export type WhatsAppConversacionDetalleResponse = {
+  id: string
+  telefonoE164: string
+  whatsAppId: string | null
+  nombrePerfilWhatsApp: string | null
+  clienteId: string | null
+  clienteNombre: string | null
+  clienteDocumento: string | null
+  asociacionClienteAmbigua: boolean
+  estado: EstadoConversacionWhatsApp
+  modoAtencion: ModoAtencionWhatsApp
+  agenteAsignadoId: string | null
+  agenteAsignadoNombre: string | null
+  fechaCreacion: string
+  fechaUltimoMensaje: string | null
+  fechaUltimoMensajeEntrante: string | null
+  fechaCambioModoHumano: string | null
+  fechaModificacion: string | null
+  totalMensajes: number
+}
+
+export type WhatsAppConversacionResumenResponse = {
+  id: string
+  telefonoE164: string
+  whatsAppId: string | null
+  nombrePerfilWhatsApp: string | null
+  clienteId: string | null
+  clienteNombre: string | null
+  asociacionClienteAmbigua: boolean
+  estado: EstadoConversacionWhatsApp
+  modoAtencion: ModoAtencionWhatsApp
+  agenteAsignadoId: string | null
+  agenteAsignadoNombre: string | null
+  fechaCreacion: string
+  fechaUltimoMensaje: string | null
+  fechaUltimoMensajeEntrante: string | null
+  fechaModificacion: string | null
+  ultimoMensajePreview: string | null
+}
+
+export type WhatsAppConversacionesPaginadasResponse = {
+  items: WhatsAppConversacionResumenResponse[]
+  totalRegistros: number
+  pagina: number
+  tamanoPagina: number
+}
+
+export type WhatsAppEnviarMensajeRequest = {
+  texto: string
+  idempotencyKey?: string | null
+}
+
+export type WhatsAppEstadoIntegracionResponse = {
+  enabled: boolean
+  provider: string
+  graphApiVersion: string
+  tieneCredencialesMetaConfiguradas: boolean
+  tieneSeguridadWebhookConfigurada: boolean
+}
+
+export type WhatsAppMensajeResponse = {
+  id: string
+  conversacionId: string
+  externalMessageId: string | null
+  idempotencyKey: string | null
+  direccion: DireccionMensajeWhatsApp
+  tipo: TipoMensajeWhatsApp
+  contenidoTexto: string | null
+  estado: EstadoMensajeWhatsApp
+  fechaEventoUtc: string
+  fechaRecepcionUtc: string
+  fechaUltimoEstadoUtc: string | null
+  enviadoPorUsuarioId: string | null
+  enviadoPorUsuarioNombre: string | null
+  mediaId: string | null
+  mediaMimeType: string | null
+  mediaNombreArchivo: string | null
+  metadataTecnicaJson: string | null
+  errorDetalle: string | null
+}
+
+export type WhatsAppMensajesPaginadosResponse = {
+  items: WhatsAppMensajeResponse[]
+  totalRegistros: number
+  pagina: number
+  tamanoPagina: number
+}
+
+export type WhatsAppVincularClienteRequest = {
+  clienteId?: string | null
 }
 
 // ── Yamaha ──────────────────────────────────────────────────────────────────

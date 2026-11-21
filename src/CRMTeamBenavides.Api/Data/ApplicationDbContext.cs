@@ -78,6 +78,12 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
     // Integración Yamaha Motor del Perú v3
     public DbSet<YamahaSyncLog> YamahaSyncLogs => Set<YamahaSyncLog>();
 
+    // Integración WhatsApp Business Cloud API
+    public DbSet<ConversacionWhatsApp> ConversacionesWhatsApp => Set<ConversacionWhatsApp>();
+    public DbSet<MensajeWhatsApp> MensajesWhatsApp => Set<MensajeWhatsApp>();
+    public DbSet<OutboxMensajeWhatsApp> OutboxMensajesWhatsApp => Set<OutboxMensajeWhatsApp>();
+    public DbSet<EventoWebhookWhatsApp> EventosWebhookWhatsApp => Set<EventoWebhookWhatsApp>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -945,6 +951,153 @@ public class ApplicationDbContext : IdentityUserContext<Usuario, Guid>
             entity.HasIndex(l => l.Estado);
             entity.HasIndex(l => l.FechaInicio);
             entity.HasIndex(l => l.Exitoso);
+        });
+
+        // --- Integración WhatsApp Business Cloud API ---
+        modelBuilder.Entity<ConversacionWhatsApp>(entity =>
+        {
+            entity.ToTable("ConversacionesWhatsApp");
+
+            entity.Property(c => c.TelefonoE164)
+                .IsRequired()
+                .HasMaxLength(20);
+
+            entity.Property(c => c.WhatsAppId)
+                .HasMaxLength(32);
+
+            entity.Property(c => c.NombrePerfilWhatsApp)
+                .HasMaxLength(150);
+
+            entity.HasOne(c => c.Cliente)
+                .WithMany()
+                .HasForeignKey(c => c.ClienteId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(c => c.AgenteAsignado)
+                .WithMany()
+                .HasForeignKey(c => c.AgenteAsignadoId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(c => c.TelefonoE164)
+                .IsUnique()
+                .HasFilter("\"Activo\" = true");
+
+            entity.HasIndex(c => c.WhatsAppId);
+            entity.HasIndex(c => c.ClienteId);
+            entity.HasIndex(c => new { c.Estado, c.ModoAtencion, c.FechaUltimoMensaje });
+            entity.HasIndex(c => c.FechaUltimoMensaje);
+        });
+
+        modelBuilder.Entity<MensajeWhatsApp>(entity =>
+        {
+            entity.ToTable("MensajesWhatsApp");
+
+            entity.Property(m => m.ExternalMessageId)
+                .HasMaxLength(128);
+
+            entity.Property(m => m.IdempotencyKey)
+                .HasMaxLength(128);
+
+            entity.Property(m => m.ContenidoTexto)
+                .HasMaxLength(4096);
+
+            entity.Property(m => m.MediaId)
+                .HasMaxLength(128);
+
+            entity.Property(m => m.MediaMimeType)
+                .HasMaxLength(100);
+
+            entity.Property(m => m.MediaSha256)
+                .HasMaxLength(128);
+
+            entity.Property(m => m.MediaNombreArchivo)
+                .HasMaxLength(255);
+
+            entity.Property(m => m.MetadataTecnicaJson)
+                .HasMaxLength(2000);
+
+            entity.Property(m => m.ErrorDetalle)
+                .HasMaxLength(500);
+
+            entity.HasOne(m => m.Conversacion)
+                .WithMany(c => c.Mensajes)
+                .HasForeignKey(m => m.ConversacionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(m => m.EnviadoPorUsuario)
+                .WithMany()
+                .HasForeignKey(m => m.EnviadoPorUsuarioId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Unicidad estricta del wamid de Meta para evitar duplicados ante reintentos/concurrencia
+            entity.HasIndex(m => m.ExternalMessageId)
+                .IsUnique()
+                .HasFilter("\"ExternalMessageId\" IS NOT NULL");
+
+            // Unicidad de clave idempotente para evitar envíos salientes duplicados
+            entity.HasIndex(m => m.IdempotencyKey)
+                .IsUnique()
+                .HasFilter("\"IdempotencyKey\" IS NOT NULL");
+
+            entity.HasIndex(m => new { m.ConversacionId, m.FechaEventoUtc });
+            entity.HasIndex(m => new { m.ConversacionId, m.FechaRecepcionUtc });
+            entity.HasIndex(m => m.Estado);
+        });
+
+        modelBuilder.Entity<OutboxMensajeWhatsApp>(entity =>
+        {
+            entity.ToTable("OutboxMensajesWhatsApp");
+
+            entity.Property(o => o.DestinatarioE164)
+                .IsRequired()
+                .HasMaxLength(20);
+
+            entity.Property(o => o.ContenidoTexto)
+                .IsRequired()
+                .HasMaxLength(4096);
+
+            entity.Property(o => o.IdempotencyKey)
+                .IsRequired()
+                .HasMaxLength(128);
+
+            entity.Property(o => o.UltimoError)
+                .HasMaxLength(500);
+
+            entity.Property(o => o.HistorialIntentosJson)
+                .HasMaxLength(4000);
+
+            entity.HasOne(o => o.MensajeWhatsApp)
+                .WithOne()
+                .HasForeignKey<OutboxMensajeWhatsApp>(o => o.MensajeWhatsAppId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(o => o.MensajeWhatsAppId).IsUnique();
+            entity.HasIndex(o => o.IdempotencyKey).IsUnique();
+            entity.HasIndex(o => new { o.Estado, o.ProximoIntentoUtc, o.ReservadoHastaUtc });
+            entity.HasIndex(o => o.ConversacionId);
+        });
+
+        modelBuilder.Entity<EventoWebhookWhatsApp>(entity =>
+        {
+            entity.ToTable("EventosWebhookWhatsApp");
+
+            entity.Property(e => e.PayloadHashSha256)
+                .IsRequired()
+                .HasMaxLength(64);
+
+            entity.Property(e => e.TipoEvento)
+                .IsRequired()
+                .HasMaxLength(64);
+
+            entity.Property(e => e.ExternalMessageId)
+                .HasMaxLength(128);
+
+            entity.Property(e => e.Resumen)
+                .HasMaxLength(500);
+
+            entity.HasIndex(e => e.FechaRecepcionUtc);
+            entity.HasIndex(e => e.ExternalMessageId);
+            entity.HasIndex(e => e.PayloadHashSha256);
         });
     }
 }
