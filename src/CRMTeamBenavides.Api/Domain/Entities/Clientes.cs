@@ -55,7 +55,8 @@ public enum TipoUnidad
     Cuatrimoto,
     MotoAcuatica,
     Generador,
-    Otro
+    Otro,
+    MotorFueraDeBorda
 }
 
 public enum TipoMedidor

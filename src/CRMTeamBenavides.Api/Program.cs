@@ -293,7 +293,9 @@ builder.Services
         {
             client.DefaultRequestHeaders.Add(settings.AuthHeaderName, settings.AuthHeaderValue);
         }
-    });
+    })
+    // Evita que LoggingHttpMessageHandler escriba la URI cruda con ?code={Function_Key} en los logs.
+    .RemoveAllLoggers();
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi

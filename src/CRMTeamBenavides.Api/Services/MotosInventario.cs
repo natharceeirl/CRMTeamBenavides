@@ -1,4 +1,5 @@
 using CRMTeamBenavides.Api.Features.Motos;
+using CRMTeamBenavides.Api.Features.Yamaha;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -158,13 +159,39 @@ public static class MotosInventario
         if (deCliente is not null)
             return $"La serie {deCliente} ya es la unidad de un cliente: revisa Unidades antes de venderla.";
 
+        var productoParaClasificar = producto;
+        if (producto.Categoria is null && producto.CategoriaId != Guid.Empty)
+        {
+            var categoria = await contexto.CategoriasProducto
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == producto.CategoriaId);
+            if (categoria is not null)
+            {
+                productoParaClasificar = new Producto
+                {
+                    Codigo = producto.Codigo,
+                    Nombre = producto.Nombre,
+                    Descripcion = producto.Descripcion,
+                    Marca = producto.Marca,
+                    Tipo = producto.Tipo,
+                    CategoriaId = producto.CategoriaId,
+                    Categoria = categoria
+                };
+            }
+        }
+
+        var tipoUnidad = YamahaCatalogMapper.InferirTipoUnidadDesdeProducto(productoParaClasificar);
+        var tipoMedidor = tipoUnidad is TipoUnidad.MotoAcuatica or TipoUnidad.MotorFueraDeBorda or TipoUnidad.Generador
+            ? TipoMedidor.Horas
+            : TipoMedidor.Kilometraje;
+
         var ahora = DateTime.UtcNow;
         foreach (var moto in motos)
         {
             var unidad = new Vehiculo
             {
                 ClienteId = venta.ClienteId,
-                TipoUnidad = TipoUnidad.Motocicleta,
+                TipoUnidad = tipoUnidad,
                 Marca = string.IsNullOrWhiteSpace(producto.Marca) ? "Yamaha" : producto.Marca.Trim(),
                 Modelo = producto.Nombre.Trim(),
                 Anio = moto.Anio,
@@ -174,8 +201,9 @@ public static class MotosInventario
                 Dua = moto.Dua,
                 ItemDua = moto.ItemDua,
                 FechaInicioGarantia = HoraPeru.Hoy(),
-                TipoMedidor = TipoMedidor.Kilometraje,
-                Kilometraje = 0,
+                TipoMedidor = tipoMedidor,
+                Kilometraje = tipoMedidor == TipoMedidor.Kilometraje ? 0 : null,
+                HorasUso = tipoMedidor == TipoMedidor.Horas ? 0 : null,
                 LecturaMedidorActual = 0,
                 Observaciones = "Vendida por el taller.",
                 FechaCreacion = ahora,

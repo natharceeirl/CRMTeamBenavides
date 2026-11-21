@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.Http.Headers;
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 
 namespace CRMTeamBenavides.Api.Features.Yamaha;
@@ -177,6 +178,26 @@ public sealed class YamahaApiClient : IYamahaApiClient
                         hashEnviado);
                 }
 
+                // Verificar rechazo lógico o parcial dentro de una respuesta HTTP 2xx
+                // conforme al contrato real observado en Azure Functions: {"total":N,"exitosos":X,"fallidos":Y,"status":"ok"|"error"}
+                var errorLogico2xx = DetectarErrorLogicoEnCuerpo2xx(bodySanitizado);
+                if (errorLogico2xx is not null)
+                {
+                    _logger.LogWarning(
+                        "Yamaha API [{Servicio}] respondió status {StatusCode} con rechazo lógico/parcial: {Detalle}",
+                        nombreServicio,
+                        statusCode,
+                        errorLogico2xx);
+
+                    return new YamahaHttpRespuestaDto(
+                        statusCode,
+                        EsExitoso: false,
+                        bodySanitizado,
+                        MensajeError: errorLogico2xx,
+                        stopwatch.Elapsed,
+                        hashEnviado);
+                }
+
                 _logger.LogInformation(
                     "Yamaha API [{Servicio}] respondió exitosamente con status {StatusCode} en {Ms}ms.",
                     nombreServicio,
@@ -233,6 +254,66 @@ public sealed class YamahaApiClient : IYamahaApiClient
                     stopwatch.Elapsed,
                     hashEnviado);
             }
+        }
+    }
+
+    /// <summary>
+    /// Inspecciona el JSON devuelto en HTTP 2xx para detectar respuestas parciales o errores lógicos
+    /// (<c>fallidos &gt; 0</c> o <c>status == "error"</c>), sin asumir que todo HTTP 200 implica 100 % de aceptación.
+    /// </summary>
+    internal static string? DetectarErrorLogicoEnCuerpo2xx(string? cuerpoJson)
+    {
+        if (string.IsNullOrWhiteSpace(cuerpoJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(cuerpoJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            string? status = null;
+            int? total = null;
+            int? exitosos = null;
+            int? fallidos = null;
+
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (prop.Name.Equals("status", StringComparison.OrdinalIgnoreCase) && prop.Value.ValueKind == JsonValueKind.String)
+                {
+                    status = prop.Value.GetString();
+                }
+                else if (prop.Name.Equals("total", StringComparison.OrdinalIgnoreCase) && prop.Value.TryGetInt32(out var t))
+                {
+                    total = t;
+                }
+                else if (prop.Name.Equals("exitosos", StringComparison.OrdinalIgnoreCase) && prop.Value.TryGetInt32(out var ex))
+                {
+                    exitosos = ex;
+                }
+                else if (prop.Name.Equals("fallidos", StringComparison.OrdinalIgnoreCase) && prop.Value.TryGetInt32(out var f))
+                {
+                    fallidos = f;
+                }
+            }
+
+            var tieneStatusError = string.Equals(status, "error", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase);
+
+            if ((fallidos.HasValue && fallidos.Value > 0) || tieneStatusError)
+            {
+                return $"Yamaha API reportó rechazo parcial/lógico en HTTP 2xx (status={status ?? "desconocido"}, total={total?.ToString() ?? "?"}, exitosos={exitosos?.ToString() ?? "?"}, fallidos={fallidos?.ToString() ?? "?"}).";
+            }
+
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 

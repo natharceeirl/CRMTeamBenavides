@@ -63,6 +63,10 @@ public sealed class YamahaMappingService : IYamahaMappingService
         {
             errores.Add("La venta no cuenta con comprobante de facturación emitido. Yamaha v3 Sección 4 exige NumeroComprobante y FechaFacturacion obligatorios.");
         }
+        else if (!comprobante.Activo)
+        {
+            errores.Add("El comprobante asociado a la venta se encuentra inactivo.");
+        }
         else if (string.Equals(comprobante.Estado, "Anulado", StringComparison.OrdinalIgnoreCase))
         {
             errores.Add("El comprobante asociado a la venta se encuentra en estado 'Anulado'.");
@@ -136,9 +140,17 @@ public sealed class YamahaMappingService : IYamahaMappingService
         {
             errores.Add("La línea de detalle de venta no cuenta con el Producto asociado cargado para obtener el código SKU.");
         }
-        else if (string.IsNullOrWhiteSpace(codigoYamaha))
+        else
         {
-            errores.Add("El producto asociado a la línea de venta no cuenta con código SKU (CodigoYamaha).");
+            var resCodigo = YamahaCatalogMapper.ValidarCodigoYamaha(producto.Codigo);
+            if (!resCodigo.EsValido)
+            {
+                errores.Add(resCodigo.Error!);
+            }
+            else
+            {
+                codigoYamaha = resCodigo.Valor!;
+            }
         }
 
         if (detalle.Cantidad <= 0)
@@ -146,7 +158,7 @@ public sealed class YamahaMappingService : IYamahaMappingService
             errores.Add($"La cantidad vendida debe ser mayor a 0 (recibido: {detalle.Cantidad}).");
         }
 
-        // Validación de datos específicos de unidades físicas (MC o ATV)
+        // Validación de datos específicos de unidades físicas (MC, ATV u OM)
         var esVehiculo = unidadFisica is not null || detalle.Producto?.Tipo == TipoProducto.Vehiculo;
         string lineaNegocio;
         string vin = string.Empty;
@@ -161,51 +173,86 @@ public sealed class YamahaMappingService : IYamahaMappingService
 
         if (esVehiculo)
         {
-            if (unidadFisica is null)
+            var vehiculoReferencia = unidadFisica?.Vehiculo ?? vehiculo;
+            var resLinea = YamahaCatalogMapper.ClasificarLineaNegocioVehiculo(detalle.Producto, vehiculoReferencia);
+            if (!resLinea.EsValido)
             {
-                errores.Add("La línea de venta corresponde a un vehículo pero no se suministró la unidad física individual con su número de serie/VIN.");
-                lineaNegocio = YamahaCatalogMapper.DeterminarLineaNegocioVehiculo(detalle.Producto, vehiculo);
+                errores.Add(resLinea.Error!);
+                lineaNegocio = string.Empty;
             }
             else
             {
-                lineaNegocio = YamahaCatalogMapper.DeterminarLineaNegocioVehiculo(detalle.Producto, unidadFisica.Vehiculo ?? vehiculo);
+                lineaNegocio = resLinea.Valor!;
+            }
+
+            if (unidadFisica is null)
+            {
+                errores.Add("La línea de venta corresponde a un vehículo pero no se suministró la unidad física individual con su número de serie/VIN.");
+            }
+            else
+            {
                 vin = unidadFisica.NumeroSerieVIN?.Trim() ?? string.Empty;
-                numeroMotor = unidadFisica.NumeroMotor?.Trim() ?? string.Empty;
                 modelo = !string.IsNullOrWhiteSpace(unidadFisica.Vehiculo?.Modelo)
                     ? unidadFisica.Vehiculo.Modelo.Trim()
                     : (detalle.Producto?.Nombre?.Trim() ?? string.Empty);
-                color = !string.IsNullOrWhiteSpace(unidadFisica.Color)
-                    ? unidadFisica.Color.Trim()
-                    : (unidadFisica.Vehiculo?.Color?.Trim() ?? string.Empty);
-                anioModelo = unidadFisica.Anio ?? unidadFisica.Vehiculo?.Anio;
 
-                if (string.IsNullOrWhiteSpace(vin))
+                var colorCrudo = !string.IsNullOrWhiteSpace(unidadFisica.Color)
+                    ? unidadFisica.Color
+                    : unidadFisica.Vehiculo?.Color;
+                var (colorSanitizado, colorDescartado) = YamahaCatalogMapper.SanitizarColorOpcional(colorCrudo);
+                color = colorSanitizado;
+                if (colorDescartado)
                 {
-                    errores.Add("El campo VIN/número de serie es obligatorio para ventas de vehículos (MC/ATV).");
-                }
-                else if (vin.Length < YamahaV3Catalogos.LongitudMinimaChasis || vin.Length > YamahaV3Catalogos.LongitudMaximaChasis)
-                {
-                    errores.Add($"El VIN '{vin}' debe tener entre {YamahaV3Catalogos.LongitudMinimaChasis} y {YamahaV3Catalogos.LongitudMaximaChasis} caracteres.");
+                    observaciones.Add($"Color '{colorCrudo}' omitido por no cumplir el formato Yamaha v3 (Sección 4).");
                 }
 
-                if (string.IsNullOrWhiteSpace(numeroMotor))
+                if (!string.IsNullOrEmpty(lineaNegocio))
                 {
-                    errores.Add("El campo NumeroMotor es obligatorio para ventas de vehículos (MC/ATV).");
-                }
-
-                if (!anioModelo.HasValue || anioModelo.Value <= 1900)
-                {
-                    errores.Add("El campo AnioModelo es obligatorio y debe ser mayor a 1900 para ventas de vehículos (MC/ATV).");
-                }
-
-                if (string.IsNullOrWhiteSpace(color))
-                {
-                    errores.Add("El campo Color es obligatorio para ventas de vehículos (MC/ATV).");
+                    var resVin = YamahaCatalogMapper.ValidarVinVehiculo(vin, lineaNegocio);
+                    if (!resVin.EsValido)
+                    {
+                        errores.Add(resVin.Error!);
+                    }
+                    else
+                    {
+                        vin = resVin.Valor!;
+                        if (!string.IsNullOrEmpty(codigoYamaha) &&
+                            string.Equals(vin, codigoYamaha, StringComparison.OrdinalIgnoreCase))
+                        {
+                            errores.Add("El campo VIN no puede ser igual a CodigoYamaha (Sección 8).");
+                        }
+                    }
                 }
 
                 if (string.IsNullOrWhiteSpace(modelo))
                 {
-                    errores.Add("El campo Modelo es obligatorio para ventas de vehículos (MC/ATV).");
+                    errores.Add("El campo Modelo es obligatorio para ventas de vehículos (MC/ATV/OM).");
+                }
+
+                // Sección 4: AnioModelo y NumeroMotor son obligatorios para MC y ATV, y NO aplican para OM.
+                var esMotoOCuatrimoto = string.Equals(lineaNegocio, YamahaV3Catalogos.LineaMotocicletas, StringComparison.Ordinal)
+                    || string.Equals(lineaNegocio, YamahaV3Catalogos.LineaCuatrimotos, StringComparison.Ordinal);
+
+                if (esMotoOCuatrimoto)
+                {
+                    numeroMotor = unidadFisica.NumeroMotor?.Trim() ?? string.Empty;
+                    anioModelo = unidadFisica.Anio ?? unidadFisica.Vehiculo?.Anio;
+
+                    if (string.IsNullOrWhiteSpace(numeroMotor))
+                    {
+                        errores.Add($"El campo NumeroMotor es obligatorio para ventas de '{lineaNegocio}'.");
+                    }
+
+                    if (!anioModelo.HasValue || anioModelo.Value <= 1900)
+                    {
+                        errores.Add($"El campo AnioModelo es obligatorio y debe ser mayor a 1900 para ventas de '{lineaNegocio}'.");
+                    }
+                }
+                else if (string.Equals(lineaNegocio, YamahaV3Catalogos.LineaMotoresFueraDeBorda, StringComparison.Ordinal))
+                {
+                    // Para OM, Sección 4 indica que AnioModelo y NumeroMotor no aplican (se envían vacíos/0).
+                    numeroMotor = string.Empty;
+                    anioModelo = null;
                 }
             }
 
@@ -225,10 +272,28 @@ public sealed class YamahaMappingService : IYamahaMappingService
 
         // Cálculos monetarios e importes con redondeo seguro
         // Una línea gratuita se reporta con lo que se cobró: S/ 0.00 (decisión del 10/11, por confirmar con Yamaha).
-        var montoConIgv = detalle.TipoAfectacionIgv.EsGratuita() ? 0m
-            : detalle.Total > 0
-                ? Math.Round(detalle.Total, 2, MidpointRounding.AwayFromZero)
-                : Math.Round(detalle.Cantidad * detalle.PrecioUnitario, 2, MidpointRounding.AwayFromZero);
+        var factorIgv = 1m + (contexto.PorcentajeIgv > 0m ? contexto.PorcentajeIgv / 100m : 0.18m);
+        decimal montoConIgv;
+        if (detalle.TipoAfectacionIgv.EsGratuita())
+        {
+            montoConIgv = 0m;
+        }
+        else if (detalle.Total > 0)
+        {
+            montoConIgv = Math.Round(detalle.Total, 2, MidpointRounding.AwayFromZero);
+        }
+        else if (detalle.PrecioUnitarioConIgv is > 0m)
+        {
+            montoConIgv = Math.Round(detalle.Cantidad * detalle.PrecioUnitarioConIgv.Value, 2, MidpointRounding.AwayFromZero);
+        }
+        else if (detalle.TipoAfectacionIgv == TipoAfectacionIgv.Gravado)
+        {
+            montoConIgv = Math.Round(detalle.Cantidad * detalle.PrecioUnitario * factorIgv, 2, MidpointRounding.AwayFromZero);
+        }
+        else
+        {
+            montoConIgv = Math.Round(detalle.Cantidad * detalle.PrecioUnitario, 2, MidpointRounding.AwayFromZero);
+        }
 
         decimal montoSinIgv;
         if (detalle.TipoAfectacionIgv.EsGratuita())
@@ -239,7 +304,7 @@ public sealed class YamahaMappingService : IYamahaMappingService
         {
             montoSinIgv = detalle.SubtotalGravado > 0
                 ? Math.Round(detalle.SubtotalGravado, 2, MidpointRounding.AwayFromZero)
-                : Math.Round(montoConIgv / 1.18m, 2, MidpointRounding.AwayFromZero);
+                : Math.Round(montoConIgv / factorIgv, 2, MidpointRounding.AwayFromZero);
         }
         else
         {
@@ -295,9 +360,18 @@ public sealed class YamahaMappingService : IYamahaMappingService
         var ciudadCliente = contexto.CiudadSede;
         var departamentoCliente = contexto.DepartamentoSede;
 
-        // Celular y correo
-        var celularCliente = cliente.Telefono?.Trim() ?? string.Empty;
-        var correoCliente = cliente.Email?.Trim() ?? string.Empty;
+        // Celular y correo (opcionales: se sanitizan para no bloquear el lote por teléfonos fijos o formatos sucios)
+        var (celularCliente, celularDescartado) = YamahaCatalogMapper.SanitizarCelularOpcional(cliente.Telefono);
+        if (celularDescartado)
+        {
+            observaciones.Add("CelularCliente omitido por no corresponder a un celular de 9 dígitos.");
+        }
+
+        var (correoCliente, correoDescartado) = YamahaCatalogMapper.SanitizarCorreoOpcional(cliente.Email);
+        if (correoDescartado)
+        {
+            observaciones.Add("CorreoCliente omitido por no tener formato de correo válido.");
+        }
 
         // Vehículo (si aplica)
         vehiculo ??= venta.OrdenServicio?.Vehiculo;
@@ -520,10 +594,16 @@ public sealed class YamahaMappingService : IYamahaMappingService
                 $"El producto '{producto.Nombre}' es un modelo de vehículo. Las motocicletas y cuatrimotos no se proyectan como repuestos (SP); sus unidades físicas en stock se proyectan con su VIN individual como MC o ATV.");
         }
 
-        var codigo = producto.Codigo?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(codigo))
+        if (!producto.Activo)
         {
-            errores.Add("El producto no cuenta con código SKU (CodigoYamaha).");
+            errores.Add($"El producto '{producto.Codigo}' está inactivo y no debe reportarse en Stock.");
+        }
+
+        var resCodigo = YamahaCatalogMapper.ValidarCodigoYamaha(producto.Codigo);
+        var codigo = resCodigo.EsValido ? resCodigo.Valor! : string.Empty;
+        if (!resCodigo.EsValido)
+        {
+            errores.Add(resCodigo.Error!);
         }
 
         var nombre = producto.Nombre?.Trim() ?? string.Empty;
@@ -544,9 +624,10 @@ public sealed class YamahaMappingService : IYamahaMappingService
 
         // Sección 5.2: En repuestos (SP), StockDisponible = 0 es plenamente válido.
         // D-03: Mapeamos CostoVentaSinIGV desde producto.Costo (costo de adquisición acordado con Yamaha)
-        // y calculamos CostoVentaConIGV agregando el 18% de IGV.
+        // y calculamos CostoVentaConIGV aplicando el IGV vigente de configuración.
+        var factorIgv = 1m + (contexto.PorcentajeIgv > 0m ? contexto.PorcentajeIgv / 100m : 0.18m);
         var costoSinIgv = Math.Round(producto.Costo, 2, MidpointRounding.AwayFromZero);
-        var costoConIgv = Math.Round(costoSinIgv * 1.18m, 2, MidpointRounding.AwayFromZero);
+        var costoConIgv = Math.Round(costoSinIgv * factorIgv, 2, MidpointRounding.AwayFromZero);
 
         observaciones.Add("D-03: CostoVenta proyectado desde Producto.Costo como costo de adquisición acordado con Yamaha.");
 
@@ -598,21 +679,46 @@ public sealed class YamahaMappingService : IYamahaMappingService
         {
             errores.Add("La unidad física no cuenta con la entidad Producto asociada cargada.");
         }
+        else if (!producto.Activo)
+        {
+            errores.Add($"El modelo '{producto.Codigo}' asociado a la unidad está inactivo.");
+        }
+
+        var resLinea = YamahaCatalogMapper.ClasificarLineaNegocioVehiculo(producto, unidad.Vehiculo);
+        var lineaNegocio = resLinea.EsValido ? resLinea.Valor! : string.Empty;
+        if (!resLinea.EsValido)
+        {
+            errores.Add(resLinea.Error!);
+        }
+
+        var resCodigo = YamahaCatalogMapper.ValidarCodigoYamaha(producto?.Codigo);
+        var codigoYamaha = resCodigo.EsValido ? resCodigo.Valor! : string.Empty;
+        if (producto is not null && !resCodigo.EsValido)
+        {
+            errores.Add(resCodigo.Error!);
+        }
 
         var vin = unidad.NumeroSerieVIN?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(vin))
+        if (!string.IsNullOrEmpty(lineaNegocio))
+        {
+            var resVin = YamahaCatalogMapper.ValidarVinVehiculo(vin, lineaNegocio);
+            if (!resVin.EsValido)
+            {
+                errores.Add(resVin.Error!);
+            }
+            else
+            {
+                vin = resVin.Valor!;
+                if (!string.IsNullOrEmpty(codigoYamaha) &&
+                    string.Equals(vin, codigoYamaha, StringComparison.OrdinalIgnoreCase))
+                {
+                    errores.Add("El campo VIN no puede ser igual a CodigoYamaha (Sección 8).");
+                }
+            }
+        }
+        else if (string.IsNullOrWhiteSpace(vin))
         {
             errores.Add("La unidad física no cuenta con número de serie/VIN.");
-        }
-        else if (vin.Length < YamahaV3Catalogos.LongitudMinimaChasis || vin.Length > YamahaV3Catalogos.LongitudMaximaChasis)
-        {
-            errores.Add($"El VIN '{vin}' debe tener entre {YamahaV3Catalogos.LongitudMinimaChasis} y {YamahaV3Catalogos.LongitudMaximaChasis} caracteres.");
-        }
-
-        var codigoYamaha = producto?.Codigo?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(codigoYamaha))
-        {
-            errores.Add("El modelo de vehículo asociado no cuenta con código SKU.");
         }
 
         var descripcion = producto?.Nombre?.Trim() ?? string.Empty;
@@ -626,10 +732,12 @@ public sealed class YamahaMappingService : IYamahaMappingService
             return YamahaMapeoRegistroResultado<YamahaStockV3Dto>.NoProyectable(idOrigen, errores, observaciones);
         }
 
-        var lineaNegocio = YamahaCatalogMapper.DeterminarLineaNegocioVehiculo(producto, unidad.Vehiculo);
+        var factorIgv = 1m + (contexto.PorcentajeIgv > 0m ? contexto.PorcentajeIgv / 100m : 0.18m);
         var costoSinIgv = Math.Round(unidad.CostoUnitario, 2, MidpointRounding.AwayFromZero);
-        var costoConIgv = Math.Round(costoSinIgv * 1.18m, 2, MidpointRounding.AwayFromZero);
-        var fechaIngreso = YamahaCatalogMapper.FormatearFecha(unidad.FechaCreacion);
+        var costoConIgv = Math.Round(costoSinIgv * factorIgv, 2, MidpointRounding.AwayFromZero);
+        var fechaIngreso = unidad.Compra is not null
+            ? YamahaCatalogMapper.FormatearFecha(unidad.Compra.FechaEmision)
+            : YamahaCatalogMapper.FormatearFecha(unidad.FechaCreacion);
 
         var dto = new YamahaStockV3Dto
         {
@@ -728,6 +836,13 @@ public sealed class YamahaMappingService : IYamahaMappingService
         var errores = new List<string>();
         var observaciones = new List<string>();
 
+        // Órdenes inactivas o canceladas no se reportan como FACTURADO
+        if (!orden.Activo || orden.Estado == EstadoOrdenServicio.Cancelada)
+        {
+            errores.Add($"La orden de servicio se encuentra en estado '{orden.Estado}' (Activo={orden.Activo}) y no es elegible para reporte.");
+            return YamahaMapeoRegistroResultado<YamahaServicioTecnicoV3Dto>.NoProyectable(idOrigen, errores, observaciones);
+        }
+
         // Requisito estricto Sección 6.2: Solo se reportan órdenes facturadas con comprobante emitido
         if (comprobante is null)
         {
@@ -735,9 +850,9 @@ public sealed class YamahaMappingService : IYamahaMappingService
             return YamahaMapeoRegistroResultado<YamahaServicioTecnicoV3Dto>.NoProyectable(idOrigen, errores, observaciones);
         }
 
-        if (string.Equals(comprobante.Estado, "Anulado", StringComparison.OrdinalIgnoreCase))
+        if (!comprobante.Activo || string.Equals(comprobante.Estado, "Anulado", StringComparison.OrdinalIgnoreCase))
         {
-            errores.Add("El comprobante de facturación asociado a la orden está en estado 'Anulado'.");
+            errores.Add($"El comprobante de facturación asociado a la orden no está vigente (Activo={comprobante.Activo}, Estado='{comprobante.Estado}').");
             return YamahaMapeoRegistroResultado<YamahaServicioTecnicoV3Dto>.NoProyectable(idOrigen, errores, observaciones);
         }
 
@@ -833,9 +948,24 @@ public sealed class YamahaMappingService : IYamahaMappingService
             {
                 errores.Add("La línea de repuesto en la orden no cuenta con el Producto asociado cargado para obtener el código SKU.");
             }
-            else if (string.IsNullOrWhiteSpace(codigoYamaha))
+            else
             {
-                errores.Add("El repuesto utilizado no cuenta con código SKU (CodigoYamaha).");
+                var resCodigo = YamahaCatalogMapper.ValidarCodigoYamaha(
+                    producto.Codigo,
+                    YamahaV3Catalogos.LongitudMaximaCodigoYamahaSte);
+                if (!resCodigo.EsValido)
+                {
+                    errores.Add(resCodigo.Error!);
+                }
+                else
+                {
+                    codigoYamaha = resCodigo.Valor!;
+                    if (proyChasis.EsValido &&
+                        string.Equals(codigoYamaha, proyChasis.Valor, StringComparison.OrdinalIgnoreCase))
+                    {
+                        errores.Add("El campo CodigoYamaha no puede ser igual a Chasis (Sección 8).");
+                    }
+                }
             }
 
             if (detalle.Cantidad <= 0)
@@ -844,9 +974,11 @@ public sealed class YamahaMappingService : IYamahaMappingService
             }
 
             cantidad = detalle.Cantidad;
-            precioUnit = detalle.PrecioUnitario > 0
-                ? Math.Round(detalle.PrecioUnitario, 2, MidpointRounding.AwayFromZero)
-                : 0.00m;
+            precioUnit = detalle.TipoAfectacionIgv.EsGratuita()
+                ? 0.00m
+                : (detalle.PrecioUnitario > 0
+                    ? Math.Round(detalle.PrecioUnitario, 2, MidpointRounding.AwayFromZero)
+                    : 0.00m);
 
             // Sección 6.3: El valor '-' es el único permitido para TipoServicio en líneas SP
             tipoServicio = YamahaCatalogMapper.ObtenerTipoServicioParaRepuesto();
@@ -857,16 +989,16 @@ public sealed class YamahaMappingService : IYamahaMappingService
         else
         {
             // Línea de Servicio / Mano de Obra (STE)
+            // Sección 6.2 y payload aceptado por Yamaha (28/10/2026): CodigoYamaha y Descripcion vacíos en STE.
             codigoYamaha = string.Empty;
-            descripcion = !string.IsNullOrWhiteSpace(detalle.Descripcion)
-                ? detalle.Descripcion.Trim()
-                : "SERVICIO TECNICO";
+            descripcion = string.Empty;
 
-            // En STE, Cantidad y PrecioUnit no aplican (se serializan como "" según Sección 3.4 y 6.2)
+            // En STE, Cantidad y PrecioUnit no aplican (se serializan como 0 / 0.00 conforme a aclaración Yamaha)
             cantidad = null;
             precioUnit = null;
 
             // Traducción del TipoAtencion del CRM a código de Yamaha v3 (D-09)
+            // No se inventa equivalencia para combinaciones múltiples hasta confirmación expresa de Yamaha.
             var resTipoAtencion = YamahaCatalogMapper.TraducirTipoAtencion(orden.TipoAtencion);
             if (!resTipoAtencion.EsValido)
             {
@@ -876,6 +1008,11 @@ public sealed class YamahaMappingService : IYamahaMappingService
             else
             {
                 tipoServicio = resTipoAtencion.Valor!;
+                if (orden.TiposAtencion is { Count: > 1 })
+                {
+                    observaciones.Add(
+                        $"D-09: La orden registra múltiples tipos de atención ({string.Join(", ", orden.TiposAtencion)}). Se proyectó el principal '{tipoServicio}' sin inventar código combinado hasta confirmación expresa de Yamaha.");
+                }
             }
 
             actividad = !string.IsNullOrWhiteSpace(detalle.Descripcion)
@@ -890,10 +1027,28 @@ public sealed class YamahaMappingService : IYamahaMappingService
 
         // Totales monetarios de la línea
         // Una línea gratuita se reporta con lo que se cobró: S/ 0.00 (decisión del 10/11, por confirmar con Yamaha).
-        var montoConIgv = detalle.TipoAfectacionIgv.EsGratuita() ? 0m
-            : detalle.Total > 0
-                ? Math.Round(detalle.Total, 2, MidpointRounding.AwayFromZero)
-                : Math.Round(detalle.Cantidad * detalle.PrecioUnitario, 2, MidpointRounding.AwayFromZero);
+        var factorIgv = 1m + (contexto.PorcentajeIgv > 0m ? contexto.PorcentajeIgv / 100m : 0.18m);
+        decimal montoConIgv;
+        if (detalle.TipoAfectacionIgv.EsGratuita())
+        {
+            montoConIgv = 0m;
+        }
+        else if (detalle.Total > 0)
+        {
+            montoConIgv = Math.Round(detalle.Total, 2, MidpointRounding.AwayFromZero);
+        }
+        else if (detalle.PrecioUnitarioConIgv is > 0m)
+        {
+            montoConIgv = Math.Round(detalle.Cantidad * detalle.PrecioUnitarioConIgv.Value, 2, MidpointRounding.AwayFromZero);
+        }
+        else if (detalle.TipoAfectacionIgv == TipoAfectacionIgv.Gravado)
+        {
+            montoConIgv = Math.Round(detalle.Cantidad * detalle.PrecioUnitario * factorIgv, 2, MidpointRounding.AwayFromZero);
+        }
+        else
+        {
+            montoConIgv = Math.Round(detalle.Cantidad * detalle.PrecioUnitario, 2, MidpointRounding.AwayFromZero);
+        }
 
         decimal montoSinIgv;
         if (detalle.TipoAfectacionIgv.EsGratuita())
@@ -904,7 +1059,7 @@ public sealed class YamahaMappingService : IYamahaMappingService
         {
             montoSinIgv = detalle.SubtotalGravado > 0
                 ? Math.Round(detalle.SubtotalGravado, 2, MidpointRounding.AwayFromZero)
-                : Math.Round(montoConIgv / 1.18m, 2, MidpointRounding.AwayFromZero);
+                : Math.Round(montoConIgv / factorIgv, 2, MidpointRounding.AwayFromZero);
         }
         else
         {
@@ -927,10 +1082,27 @@ public sealed class YamahaMappingService : IYamahaMappingService
             kilometraje = 0;
         }
 
-        var celular = cliente.Telefono?.Trim() ?? string.Empty;
-        var correo = cliente.Email?.Trim() ?? string.Empty;
+        if (vehiculo?.TipoMedidor == TipoMedidor.Horas ||
+            vehiculo?.TipoUnidad is TipoUnidad.MotoAcuatica or TipoUnidad.MotorFueraDeBorda)
+        {
+            observaciones.Add("Unidad medida en horas de uso (OM/acuática): se envía Kilometraje=0 pendiente de confirmación de Yamaha sobre uso de horas en Servicio Técnico.");
+        }
+
+        var (celular, celularDescartado) = YamahaCatalogMapper.SanitizarCelularOpcional(cliente.Telefono);
+        if (celularDescartado)
+        {
+            observaciones.Add("Celular omitido en Servicio Técnico por no corresponder a un celular de 9 dígitos.");
+        }
+
+        var (correo, correoDescartado) = YamahaCatalogMapper.SanitizarCorreoOpcional(cliente.Email);
+        if (correoDescartado)
+        {
+            observaciones.Add("Correo omitido en Servicio Técnico por no tener formato de correo válido.");
+        }
+
         var modelo = vehiculo?.Modelo?.Trim() ?? string.Empty;
-        var version = vehiculo?.Anio?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        // Sección 6.2: Version corresponde a la versión del modelo (ej. STD), no al año de fabricación.
+        var version = string.Empty;
 
         var dto = new YamahaServicioTecnicoV3Dto
         {
@@ -981,6 +1153,21 @@ public sealed class YamahaMappingService : IYamahaMappingService
         ArgumentNullException.ThrowIfNull(contexto);
 
         var idOrigen = $"Orden-{orden.Id}";
+
+        if (!orden.Activo || orden.Estado == EstadoOrdenServicio.Cancelada)
+        {
+            return new YamahaMapeoLoteResultado<YamahaServicioTecnicoV3Dto>(
+                Array.Empty<YamahaServicioTecnicoV3Dto>(),
+                new[]
+                {
+                    YamahaMapeoRegistroResultado<YamahaServicioTecnicoV3Dto>.NoProyectable(
+                        idOrigen,
+                        $"La orden de servicio se encuentra en estado '{orden.Estado}' (Activo={orden.Activo}) y no es elegible para reporte.")
+                },
+                TotalProcesados: 0,
+                TotalValidos: 0,
+                TotalNoProyectables: 1);
+        }
 
         // Sección 6.2: Solo se reportan órdenes facturadas con comprobante emitido.
         // Selección determinista de comprobante final de liquidación:

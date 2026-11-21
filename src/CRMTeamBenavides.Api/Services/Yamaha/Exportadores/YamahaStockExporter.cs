@@ -44,8 +44,9 @@ public sealed class YamahaStockExporter : IYamahaStockExporter
         var queryUnidades = _context.UnidadesInventario
             .AsNoTracking()
             .Include(u => u.Producto)
+            .Include(u => u.Compra)
             .Include(u => u.Vehiculo)
-            .Where(u => u.Activo && u.Estado == EstadoUnidadInventario.EnStock && !string.IsNullOrWhiteSpace(u.NumeroSerieVIN));
+            .Where(u => u.Activo && u.Producto.Activo && u.Estado == EstadoUnidadInventario.EnStock && !string.IsNullOrWhiteSpace(u.NumeroSerieVIN));
 
         if (soloMarcaYamaha)
         {
@@ -78,8 +79,19 @@ public sealed class YamahaStockExporter : IYamahaStockExporter
 
             totalLeidos += paginaProductos.Count;
             var resultadoMapeo = _mappingService.MapearLoteStock(paginaProductos, contexto);
-            dtosValidos.AddRange(resultadoMapeo.DtosProyectados);
-            totalValidos += resultadoMapeo.TotalValidos;
+            foreach (var dto in resultadoMapeo.DtosProyectados)
+            {
+                if (!_settings.EsLineaHabilitada(dto.LineaNegocio))
+                {
+                    totalOmitidos++;
+                    observaciones.Add($"Línea '{dto.LineaNegocio}' deshabilitada por configuración (YamahaSettings.LineasHabilitadas).");
+                    continue;
+                }
+
+                dtosValidos.Add(dto);
+                totalValidos++;
+            }
+
             totalOmitidos += resultadoMapeo.TotalNoProyectables;
 
             foreach (var obs in resultadoMapeo.Registros.SelectMany(r => r.Observaciones))
@@ -110,10 +122,44 @@ public sealed class YamahaStockExporter : IYamahaStockExporter
                 break;
             }
 
+            // Hidratar Categoría de cada modelo vehicular para clasificación explícita MC / ATV / OM
+            var productosVehiculos = paginaUnidades
+                .Select(u => u.Producto)
+                .Where(p => p is not null && p.Categoria is null && p.CategoriaId != Guid.Empty)
+                .ToList();
+
+            if (productosVehiculos.Count > 0)
+            {
+                var categoriaIds = productosVehiculos.Select(p => p.CategoriaId).Distinct().ToList();
+                var categorias = await _context.CategoriasProducto
+                    .AsNoTracking()
+                    .Where(c => categoriaIds.Contains(c.Id))
+                    .ToDictionaryAsync(c => c.Id, cancellationToken);
+
+                foreach (var prod in productosVehiculos)
+                {
+                    if (categorias.TryGetValue(prod.CategoriaId, out var cat))
+                    {
+                        prod.Categoria = cat;
+                    }
+                }
+            }
+
             totalLeidos += paginaUnidades.Count;
             var resultadoMapeo = _mappingService.MapearLoteStock(Enumerable.Empty<Producto>(), contexto, paginaUnidades);
-            dtosValidos.AddRange(resultadoMapeo.DtosProyectados);
-            totalValidos += resultadoMapeo.TotalValidos;
+            foreach (var dto in resultadoMapeo.DtosProyectados)
+            {
+                if (!_settings.EsLineaHabilitada(dto.LineaNegocio))
+                {
+                    totalOmitidos++;
+                    observaciones.Add($"Línea '{dto.LineaNegocio}' deshabilitada por configuración (YamahaSettings.LineasHabilitadas).");
+                    continue;
+                }
+
+                dtosValidos.Add(dto);
+                totalValidos++;
+            }
+
             totalOmitidos += resultadoMapeo.TotalNoProyectables;
 
             foreach (var obs in resultadoMapeo.Registros.SelectMany(r => r.Observaciones))

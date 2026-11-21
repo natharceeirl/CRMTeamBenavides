@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Domain.Entities;
 
 namespace CRMTeamBenavides.Api.Features.Yamaha;
@@ -34,6 +35,27 @@ public static partial class YamahaCatalogMapper
 
     [GeneratedRegex(@"^[A-Za-z0-9-]+$", RegexOptions.CultureInvariant)]
     private static partial Regex AlfanumericoYGuionRegex();
+
+    [GeneratedRegex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.CultureInvariant)]
+    private static partial Regex CorreoBasicoRegex();
+
+    [GeneratedRegex(@"\s{2,}", RegexOptions.CultureInvariant)]
+    private static partial Regex EspaciosMultiplesRegex();
+
+    [GeneratedRegex(@"\bOM\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex PalabraOmRegex();
+
+    [GeneratedRegex(@"\bATV\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex PalabraAtvRegex();
+
+    [GeneratedRegex(@"\bQUAD\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex PalabraQuadRegex();
+
+    [GeneratedRegex(@"\bMC\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex PalabraMcRegex();
+
+    [GeneratedRegex(@"\bMOTO(S)?\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex PalabraMotoRegex();
 
     // -------------------------------------------------------------------------
     // 1. Proyección de Correlativo de Orden de Servicio a Orden de Trabajo (D-08)
@@ -293,10 +315,145 @@ public static partial class YamahaCatalogMapper
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Formatea una fecha explícitamente en <c>DD/MM/YYYY</c> con cultura invariante.
+    /// Formatea una fecha explícitamente en <c>DD/MM/YYYY</c> con cultura invariante en hora de Perú (UTC-5).
+    /// Las marcas de tiempo en UTC o locales del servidor se convierten a la jornada real del concesionario en Perú.
     /// </summary>
-    public static string FormatearFecha(DateTime fecha) =>
+    public static string FormatearFecha(DateTime fecha)
+    {
+        var fechaPeru = fecha.Kind switch
+        {
+            DateTimeKind.Utc => HoraPeru.DesdeUtc(fecha),
+            DateTimeKind.Local => HoraPeru.DesdeUtc(fecha.ToUniversalTime()),
+            _ => fecha
+        };
+
+        return fechaPeru.ToString(YamahaV3Catalogos.FormatoFecha, CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Formatea una fecha calendario local (<see cref="DateOnly"/>) en <c>DD/MM/YYYY</c> con cultura invariante.
+    /// </summary>
+    public static string FormatearFecha(DateOnly fecha) =>
         fecha.ToString(YamahaV3Catalogos.FormatoFecha, CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Valida el formato de <c>CodigoYamaha</c> conforme a Secciones 4, 5.3, 6.2 y 8:
+    /// solo letras, números y guión (-), sin espacios ni símbolos especiales.
+    /// </summary>
+    public static ResultadoMapeo<string> ValidarCodigoYamaha(string? codigoOriginal, int longitudMaxima = YamahaV3Catalogos.LongitudMaximaVarchar)
+    {
+        if (string.IsNullOrWhiteSpace(codigoOriginal))
+        {
+            return ResultadoMapeo<string>.Fallido("El producto no cuenta con código SKU (CodigoYamaha).");
+        }
+
+        var limpio = codigoOriginal.Trim();
+        if (limpio.Length > longitudMaxima)
+        {
+            return ResultadoMapeo<string>.Fallido($"El código SKU '{limpio}' excede la longitud máxima de {longitudMaxima} caracteres.");
+        }
+
+        if (!AlfanumericoYGuionRegex().IsMatch(limpio))
+        {
+            return ResultadoMapeo<string>.Fallido(
+                $"El código SKU '{limpio}' no cumple el formato Yamaha (solo letras, números y guión '-', sin espacios ni símbolos).");
+        }
+
+        return ResultadoMapeo<string>.Exitoso(limpio);
+    }
+
+    /// <summary>
+    /// Valida el formato de <c>VIN</c> para Ventas y Stock (Secciones 4, 5.3 y 8).
+    /// Para MC y ATV exige 15 a 20 caracteres; para OM (motores fuera de borda / acuáticos) exige 1 a 20 caracteres.
+    /// </summary>
+    public static ResultadoMapeo<string> ValidarVinVehiculo(string? vinOriginal, string lineaNegocio)
+    {
+        if (string.IsNullOrWhiteSpace(vinOriginal))
+        {
+            return ResultadoMapeo<string>.Fallido($"El campo VIN/número de serie es obligatorio para la línea '{lineaNegocio}'.");
+        }
+
+        var limpio = vinOriginal.Trim();
+        if (limpio.Length > YamahaV3Catalogos.LongitudMaximaVin)
+        {
+            return ResultadoMapeo<string>.Fallido(
+                $"El VIN '{limpio}' excede el máximo de {YamahaV3Catalogos.LongitudMaximaVin} caracteres.");
+        }
+
+        var requiereMinimo15 = string.Equals(lineaNegocio, YamahaV3Catalogos.LineaMotocicletas, StringComparison.Ordinal)
+            || string.Equals(lineaNegocio, YamahaV3Catalogos.LineaCuatrimotos, StringComparison.Ordinal);
+
+        if (requiereMinimo15 && limpio.Length < YamahaV3Catalogos.LongitudMinimaChasis)
+        {
+            return ResultadoMapeo<string>.Fallido(
+                $"El VIN '{limpio}' debe tener entre {YamahaV3Catalogos.LongitudMinimaChasis} y {YamahaV3Catalogos.LongitudMaximaChasis} caracteres para la línea '{lineaNegocio}'.");
+        }
+
+        if (!AlfanumericoYGuionRegex().IsMatch(limpio))
+        {
+            return ResultadoMapeo<string>.Fallido(
+                $"El VIN '{limpio}' solo acepta letras, números y guión (-), sin espacios.");
+        }
+
+        return ResultadoMapeo<string>.Exitoso(limpio);
+    }
+
+    /// <summary>
+    /// Sanitiza un celular opcional conforme a Yamaha v3 (9 dígitos sin espacios).
+    /// Elimina prefijos +51/51, espacios y guiones; si no resulta en 9 dígitos exactos, retorna vacío con aviso.
+    /// </summary>
+    public static (string Valor, bool Descartado) SanitizarCelularOpcional(string? telefono)
+    {
+        if (string.IsNullOrWhiteSpace(telefono))
+        {
+            return (string.Empty, false);
+        }
+
+        var digitos = new string(telefono.Where(char.IsDigit).ToArray());
+        if (digitos.Length == 11 && digitos.StartsWith("51", StringComparison.Ordinal))
+        {
+            digitos = digitos[2..];
+        }
+        else if (digitos.Length == 13 && digitos.StartsWith("0051", StringComparison.Ordinal))
+        {
+            digitos = digitos[4..];
+        }
+
+        return digitos.Length == 9 && digitos[0] == '9' ? (digitos, false) : (string.Empty, true);
+    }
+
+    /// <summary>
+    /// Sanitiza un correo opcional; si tiene formato inválido lo omite como vacío sin bloquear el lote.
+    /// </summary>
+    public static (string Valor, bool Descartado) SanitizarCorreoOpcional(string? correo)
+    {
+        if (string.IsNullOrWhiteSpace(correo))
+        {
+            return (string.Empty, false);
+        }
+
+        var limpio = correo.Trim();
+        return CorreoBasicoRegex().IsMatch(limpio) ? (limpio, false) : (string.Empty, true);
+    }
+
+    /// <summary>
+    /// Sanitiza el campo opcional Color (Sección 4: no puramente numérico ni con espacios dobles).
+    /// </summary>
+    public static (string Valor, bool Descartado) SanitizarColorOpcional(string? color)
+    {
+        if (string.IsNullOrWhiteSpace(color))
+        {
+            return (string.Empty, false);
+        }
+
+        var limpio = EspaciosMultiplesRegex().Replace(color.Trim(), " ");
+        if (SoloDigitosRegex().IsMatch(limpio))
+        {
+            return (string.Empty, true);
+        }
+
+        return (limpio, false);
+    }
 
     /// <summary>
     /// Proyecta una placa vehicular validando que cumpla el formato estricto de Yamaha v3 (Sección 6.2).
@@ -365,101 +522,245 @@ public static partial class YamahaCatalogMapper
     }
 
     // -------------------------------------------------------------------------
-    // 9. Determinación de Línea de Negocio Vehicular: MC vs ATV (Sección 3.3)
+    // 9. Determinación explícita de Línea de Negocio Vehicular: MC / ATV / OM (Sección 3.3)
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Determina determinísticamente la línea de negocio vehicular conforme a los catálogos oficiales de Yamaha v3 (Sección 3.3):
+    /// Clasifica explícitamente la línea de negocio vehicular conforme a la Sección 3.3 de Yamaha v3:
     /// - "MC": Motocicletas
     /// - "ATV": Cuatrimotos
     /// - "OM": Motores fuera de borda y motos acuáticas (Outboard Motors / Marine)
-    /// Regla taxativa: Jamás retorna "MV", ya que dicho código no existe en Yamaha v3.
+    ///
+    /// Reglas de integridad:
+    /// 1. Jamás retorna "MV" (código inexistente en Yamaha v3).
+    /// 2. No hace fallback silencioso a "MC": si el producto/unidad es Generador, Otro o no tiene
+    ///    clasificación reconocible, retorna <see cref="ResultadoMapeo{T}.Fallido"/> para evitar
+    ///    envíos erróneos a Yamaha.
+    /// 3. Usa coincidencias de palabra completa para evitar falsos positivos (p. ej. "Comercial" != "OM").
     /// </summary>
-    public static string DeterminarLineaNegocioVehiculo(Producto? producto, Vehiculo? vehiculo)
+    public static ResultadoMapeo<string> ClasificarLineaNegocioVehiculo(Producto? producto, Vehiculo? vehiculo)
     {
+        // 1. TipoUnidad explícito distinto de Motocicleta en la unidad física/cliente
         if (vehiculo is not null)
         {
             if (vehiculo.TipoUnidad == TipoUnidad.Cuatrimoto)
             {
-                return YamahaV3Catalogos.LineaCuatrimotos; // "ATV"
+                return ResultadoMapeo<string>.Exitoso(YamahaV3Catalogos.LineaCuatrimotos); // "ATV"
             }
 
-            if (vehiculo.TipoUnidad == TipoUnidad.MotoAcuatica)
+            if (vehiculo.TipoUnidad is TipoUnidad.MotoAcuatica or TipoUnidad.MotorFueraDeBorda)
             {
-                return YamahaV3Catalogos.LineaMotoresFueraDeBorda; // "OM"
+                return ResultadoMapeo<string>.Exitoso(YamahaV3Catalogos.LineaMotoresFueraDeBorda); // "OM"
             }
 
-            if (vehiculo.TipoUnidad == TipoUnidad.Motocicleta)
+            if (vehiculo.TipoUnidad is TipoUnidad.Generador or TipoUnidad.Otro)
             {
-                return YamahaV3Catalogos.LineaMotocicletas; // "MC"
+                return ResultadoMapeo<string>.Fallido(
+                    $"El tipo de unidad '{vehiculo.TipoUnidad}' no corresponde a las líneas vehiculares reportables a Yamaha (MC, ATV, OM).");
             }
         }
 
-        if (producto?.Categoria is not null)
+        // 2. Categoría maestra del producto (prioritaria sobre TipoUnidad.Motocicleta por compatibilidad con ventas previas)
+        if (producto?.Categoria is not null && !string.IsNullOrWhiteSpace(producto.Categoria.Nombre))
         {
-            var cat = producto.Categoria.Nombre;
-            if (cat.Contains("Acuatica", StringComparison.OrdinalIgnoreCase) ||
-                cat.Contains("Acuática", StringComparison.OrdinalIgnoreCase) ||
-                cat.Contains("Marino", StringComparison.OrdinalIgnoreCase) ||
-                cat.Contains("Fuera de Borda", StringComparison.OrdinalIgnoreCase) ||
-                cat.Contains("Outboard", StringComparison.OrdinalIgnoreCase) ||
-                cat.Contains("OM", StringComparison.OrdinalIgnoreCase))
+            var resCategoria = ClasificarDesdeTextoCategoria(producto.Categoria.Nombre);
+            if (resCategoria.HasValue)
             {
-                return YamahaV3Catalogos.LineaMotoresFueraDeBorda; // "OM"
-            }
-
-            if (cat.Contains("Cuatrimoto", StringComparison.OrdinalIgnoreCase) ||
-                cat.Contains("ATV", StringComparison.OrdinalIgnoreCase) ||
-                cat.Contains("Quad", StringComparison.OrdinalIgnoreCase))
-            {
-                return YamahaV3Catalogos.LineaCuatrimotos; // "ATV"
+                return resCategoria.Value;
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(producto?.Nombre))
+        // 3. Nombre y descripción del modelo/producto
+        var resTexto = ClasificarDesdeNombreODescripcion(producto?.Nombre, producto?.Descripcion);
+        if (resTexto.HasValue)
         {
-            var nom = producto.Nombre;
-            if (nom.Contains("Fuera de borda", StringComparison.OrdinalIgnoreCase) ||
-                nom.Contains("Outboard", StringComparison.OrdinalIgnoreCase) ||
-                nom.Contains("Motor marino", StringComparison.OrdinalIgnoreCase) ||
-                nom.Contains("WaveRunner", StringComparison.OrdinalIgnoreCase) ||
-                nom.Contains("Moto acuática", StringComparison.OrdinalIgnoreCase) ||
-                nom.Contains("Moto acuatica", StringComparison.OrdinalIgnoreCase))
-            {
-                return YamahaV3Catalogos.LineaMotoresFueraDeBorda; // "OM"
-            }
-
-            if (nom.Contains("Cuatrimoto", StringComparison.OrdinalIgnoreCase) ||
-                nom.Contains("ATV", StringComparison.OrdinalIgnoreCase) ||
-                nom.Contains("Grizzly", StringComparison.OrdinalIgnoreCase) ||
-                nom.Contains("Kodiak", StringComparison.OrdinalIgnoreCase) ||
-                nom.Contains("Raptor", StringComparison.OrdinalIgnoreCase) ||
-                nom.Contains("YFZ", StringComparison.OrdinalIgnoreCase))
-            {
-                return YamahaV3Catalogos.LineaCuatrimotos; // "ATV"
-            }
+            return resTexto.Value;
         }
 
-        if (!string.IsNullOrWhiteSpace(producto?.Descripcion))
+        // 4. TipoUnidad.Motocicleta explícito cuando el producto no contradice la clasificación
+        if (vehiculo?.TipoUnidad == TipoUnidad.Motocicleta)
         {
-            var desc = producto.Descripcion;
-            if (desc.Contains("Fuera de borda", StringComparison.OrdinalIgnoreCase) ||
-                desc.Contains("Outboard", StringComparison.OrdinalIgnoreCase) ||
-                desc.Contains("Motor marino", StringComparison.OrdinalIgnoreCase) ||
-                desc.Contains("WaveRunner", StringComparison.OrdinalIgnoreCase) ||
-                desc.Contains("Moto acuática", StringComparison.OrdinalIgnoreCase) ||
-                desc.Contains("Moto acuatica", StringComparison.OrdinalIgnoreCase))
-            {
-                return YamahaV3Catalogos.LineaMotoresFueraDeBorda; // "OM"
-            }
-
-            if (desc.Contains("Cuatrimoto", StringComparison.OrdinalIgnoreCase) ||
-                desc.Contains("ATV", StringComparison.OrdinalIgnoreCase))
-            {
-                return YamahaV3Catalogos.LineaCuatrimotos; // "ATV"
-            }
+            return ResultadoMapeo<string>.Exitoso(YamahaV3Catalogos.LineaMotocicletas); // "MC"
         }
 
-        return YamahaV3Catalogos.LineaMotocicletas; // "MC"
+        return ResultadoMapeo<string>.Fallido(
+            $"No se pudo determinar la línea de negocio Yamaha (MC, ATV u OM) para el producto '{producto?.Codigo ?? "sin código"}' ('{producto?.Nombre ?? "sin nombre"}'). Complete su categoría o clasificación comercial antes de reportar.");
     }
+
+    /// <summary>
+    /// Mantiene compatibilidad de firma devolviendo la línea resuelta o cadena vacía si no es clasificable.
+    /// Regla taxativa: Jamás retorna "MV", ya que dicho código no existe en Yamaha v3.
+    /// </summary>
+    public static string DeterminarLineaNegocioVehiculo(Producto? producto, Vehiculo? vehiculo)
+    {
+        var resultado = ClasificarLineaNegocioVehiculo(producto, vehiculo);
+        return resultado.EsValido ? resultado.Valor! : string.Empty;
+    }
+
+    /// <summary>
+    /// Infiere el <see cref="TipoUnidad"/> del CRM al vender una unidad vehicular desde inventario,
+    /// evitando registrar cuatrimotos o productos acuáticos/fuera de borda como <see cref="TipoUnidad.Motocicleta"/>.
+    /// </summary>
+    public static TipoUnidad InferirTipoUnidadDesdeProducto(Producto? producto)
+    {
+        var textoCombinado = $"{producto?.Categoria?.Nombre} {producto?.Nombre} {producto?.Descripcion}";
+        if (textoCombinado.Contains("Generador", StringComparison.OrdinalIgnoreCase))
+        {
+            return TipoUnidad.Generador;
+        }
+
+        var linea = ClasificarLineaNegocioVehiculo(producto, null);
+        if (linea.EsValido)
+        {
+            if (string.Equals(linea.Valor, YamahaV3Catalogos.LineaCuatrimotos, StringComparison.Ordinal))
+            {
+                return TipoUnidad.Cuatrimoto;
+            }
+
+            if (string.Equals(linea.Valor, YamahaV3Catalogos.LineaMotoresFueraDeBorda, StringComparison.Ordinal))
+            {
+                return textoCombinado.Contains("Fuera de borda", StringComparison.OrdinalIgnoreCase)
+                    || textoCombinado.Contains("Outboard", StringComparison.OrdinalIgnoreCase)
+                    || textoCombinado.Contains("Motor marino", StringComparison.OrdinalIgnoreCase)
+                    ? TipoUnidad.MotorFueraDeBorda
+                    : TipoUnidad.MotoAcuatica;
+            }
+        }
+
+        return TipoUnidad.Motocicleta;
+    }
+
+    private static ResultadoMapeo<string>? ClasificarDesdeTextoCategoria(string categoria)
+    {
+        if (categoria.Contains("Generador", StringComparison.OrdinalIgnoreCase) ||
+            categoria.Contains("Línea de Fuerza", StringComparison.OrdinalIgnoreCase) ||
+            categoria.Contains("Linea de Fuerza", StringComparison.OrdinalIgnoreCase))
+        {
+            return ResultadoMapeo<string>.Fallido(
+                $"La categoría '{categoria}' corresponde a línea de fuerza/generadores y no es reportable como MC, ATV u OM.");
+        }
+
+        if (EsTextoMarineOm(categoria, permitirAbreviaturaOm: true))
+        {
+            return ResultadoMapeo<string>.Exitoso(YamahaV3Catalogos.LineaMotoresFueraDeBorda);
+        }
+
+        if (EsTextoAtv(categoria))
+        {
+            return ResultadoMapeo<string>.Exitoso(YamahaV3Catalogos.LineaCuatrimotos);
+        }
+
+        if (categoria.Contains("Motocicleta", StringComparison.OrdinalIgnoreCase) ||
+            PalabraMotoRegex().IsMatch(categoria) ||
+            PalabraMcRegex().IsMatch(categoria))
+        {
+            return ResultadoMapeo<string>.Exitoso(YamahaV3Catalogos.LineaMotocicletas);
+        }
+
+        return null;
+    }
+
+    private static ResultadoMapeo<string>? ClasificarDesdeNombreODescripcion(string? nombre, string? descripcion)
+    {
+        foreach (var texto in new[] { nombre, descripcion })
+        {
+            if (string.IsNullOrWhiteSpace(texto))
+            {
+                continue;
+            }
+
+            if (texto.Contains("Generador", StringComparison.OrdinalIgnoreCase))
+            {
+                return ResultadoMapeo<string>.Fallido(
+                    $"El producto '{texto}' corresponde a un generador y no pertenece a las líneas vehiculares MC, ATV u OM.");
+            }
+
+            if (EsTextoMarineOm(texto, permitirAbreviaturaOm: true))
+            {
+                return ResultadoMapeo<string>.Exitoso(YamahaV3Catalogos.LineaMotoresFueraDeBorda);
+            }
+
+            if (EsTextoAtv(texto))
+            {
+                return ResultadoMapeo<string>.Exitoso(YamahaV3Catalogos.LineaCuatrimotos);
+            }
+        }
+
+        foreach (var texto in new[] { nombre, descripcion })
+        {
+            if (string.IsNullOrWhiteSpace(texto))
+            {
+                continue;
+            }
+
+            if (EsTextoMotocicleta(texto))
+            {
+                return ResultadoMapeo<string>.Exitoso(YamahaV3Catalogos.LineaMotocicletas);
+            }
+        }
+
+        return null;
+    }
+
+    private static bool EsTextoMarineOm(string texto, bool permitirAbreviaturaOm) =>
+        texto.Contains("Acuatica", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("Acuática", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("Marino", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("Nautica", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("Náutica", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("Fuera de Borda", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("Outboard", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("WaveRunner", StringComparison.OrdinalIgnoreCase) ||
+        (permitirAbreviaturaOm && PalabraOmRegex().IsMatch(texto));
+
+    private static bool EsTextoAtv(string texto) =>
+        texto.Contains("Cuatrimoto", StringComparison.OrdinalIgnoreCase) ||
+        PalabraAtvRegex().IsMatch(texto) ||
+        PalabraQuadRegex().IsMatch(texto) ||
+        texto.Contains("Grizzly", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("Kodiak", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("Raptor", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("Wolverine", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("Viking", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("YFZ", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("YFM", StringComparison.OrdinalIgnoreCase);
+
+    private static bool EsTextoMotocicleta(string texto) =>
+        texto.Contains("Motocicleta", StringComparison.OrdinalIgnoreCase) ||
+        PalabraMotoRegex().IsMatch(texto) ||
+        PalabraMcRegex().IsMatch(texto) ||
+        texto.Contains("YZF", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("MT-03", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("MT-07", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("MT-09", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("MT-15", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("MTN", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("FZN", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("FZ-S", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("FZS", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("FZ25", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("FZ-25", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("FZ-X", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("FZ15", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("FZ16", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("NMAX", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("GPD155", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("XTZ", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("YB125", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("YBR", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("Crypton", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("RayZR", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("Cygnus", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("LCG125", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("WR155", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("Tenere", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("Ténéré", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("XMAX", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("XSR", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("Tracer", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("BWS", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("Aerox", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("Fascino", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("R15", StringComparison.OrdinalIgnoreCase) ||
+        texto.Contains("R3", StringComparison.OrdinalIgnoreCase);
 }

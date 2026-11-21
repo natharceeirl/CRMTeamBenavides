@@ -183,7 +183,7 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                     case YamahaServicioSincronizacion.Stock:
                     {
                         var exp = await _stockExporter.ExportarStockAsync(
-                            soloMarcaYamaha: false,
+                            soloMarcaYamaha: _settings.SoloMarcaYamaha,
                             cancellationToken: cancellationToken);
 
                         loteStockValidos = exp.RegistrosValidos;
@@ -227,6 +227,9 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                         throw new ArgumentOutOfRangeException(nameof(servicio), servicio, "Servicio Yamaha no reconocido.");
                 }
 
+                // Asegura coherencia de contadores cuando 1 cabecera (Venta/OS) genera múltiples líneas detalle.
+                var procesadosAuditoria = Math.Max(totalLeidos, totalValidos + totalOmitidos);
+
                 // 3. Lote sin registros: no se valida ni se envía (plan v3, sección 5.2).
                 // Cuenta como ejecución correcta para el watermark y el cierre diario de Stock.
                 if (cantidadLote == 0)
@@ -239,7 +242,7 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                             string.Join(" | ", observaciones.Take(5)));
                     }
 
-                    syncLog.RegistrarSinCambios(procesados: totalLeidos, rechazados: totalOmitidos);
+                    syncLog.RegistrarSinCambios(procesados: procesadosAuditoria, rechazados: totalOmitidos);
                     await _context.SaveChangesAsync(cancellationToken);
 
                     return new YamahaSyncEjecucionResultado(
@@ -265,13 +268,14 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                 if (erroresValidacion.Count > 0)
                 {
                     var resumenErrores = string.Join(" | ", erroresValidacion.Take(5));
+                    var totalRechazadosValidacion = totalOmitidos + erroresValidacion.Count;
                     syncLog.RegistrarFallo(
                         mensajeError: $"Validación de contrato Yamaha v3 rechazó el lote: {resumenErrores}",
                         codigoHttp: null,
                         respuestaCuerpo: null,
-                        procesados: totalLeidos,
+                        procesados: Math.Max(procesadosAuditoria, totalRechazadosValidacion),
                         validos: 0,
-                        rechazados: totalOmitidos + erroresValidacion.Count);
+                        rechazados: totalRechazadosValidacion);
 
                     await _context.SaveChangesAsync(cancellationToken);
 
@@ -299,7 +303,7 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                     var cuerpoSimulado = "{\"status\":\"ok\",\"modo\":\"simulacion\",\"mensaje\":\"Ejecución en modo simulación (Dry-Run). No se enviaron peticiones HTTP a Yamaha.\"}";
 
                     syncLog.RegistrarExito(
-                        procesados: totalLeidos,
+                        procesados: procesadosAuditoria,
                         validos: totalValidos,
                         rechazados: totalOmitidos,
                         payloadHash: payloadHash,
@@ -377,7 +381,7 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                         mensajeError: httpResp.MensajeError ?? $"Yamaha API respondió código HTTP {httpResp.CodigoHttp}",
                         codigoHttp: httpResp.CodigoHttp,
                         respuestaCuerpo: httpResp.CuerpoRespuesta,
-                        procesados: totalLeidos,
+                        procesados: procesadosAuditoria,
                         validos: 0,
                         rechazados: totalOmitidos);
 
@@ -400,7 +404,7 @@ public sealed class YamahaSyncOrchestrator : IYamahaSyncOrchestrator
                 }
 
                 syncLog.RegistrarExito(
-                    procesados: totalLeidos,
+                    procesados: procesadosAuditoria,
                     validos: totalValidos,
                     rechazados: totalOmitidos,
                     payloadHash: hashEnviado,

@@ -1,5 +1,6 @@
 using CRMTeamBenavides.Api.Features.Yamaha;
 using CRMTeamBenavides.Data;
+using CRMTeamBenavides.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -40,6 +41,8 @@ public sealed class YamahaServicioTecnicoExporter : IYamahaServicioTecnicoExport
 
         var contexto = YamahaPuntoVentaContexto.Crear(empresa, _settings);
 
+        // Un único Any garantiza que un mismo comprobante activo y emitido caiga dentro de (desdeUtc, hastaUtc],
+        // evitando duplicidades cuando una orden tiene múltiples comprobantes en ventanas distintas.
         var query = _context.OrdenesServicio
             .AsNoTracking()
             .Include(os => os.Cliente)
@@ -47,16 +50,26 @@ public sealed class YamahaServicioTecnicoExporter : IYamahaServicioTecnicoExport
             .Include(os => os.Comprobantes)
             .Include(os => os.Detalles)
                 .ThenInclude(d => d.Producto)
-            .Where(os => os.Activo && os.Vehiculo != null)
-            .Where(os => os.Comprobantes.Any(c => c.Estado == "Emitido"));
+            .Where(os => os.Activo && os.Estado != EstadoOrdenServicio.Cancelada && os.Vehiculo != null);
 
-        // desde exclusivo y hasta inclusivo: el lote siguiente parte del "hasta" de este sin repetir el borde.
         if (desdeUtc.HasValue)
         {
-            query = query.Where(os => os.Comprobantes.Any(c => c.Estado == "Emitido" && c.FechaCreacion > desdeUtc.Value));
+            var desde = desdeUtc.Value;
+            var hasta = hastaUtc.Value;
+            query = query.Where(os => os.Comprobantes.Any(c =>
+                c.Activo &&
+                c.Estado == "Emitido" &&
+                c.FechaCreacion > desde &&
+                c.FechaCreacion <= hasta));
         }
-
-        query = query.Where(os => os.Comprobantes.Any(c => c.Estado == "Emitido" && c.FechaCreacion <= hastaUtc.Value));
+        else
+        {
+            var hasta = hastaUtc.Value;
+            query = query.Where(os => os.Comprobantes.Any(c =>
+                c.Activo &&
+                c.Estado == "Emitido" &&
+                c.FechaCreacion <= hasta));
+        }
 
         int tamanioLote = _settings.TamanioLoteExportacion > 0 ? _settings.TamanioLoteExportacion : 500;
         int offset = 0;

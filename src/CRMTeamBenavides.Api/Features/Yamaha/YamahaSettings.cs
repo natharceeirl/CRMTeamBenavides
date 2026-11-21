@@ -112,6 +112,37 @@ public class YamahaSettings
     public int ConcurrenciaEsperaSegundos { get; set; } = 5;
 
     /// <summary>
+    /// Cuando es <c>true</c>, restringe la extracción de Stock a productos con Marca = "YAMAHA" (D-07).
+    /// Por defecto <c>false</c> hasta confirmar el saneamiento de marcas en catálogo productivo.
+    /// </summary>
+    public bool SoloMarcaYamaha { get; set; } = false;
+
+    /// <summary>
+    /// Lista opcional de líneas de negocio habilitadas para transmisión (p. ej. ["SP", "STE"] o ["MC", "ATV", "OM", "SP", "STE"]).
+    /// Cuando está vacía, se permiten todas las líneas soportadas por contrato.
+    /// </summary>
+    public List<string> LineasHabilitadas { get; set; } = new();
+
+    /// <summary>
+    /// Fecha mínima (UTC) a partir de la cual se exportan ventas de unidades vehiculares (MC, ATV, OM),
+    /// permitiendo un arranque diferenciado frente al histórico de 3 meses de SP y STE (p. ej. noviembre 2026).
+    /// </summary>
+    public DateTime? FechaInicioVehiculosUtc { get; set; }
+
+    /// <summary>
+    /// Indica si la línea de negocio está habilitada en configuración.
+    /// </summary>
+    public bool EsLineaHabilitada(string lineaNegocio)
+    {
+        if (LineasHabilitadas is null || LineasHabilitadas.Count == 0)
+        {
+            return true;
+        }
+
+        return LineasHabilitadas.Any(l => string.Equals(l?.Trim(), lineaNegocio, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// Obtiene la hora de cierre de Stock parseada como TimeOnly (hora local de Peru).
     /// Si el valor configurado no es valido, retorna 22:00 por defecto.
     /// </summary>

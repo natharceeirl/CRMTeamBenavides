@@ -2718,7 +2718,10 @@ public class OrdenServicioService : IOrdenServicioService
     private static string DeterminarTipoMedidor(Vehiculo? vehiculo)
     {
         if (vehiculo is null) return "Km";
-        if (vehiculo.TipoMedidor == TipoMedidor.Horas || vehiculo.TipoUnidad == TipoUnidad.MotoAcuatica || vehiculo.TipoUnidad == TipoUnidad.Generador)
+        if (vehiculo.TipoMedidor == TipoMedidor.Horas
+            || vehiculo.TipoUnidad == TipoUnidad.MotoAcuatica
+            || vehiculo.TipoUnidad == TipoUnidad.MotorFueraDeBorda
+            || vehiculo.TipoUnidad == TipoUnidad.Generador)
             return "Horas";
         return "Km";
     }

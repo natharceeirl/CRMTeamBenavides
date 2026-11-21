@@ -15,7 +15,8 @@ public sealed record YamahaPuntoVentaContexto(
     string TipoPuntoVenta = YamahaV3Catalogos.TipoPuntoVentaFijo,
     string CiudadSede = "Arequipa",
     string DepartamentoSede = "Arequipa",
-    string DistritoSede = "Arequipa")
+    string DistritoSede = "Arequipa",
+    decimal PorcentajeIgv = 18.00m)
 {
     public static YamahaPuntoVentaContexto Crear(
         ConfiguracionEmpresa? configuracionEmpresa,
@@ -33,13 +34,17 @@ public sealed record YamahaPuntoVentaContexto(
         var tipoPuntoVenta = !string.IsNullOrWhiteSpace(settings?.TipoPuntoVenta)
             ? settings.TipoPuntoVenta.Trim()
             : YamahaV3Catalogos.TipoPuntoVentaFijo;
+        var porcentajeIgv = configuracionEmpresa?.PorcentajeIgv is > 0m
+            ? configuracionEmpresa.PorcentajeIgv
+            : 18.00m;
 
         return new YamahaPuntoVentaContexto(
             RazonSocial: razonSocial,
             Ruc: ruc,
             CodigoPuntoVenta: codigoPuntoVenta,
             NombreComercialPuntoVenta: nombreComercial,
-            TipoPuntoVenta: tipoPuntoVenta);
+            TipoPuntoVenta: tipoPuntoVenta,
+            PorcentajeIgv: porcentajeIgv);
     }
 }
 

@@ -74,8 +74,10 @@ services:
       YamahaApi__ServicioTecnicoFunctionKey: ${YAMAHA_SERVICIO_TECNICO_FUNCTION_KEY:-}
       YamahaApi__HoraCierreStockPeru: ${YAMAHA_HORA_CIERRE_STOCK_PERU:-22:00}
       YamahaApi__HoraLimiteRecuperacionStockPeru: ${YAMAHA_HORA_LIMITE_RECUPERACION_STOCK_PERU:-08:00}
-      # Sin cada consulta SQL en el log.
+      YamahaApi__TimeoutSeconds: ${YAMAHA_TIMEOUT_SECONDS:-60}
+      # Sin cada consulta SQL ni URLs de HttpClient (con ?code=...) en el log.
       Logging__LogLevel__Microsoft.EntityFrameworkCore: Warning
+      Logging__LogLevel__System.Net.Http.HttpClient: Warning
     volumes:
       # Fotos de las órdenes y llaves de Data Protection.
       - datos-api:/datos
