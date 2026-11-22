@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using CRMTeamBenavides.Api.Features.WhatsApp;
+using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Api.Services.WhatsApp;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
@@ -37,6 +38,12 @@ public sealed class WhatsAppPostgresIsolatedTests : IAsyncLifetime
         public T CurrentValue { get; set; } = value;
         public T Get(string? name) => CurrentValue;
         public IDisposable? OnChange(Action<T, string?> listener) => null;
+    }
+
+    private sealed class AuditoriaNoOp : IAuditoriaService
+    {
+        public Task RegistrarEventoAsync(Guid? usuarioId, string accion, string entidad, string entidadId, object? detalle = null, CancellationToken ct = default)
+            => Task.CompletedTask;
     }
 
     private sealed class CountingDelayProvider(int delayMs = 60, Queue<WhatsAppSendResult>? resultados = null) : IWhatsAppProvider
@@ -467,6 +474,166 @@ public sealed class WhatsAppPostgresIsolatedTests : IAsyncLifetime
             var o = await checkCrash.OutboxMensajesWhatsApp.Include(x => x.MensajeWhatsApp).SingleAsync(x => x.Id == outboxCrashId);
             Assert.Equal(EstadoOutboxWhatsApp.Indeterminado, o.Estado);
             Assert.Equal(EstadoMensajeWhatsApp.Indeterminado, o.MensajeWhatsApp.Estado);
+        }
+    }
+
+    [Fact]
+    public async Task PG04_Fase2_IdentificacionVinculacionYConsultasCrmAisladasEnPostgresReal()
+    {
+        Guid clienteAId;
+        Guid ordenBId;
+        Guid convAId;
+
+        await using (var seed = CrearContexto())
+        {
+            var clienteA = new Cliente
+            {
+                NombreCompleto = "Ana Morales PG",
+                TipoDocumento = TipoDocumentoCliente.DNI,
+                NumeroDocumento = "41223344",
+                Telefono = "987-333-444",
+                Activo = true
+            };
+            var clienteB = new Cliente
+            {
+                NombreCompleto = "Pedro Rios PG",
+                TipoDocumento = TipoDocumentoCliente.DNI,
+                NumeroDocumento = "41556677",
+                Telefono = "+51 987 555 666",
+                Activo = true
+            };
+            var vehA = new Vehiculo
+            {
+                Cliente = clienteA,
+                Marca = "Yamaha",
+                Modelo = "FZ25",
+                Placa = "4455-AA",
+                NumeroSerieVIN = "ME1RG4287S2011390",
+                Activo = true
+            };
+            var vehB = new Vehiculo
+            {
+                Cliente = clienteB,
+                Marca = "Yamaha",
+                Modelo = "MT-07",
+                Placa = "7788-BB",
+                NumeroSerieVIN = "JYARM04E0GA001234",
+                Activo = true
+            };
+            var ordenA = new OrdenServicio
+            {
+                Cliente = clienteA,
+                Vehiculo = vehA,
+                NumeroOrden = "OS-PG-001",
+                Estado = EstadoOrdenServicio.EnProceso,
+                FechaIngreso = DateTime.UtcNow.AddDays(-1),
+                Total = 250m,
+                Activo = true
+            };
+            var ordenB = new OrdenServicio
+            {
+                Cliente = clienteB,
+                Vehiculo = vehB,
+                NumeroOrden = "OS-PG-002",
+                Estado = EstadoOrdenServicio.Lista,
+                FechaIngreso = DateTime.UtcNow.AddDays(-1),
+                Total = 800m,
+                Activo = true
+            };
+            var citaA = new Cita
+            {
+                Cliente = clienteA,
+                Vehiculo = vehA,
+                NumeroCita = "CIT-PG-001",
+                FechaHoraProgramada = DateTime.UtcNow.AddDays(2),
+                Motivo = "Mantenimiento 5000km",
+                Estado = EstadoCita.Confirmada,
+                Activo = true
+            };
+            var convA = new ConversacionWhatsApp
+            {
+                TelefonoE164 = "+51987333444",
+                Activo = true
+            };
+
+            seed.Clientes.AddRange(clienteA, clienteB);
+            seed.Vehiculos.AddRange(vehA, vehB);
+            seed.OrdenesServicio.AddRange(ordenA, ordenB);
+            seed.Citas.Add(citaA);
+            seed.ConversacionesWhatsApp.Add(convA);
+            await seed.SaveChangesAsync();
+
+            clienteAId = clienteA.Id;
+            ordenBId = ordenB.Id;
+            convAId = convA.Id;
+        }
+
+        var monitor = new StaticOptionsMonitor<WhatsAppSettings>(new WhatsAppSettings { DefaultCountryCode = "51" });
+
+        await using (var db = CrearContexto())
+        {
+            var identSvc = new WhatsAppClienteIdentificacionService(db, monitor, NullLogger<WhatsAppClienteIdentificacionService>.Instance);
+            var resIdent = await identSvc.IdentificarPorTelefonoAsync("51987333444");
+            Assert.Equal(EstadoIdentificacionClienteWhatsApp.IdentificadoUnivoco, resIdent.Estado);
+            Assert.Equal(clienteAId, resIdent.ClienteId);
+
+            // Vincular la conversación A al cliente A
+            var conv = await db.ConversacionesWhatsApp.SingleAsync(c => c.Id == convAId);
+            conv.ClienteId = clienteAId;
+            await db.SaveChangesAsync();
+
+            var crm = new WhatsAppCrmConsultaService(
+                db,
+                monitor,
+                WhatsAppVerificadorIdentidadNoImplementado.Instancia,
+                NullLogger<WhatsAppCrmConsultaService>.Instance);
+
+            // Modo conversacional sin identidad verificada queda bloqueado (Forbidden) incluso con ClienteId asignado
+            var convBloqueado = await crm.ConsultarPerfilClienteAsync(convAId);
+            Assert.Equal(ServiceResultStatus.Forbidden, convBloqueado.Status);
+
+            var ctxAdmin = WhatsAppContextoConsultaCrm.Administrativo(permitirDocumentoCompleto: false);
+
+            var perfil = await crm.ConsultarPerfilClienteAsync(convAId, ctxAdmin);
+            Assert.True(perfil.IsSuccess);
+            Assert.Equal("****3344", perfil.Data!.DocumentoVisible);
+            Assert.Equal(1, perfil.Data.CantidadVehiculosActivos);
+            Assert.Equal(1, perfil.Data.CantidadOrdenesActivas);
+            Assert.Equal(1, perfil.Data.CantidadCitasActivas);
+
+            var ordenesA = await crm.ConsultarOrdenesServicioClienteAsync(convAId, contexto: ctxAdmin);
+            Assert.Single(ordenesA.Data!);
+            Assert.Equal("OS-PG-001", ordenesA.Data![0].NumeroOrden);
+
+            var citasA = await crm.ConsultarCitasClienteAsync(convAId, contexto: ctxAdmin);
+            Assert.Single(citasA.Data!);
+            Assert.Equal("CIT-PG-001", citasA.Data![0].NumeroCita);
+
+            // Aislamiento real en PostgreSQL: conversación A jamás ve orden B
+            var intentoCruzado = await crm.ConsultarEstadoOrdenServicioAsync(convAId, ordenServicioId: ordenBId, contexto: ctxAdmin);
+            Assert.Equal(ServiceResultStatus.NotFound, intentoCruzado.Status);
+
+            // Combinación inconsistente de ordenServicioId + numeroOrden devuelve ValidationError (B-02)
+            var ordenAId = ordenesA.Data![0].Id;
+            var comboInconsistente = await crm.ConsultarEstadoOrdenServicioAsync(
+                convAId,
+                ordenServicioId: ordenAId,
+                numeroOrden: "OS-PG-999",
+                contexto: ctxAdmin);
+            Assert.Equal(ServiceResultStatus.ValidationError, comboInconsistente.Status);
+
+            // Búsqueda SQL paginada en PostgreSQL real por teléfono normalizado (M-05)
+            var outbox = new WhatsAppOutboxService(
+                db,
+                new MockWhatsAppProvider(NullLogger<MockWhatsAppProvider>.Instance),
+                monitor,
+                NullLogger<WhatsAppOutboxService>.Instance);
+            var waSvc = new WhatsAppService(db, outbox, identSvc, new AuditoriaNoOp(), monitor);
+            var busq = await waSvc.BuscarClientesParaVincularAsync("+51 987 333 444", pagina: 1, tamanoPagina: 10);
+            Assert.True(busq.IsSuccess);
+            var candidato = Assert.Single(busq.Data!.Items);
+            Assert.Equal(clienteAId, candidato.Id);
+            Assert.Equal("****3344", candidato.DocumentoEnmascarado);
         }
     }
 }

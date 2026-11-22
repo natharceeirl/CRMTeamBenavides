@@ -21,6 +21,7 @@ public interface IWhatsAppService
 
     Task<ServiceResult<WhatsAppConversacionDetalleResponse>> ObtenerConversacionAsync(
         Guid conversacionId,
+        bool incluirDocumentoCompleto = false,
         CancellationToken ct = default);
 
     Task<ServiceResult<WhatsAppMensajesPaginadosResponse>> ListarMensajesAsync(
@@ -33,23 +34,49 @@ public interface IWhatsAppService
         Guid conversacionId,
         WhatsAppAsignarAgenteRequest request,
         Guid usuarioAccionId,
+        bool incluirDocumentoCompleto = false,
         CancellationToken ct = default);
 
     Task<ServiceResult<WhatsAppConversacionDetalleResponse>> CambiarModoAtencionAsync(
         Guid conversacionId,
         WhatsAppCambiarModoRequest request,
         Guid usuarioAccionId,
+        bool incluirDocumentoCompleto = false,
         CancellationToken ct = default);
 
     Task<ServiceResult<WhatsAppConversacionDetalleResponse>> CambiarEstadoAsync(
         Guid conversacionId,
         WhatsAppCambiarEstadoRequest request,
         Guid usuarioAccionId,
+        bool incluirDocumentoCompleto = false,
         CancellationToken ct = default);
 
     Task<ServiceResult<WhatsAppConversacionDetalleResponse>> VincularClienteAsync(
         Guid conversacionId,
         WhatsAppVincularClienteRequest request,
+        Guid usuarioAccionId,
+        bool incluirDocumentoCompleto = false,
+        CancellationToken ct = default);
+
+    Task<ServiceResult<WhatsAppConversacionDetalleResponse>> DesvincularClienteAsync(
+        Guid conversacionId,
+        Guid usuarioAccionId,
+        bool incluirDocumentoCompleto = false,
+        CancellationToken ct = default);
+
+    Task<ServiceResult<WhatsAppVinculacionClienteResponse>> ObtenerVinculacionClienteAsync(
+        Guid conversacionId,
+        bool incluirDocumentoCompleto = false,
+        CancellationToken ct = default);
+
+    Task<ServiceResult<WhatsAppClientesCandidatosPaginadosResponse>> BuscarClientesParaVincularAsync(
+        string? busqueda,
+        int pagina = 1,
+        int tamanoPagina = 15,
+        CancellationToken ct = default);
+
+    Task<ServiceResult<WhatsAppResultadoIdentificacionResponse>> ReintentarIdentificacionClienteAsync(
+        Guid conversacionId,
         Guid usuarioAccionId,
         CancellationToken ct = default);
 
@@ -66,17 +93,20 @@ public sealed class WhatsAppService : IWhatsAppService
 
     private readonly ApplicationDbContext _context;
     private readonly IWhatsAppOutboxService _outboxService;
+    private readonly IWhatsAppClienteIdentificacionService _identificacionService;
     private readonly IAuditoriaService _auditoria;
     private readonly IOptionsMonitor<WhatsAppSettings> _settingsMonitor;
 
     public WhatsAppService(
         ApplicationDbContext context,
         IWhatsAppOutboxService outboxService,
+        IWhatsAppClienteIdentificacionService identificacionService,
         IAuditoriaService auditoria,
         IOptionsMonitor<WhatsAppSettings> settingsMonitor)
     {
         _context = context;
         _outboxService = outboxService;
+        _identificacionService = identificacionService;
         _auditoria = auditoria;
         _settingsMonitor = settingsMonitor;
     }
@@ -167,13 +197,14 @@ public sealed class WhatsAppService : IWhatsAppService
                 preview = preview[..120] + "...";
             }
 
+            var clienteActivo = c.Cliente is { Activo: true } ? c.Cliente : null;
             return new WhatsAppConversacionResumenResponse(
                 c.Id,
                 c.TelefonoE164,
                 c.WhatsAppId,
                 c.NombrePerfilWhatsApp,
-                c.ClienteId,
-                c.Cliente?.NombreCompleto,
+                clienteActivo?.Id,
+                clienteActivo?.NombreCompleto,
                 c.AsociacionClienteAmbigua,
                 c.Estado,
                 c.ModoAtencion,
@@ -191,6 +222,7 @@ public sealed class WhatsAppService : IWhatsAppService
 
     public async Task<ServiceResult<WhatsAppConversacionDetalleResponse>> ObtenerConversacionAsync(
         Guid conversacionId,
+        bool incluirDocumentoCompleto = false,
         CancellationToken ct = default)
     {
         var conversacion = await _context.ConversacionesWhatsApp
@@ -208,7 +240,8 @@ public sealed class WhatsAppService : IWhatsAppService
             .AsNoTracking()
             .CountAsync(m => m.ConversacionId == conversacion.Id && m.Activo, ct);
 
-        return ServiceResult<WhatsAppConversacionDetalleResponse>.Success(MapDetalle(conversacion, totalMensajes));
+        return ServiceResult<WhatsAppConversacionDetalleResponse>.Success(
+            MapDetalle(conversacion, totalMensajes, incluirDocumentoCompleto));
     }
 
     public async Task<ServiceResult<WhatsAppMensajesPaginadosResponse>> ListarMensajesAsync(
@@ -252,6 +285,7 @@ public sealed class WhatsAppService : IWhatsAppService
         Guid conversacionId,
         WhatsAppAsignarAgenteRequest request,
         Guid usuarioAccionId,
+        bool incluirDocumentoCompleto = false,
         CancellationToken ct = default)
     {
         var conversacion = await _context.ConversacionesWhatsApp
@@ -300,13 +334,15 @@ public sealed class WhatsAppService : IWhatsAppService
             .AsNoTracking()
             .CountAsync(m => m.ConversacionId == conversacion.Id && m.Activo, ct);
 
-        return ServiceResult<WhatsAppConversacionDetalleResponse>.Success(MapDetalle(conversacion, totalMensajes));
+        return ServiceResult<WhatsAppConversacionDetalleResponse>.Success(
+            MapDetalle(conversacion, totalMensajes, incluirDocumentoCompleto));
     }
 
     public async Task<ServiceResult<WhatsAppConversacionDetalleResponse>> CambiarModoAtencionAsync(
         Guid conversacionId,
         WhatsAppCambiarModoRequest request,
         Guid usuarioAccionId,
+        bool incluirDocumentoCompleto = false,
         CancellationToken ct = default)
     {
         if (!Enum.IsDefined(request.ModoAtencion))
@@ -352,13 +388,15 @@ public sealed class WhatsAppService : IWhatsAppService
             .AsNoTracking()
             .CountAsync(m => m.ConversacionId == conversacion.Id && m.Activo, ct);
 
-        return ServiceResult<WhatsAppConversacionDetalleResponse>.Success(MapDetalle(conversacion, totalMensajes));
+        return ServiceResult<WhatsAppConversacionDetalleResponse>.Success(
+            MapDetalle(conversacion, totalMensajes, incluirDocumentoCompleto));
     }
 
     public async Task<ServiceResult<WhatsAppConversacionDetalleResponse>> CambiarEstadoAsync(
         Guid conversacionId,
         WhatsAppCambiarEstadoRequest request,
         Guid usuarioAccionId,
+        bool incluirDocumentoCompleto = false,
         CancellationToken ct = default)
     {
         if (!Enum.IsDefined(request.Estado))
@@ -395,13 +433,15 @@ public sealed class WhatsAppService : IWhatsAppService
             .AsNoTracking()
             .CountAsync(m => m.ConversacionId == conversacion.Id && m.Activo, ct);
 
-        return ServiceResult<WhatsAppConversacionDetalleResponse>.Success(MapDetalle(conversacion, totalMensajes));
+        return ServiceResult<WhatsAppConversacionDetalleResponse>.Success(
+            MapDetalle(conversacion, totalMensajes, incluirDocumentoCompleto));
     }
 
     public async Task<ServiceResult<WhatsAppConversacionDetalleResponse>> VincularClienteAsync(
         Guid conversacionId,
         WhatsAppVincularClienteRequest request,
         Guid usuarioAccionId,
+        bool incluirDocumentoCompleto = false,
         CancellationToken ct = default)
     {
         var conversacion = await _context.ConversacionesWhatsApp
@@ -427,12 +467,337 @@ public sealed class WhatsAppService : IWhatsAppService
         }
 
         var anteriorClienteId = conversacion.ClienteId;
-        conversacion.ClienteId = cliente?.Id;
+        var nuevoClienteId = cliente?.Id;
+
+        // Evitar escrituras ni auditoría espuria cuando no existe cambio real (M-04).
+        if (anteriorClienteId == nuevoClienteId
+            && (nuevoClienteId is null || !conversacion.AsociacionClienteAmbigua))
+        {
+            var totalSinCambios = await _context.MensajesWhatsApp
+                .AsNoTracking()
+                .CountAsync(m => m.ConversacionId == conversacion.Id && m.Activo, ct);
+
+            return ServiceResult<WhatsAppConversacionDetalleResponse>.Success(
+                MapDetalle(conversacion, totalSinCambios, incluirDocumentoCompleto));
+        }
+
+        conversacion.ClienteId = nuevoClienteId;
         conversacion.Cliente = cliente;
+
         if (cliente is not null)
         {
             conversacion.AsociacionClienteAmbigua = false;
         }
+        else
+        {
+            // Al desvincular, recalcular si el teléfono sigue teniendo múltiples candidatos activos (M-04).
+            var ident = await _identificacionService.IdentificarPorTelefonoAsync(conversacion.TelefonoE164, ct);
+            conversacion.AsociacionClienteAmbigua = ident.EsAmbiguo;
+        }
+
+        conversacion.ModificadoPorId = usuarioAccionId;
+        conversacion.FechaModificacion = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync(ct);
+
+        var accion = cliente is null ? "WHATSAPP_DESVINCULAR_CLIENTE" : "WHATSAPP_VINCULAR_CLIENTE";
+        await _auditoria.RegistrarEventoAsync(
+            usuarioAccionId,
+            accion,
+            "ConversacionWhatsApp",
+            conversacion.Id.ToString(),
+            new
+            {
+                ClienteAnteriorId = anteriorClienteId,
+                ClienteNuevoId = nuevoClienteId,
+                AsociacionClienteAmbigua = conversacion.AsociacionClienteAmbigua
+            },
+            ct);
+
+        var totalMensajes = await _context.MensajesWhatsApp
+            .AsNoTracking()
+            .CountAsync(m => m.ConversacionId == conversacion.Id && m.Activo, ct);
+
+        return ServiceResult<WhatsAppConversacionDetalleResponse>.Success(
+            MapDetalle(conversacion, totalMensajes, incluirDocumentoCompleto));
+    }
+
+    public Task<ServiceResult<WhatsAppConversacionDetalleResponse>> DesvincularClienteAsync(
+        Guid conversacionId,
+        Guid usuarioAccionId,
+        bool incluirDocumentoCompleto = false,
+        CancellationToken ct = default) =>
+        VincularClienteAsync(
+            conversacionId,
+            new WhatsAppVincularClienteRequest(null),
+            usuarioAccionId,
+            incluirDocumentoCompleto,
+            ct);
+
+    public async Task<ServiceResult<WhatsAppVinculacionClienteResponse>> ObtenerVinculacionClienteAsync(
+        Guid conversacionId,
+        bool incluirDocumentoCompleto = false,
+        CancellationToken ct = default)
+    {
+        var conversacion = await _context.ConversacionesWhatsApp
+            .AsNoTracking()
+            .Include(c => c.Cliente)
+            .FirstOrDefaultAsync(c => c.Id == conversacionId && c.Activo, ct);
+
+        if (conversacion is null)
+        {
+            return ServiceResult<WhatsAppVinculacionClienteResponse>.NotFound("Conversación de WhatsApp no encontrada.");
+        }
+
+        var codigoPais = _settingsMonitor.CurrentValue.DefaultCountryCode;
+        var clienteVinculadoInactivo = conversacion.ClienteId.HasValue && conversacion.Cliente is not { Activo: true };
+        var estaVinculada = conversacion.ClienteId.HasValue && conversacion.Cliente is { Activo: true };
+        bool? telefonoCoincide = null;
+        WhatsAppClienteVinculadoBasicoResponse? clienteDto = null;
+
+        if (estaVinculada)
+        {
+            var cli = conversacion.Cliente!;
+            var cantidadVehiculos = await _context.Vehiculos
+                .AsNoTracking()
+                .CountAsync(v => v.ClienteId == cli.Id && v.Activo, ct);
+
+            var docCrudo = !string.IsNullOrWhiteSpace(cli.NumeroDocumento)
+                ? cli.NumeroDocumento.Trim()
+                : cli.DocumentoIdentidad?.Trim();
+
+            var telefonosCliente = WhatsAppPhoneNormalizer.ExtraerTelefonosNormalizadosE164(cli.Telefono, codigoPais);
+            telefonoCoincide = telefonosCliente.Contains(conversacion.TelefonoE164, StringComparer.Ordinal);
+
+            clienteDto = new WhatsAppClienteVinculadoBasicoResponse(
+                Id: cli.Id,
+                NombreCompleto: cli.NombreCompleto,
+                RazonSocial: cli.RazonSocial,
+                TipoDocumento: cli.TipoDocumento,
+                DocumentoVisible: incluirDocumentoCompleto
+                    ? docCrudo
+                    : WhatsAppPhoneNormalizer.EnmascararDocumento(docCrudo),
+                Telefono: incluirDocumentoCompleto
+                    ? cli.Telefono
+                    : WhatsAppPhoneNormalizer.EnmascararTelefono(cli.Telefono),
+                CantidadVehiculosActivos: cantidadVehiculos);
+        }
+
+        var origenVinculacion = "SinVincular";
+        if (estaVinculada)
+        {
+            var convIdStr = conversacion.Id.ToString();
+            var ultimoEventoVinculo = await _context.EventosAuditoria
+                .AsNoTracking()
+                .Where(e =>
+                    e.Entidad == "ConversacionWhatsApp"
+                    && e.EntidadId == convIdStr
+                    && (e.Accion == "WHATSAPP_VINCULAR_CLIENTE"
+                        || e.Accion == "WHATSAPP_DESVINCULAR_CLIENTE"
+                        || e.Accion == "WHATSAPP_REIDENTIFICAR_CLIENTE"))
+                .OrderByDescending(e => e.Fecha)
+                .Select(e => e.Accion)
+                .FirstOrDefaultAsync(ct);
+
+            origenVinculacion = ultimoEventoVinculo == "WHATSAPP_VINCULAR_CLIENTE"
+                ? "Manual"
+                : "Automatico";
+        }
+
+        var requiereRevision = conversacion.AsociacionClienteAmbigua
+            || clienteVinculadoInactivo
+            || (estaVinculada && telefonoCoincide == false);
+
+        return ServiceResult<WhatsAppVinculacionClienteResponse>.Success(new WhatsAppVinculacionClienteResponse(
+            ConversacionId: conversacion.Id,
+            TelefonoE164: conversacion.TelefonoE164,
+            EstaVinculada: estaVinculada,
+            AsociacionClienteAmbigua: conversacion.AsociacionClienteAmbigua,
+            ClienteVinculadoInactivo: clienteVinculadoInactivo,
+            TelefonoCoincideConCliente: telefonoCoincide,
+            RequiereRevisionVinculacion: requiereRevision,
+            OrigenVinculacion: origenVinculacion,
+            Cliente: clienteDto));
+    }
+
+    public async Task<ServiceResult<WhatsAppClientesCandidatosPaginadosResponse>> BuscarClientesParaVincularAsync(
+        string? busqueda,
+        int pagina = 1,
+        int tamanoPagina = 15,
+        CancellationToken ct = default)
+    {
+        var termino = busqueda?.Trim();
+        if (string.IsNullOrWhiteSpace(termino) || termino.Length < 3)
+        {
+            return ServiceResult<WhatsAppClientesCandidatosPaginadosResponse>.Invalid(
+                "Debe ingresar un criterio de búsqueda de al menos 3 caracteres.");
+        }
+
+        var paginaSegura = Math.Max(1, pagina);
+        var tamanoSeguro = Math.Clamp(tamanoPagina, 1, 25);
+        var codigoPais = _settingsMonitor.CurrentValue.DefaultCountryCode;
+        var termLower = termino.ToLowerInvariant();
+
+        var normTelBusqueda = WhatsAppPhoneNormalizer.NormalizarE164(termino, codigoPais);
+        var telObjetivoE164 = normTelBusqueda.EsValido ? normTelBusqueda.TelefonoE164 : null;
+        var digitosPrefiltroTel = normTelBusqueda.EsValido && !string.IsNullOrEmpty(normTelBusqueda.WhatsAppId)
+            ? (normTelBusqueda.WhatsAppId.StartsWith("51", StringComparison.Ordinal) && normTelBusqueda.WhatsAppId.Length > 2
+                ? normTelBusqueda.WhatsAppId[2..]
+                : normTelBusqueda.WhatsAppId)
+            : null;
+
+        // Filtrado en SQL antes de materializar para jamás cargar el padrón completo en memoria (H-03.C / M-05).
+        var baseQuery = _context.Clientes
+            .AsNoTracking()
+            .Where(c => c.Activo);
+
+        if (digitosPrefiltroTel is not null)
+        {
+            baseQuery = baseQuery.Where(c =>
+                c.NombreCompleto.ToLower().Contains(termLower)
+                || (c.RazonSocial != null && c.RazonSocial.ToLower().Contains(termLower))
+                || (c.NumeroDocumento != null && c.NumeroDocumento.ToLower() == termLower)
+                || (c.DocumentoIdentidad != null && c.DocumentoIdentidad.ToLower() == termLower)
+                || (c.Telefono != null && c.Telefono
+                    .Replace(" ", "")
+                    .Replace("-", "")
+                    .Replace("(", "")
+                    .Replace(")", "")
+                    .Replace(".", "")
+                    .Replace("+", "")
+                    .Replace("\t", "")
+                    .Contains(digitosPrefiltroTel)));
+        }
+        else
+        {
+            baseQuery = baseQuery.Where(c =>
+                c.NombreCompleto.ToLower().Contains(termLower)
+                || (c.RazonSocial != null && c.RazonSocial.ToLower().Contains(termLower))
+                || (c.NumeroDocumento != null && c.NumeroDocumento.ToLower() == termLower)
+                || (c.DocumentoIdentidad != null && c.DocumentoIdentidad.ToLower() == termLower));
+        }
+
+        List<WhatsAppClienteCandidatoResponse> items;
+        int totalRegistros;
+
+        if (telObjetivoE164 is not null)
+        {
+            // Solo sobre el subconjunto ya prefiltrado en SQL verificamos igualdad E.164 exacta cuando coincidió por teléfono.
+            var candidatosSql = await baseQuery
+                .OrderBy(c => c.NombreCompleto)
+                .Select(c => new
+                {
+                    c.Id,
+                    c.NombreCompleto,
+                    c.RazonSocial,
+                    c.TipoDocumento,
+                    c.NumeroDocumento,
+                    c.DocumentoIdentidad,
+                    c.Telefono,
+                    CantidadVehiculos = c.Vehiculos.Count(v => v.Activo)
+                })
+                .Take(200)
+                .ToListAsync(ct);
+
+            var verificados = candidatosSql
+                .Where(c =>
+                    c.NombreCompleto.Contains(termino, StringComparison.OrdinalIgnoreCase)
+                    || (c.RazonSocial is not null && c.RazonSocial.Contains(termino, StringComparison.OrdinalIgnoreCase))
+                    || (c.NumeroDocumento is not null && c.NumeroDocumento.Equals(termino, StringComparison.OrdinalIgnoreCase))
+                    || (c.DocumentoIdentidad is not null && c.DocumentoIdentidad.Equals(termino, StringComparison.OrdinalIgnoreCase))
+                    || WhatsAppPhoneNormalizer.ExtraerTelefonosNormalizadosE164(c.Telefono, codigoPais)
+                        .Contains(telObjetivoE164, StringComparer.Ordinal))
+                .ToList();
+
+            totalRegistros = verificados.Count;
+            items = verificados
+                .Skip((paginaSegura - 1) * tamanoSeguro)
+                .Take(tamanoSeguro)
+                .Select(c =>
+                {
+                    var docCrudo = !string.IsNullOrWhiteSpace(c.NumeroDocumento)
+                        ? c.NumeroDocumento.Trim()
+                        : c.DocumentoIdentidad?.Trim();
+
+                    return new WhatsAppClienteCandidatoResponse(
+                        Id: c.Id,
+                        NombreCompleto: c.NombreCompleto,
+                        RazonSocial: c.RazonSocial,
+                        TipoDocumento: c.TipoDocumento,
+                        DocumentoEnmascarado: WhatsAppPhoneNormalizer.EnmascararDocumento(docCrudo),
+                        TelefonoEnmascarado: WhatsAppPhoneNormalizer.EnmascararTelefono(c.Telefono),
+                        CantidadVehiculosActivos: c.CantidadVehiculos);
+                })
+                .ToList();
+        }
+        else
+        {
+            totalRegistros = await baseQuery.CountAsync(ct);
+            var paginaSql = await baseQuery
+                .OrderBy(c => c.NombreCompleto)
+                .Skip((paginaSegura - 1) * tamanoSeguro)
+                .Take(tamanoSeguro)
+                .Select(c => new
+                {
+                    c.Id,
+                    c.NombreCompleto,
+                    c.RazonSocial,
+                    c.TipoDocumento,
+                    c.NumeroDocumento,
+                    c.DocumentoIdentidad,
+                    c.Telefono,
+                    CantidadVehiculos = c.Vehiculos.Count(v => v.Activo)
+                })
+                .ToListAsync(ct);
+
+            items = paginaSql.Select(c =>
+            {
+                var docCrudo = !string.IsNullOrWhiteSpace(c.NumeroDocumento)
+                    ? c.NumeroDocumento.Trim()
+                    : c.DocumentoIdentidad?.Trim();
+
+                return new WhatsAppClienteCandidatoResponse(
+                    Id: c.Id,
+                    NombreCompleto: c.NombreCompleto,
+                    RazonSocial: c.RazonSocial,
+                    TipoDocumento: c.TipoDocumento,
+                    DocumentoEnmascarado: WhatsAppPhoneNormalizer.EnmascararDocumento(docCrudo),
+                    TelefonoEnmascarado: WhatsAppPhoneNormalizer.EnmascararTelefono(c.Telefono),
+                    CantidadVehiculosActivos: c.CantidadVehiculos);
+            }).ToList();
+        }
+
+        return ServiceResult<WhatsAppClientesCandidatosPaginadosResponse>.Success(
+            new WhatsAppClientesCandidatosPaginadosResponse(items, totalRegistros, paginaSegura, tamanoSeguro));
+    }
+
+    public async Task<ServiceResult<WhatsAppResultadoIdentificacionResponse>> ReintentarIdentificacionClienteAsync(
+        Guid conversacionId,
+        Guid usuarioAccionId,
+        CancellationToken ct = default)
+    {
+        var conversacion = await _context.ConversacionesWhatsApp
+            .Include(c => c.Cliente)
+            .FirstOrDefaultAsync(c => c.Id == conversacionId && c.Activo, ct);
+
+        if (conversacion is null)
+        {
+            return ServiceResult<WhatsAppResultadoIdentificacionResponse>.NotFound("Conversación de WhatsApp no encontrada.");
+        }
+
+        // Nunca sobrescribir un vínculo activo (manual o previo); sí permitir reemplazar si el cliente anterior fue desactivado (M-03).
+        if (conversacion.ClienteId.HasValue && conversacion.Cliente is { Activo: true })
+        {
+            return ServiceResult<WhatsAppResultadoIdentificacionResponse>.Conflict(
+                "La conversación ya está vinculada a un cliente activo. Desvincule primero si desea re-ejecutar la identificación automática.");
+        }
+
+        var clienteAnteriorInactivoId = conversacion.ClienteId;
+        var identificacion = await _identificacionService.IdentificarPorTelefonoAsync(conversacion.TelefonoE164, ct);
+
+        conversacion.ClienteId = identificacion.EsVinculableAutomaticamente ? identificacion.ClienteId : null;
+        conversacion.Cliente = null;
+        conversacion.AsociacionClienteAmbigua = identificacion.EsAmbiguo;
         conversacion.ModificadoPorId = usuarioAccionId;
         conversacion.FechaModificacion = DateTime.UtcNow;
 
@@ -440,17 +805,27 @@ public sealed class WhatsAppService : IWhatsAppService
 
         await _auditoria.RegistrarEventoAsync(
             usuarioAccionId,
-            "WHATSAPP_VINCULAR_CLIENTE",
+            "WHATSAPP_REIDENTIFICAR_CLIENTE",
             "ConversacionWhatsApp",
             conversacion.Id.ToString(),
-            new { ClienteAnteriorId = anteriorClienteId, ClienteNuevoId = cliente?.Id },
+            new
+            {
+                ClienteAnteriorInactivoId = clienteAnteriorInactivoId,
+                EstadoIdentificacion = identificacion.Estado.ToString(),
+                TotalCandidatos = identificacion.TotalCandidatos,
+                ClienteVinculadoId = conversacion.ClienteId
+            },
             ct);
 
-        var totalMensajes = await _context.MensajesWhatsApp
-            .AsNoTracking()
-            .CountAsync(m => m.ConversacionId == conversacion.Id && m.Activo, ct);
-
-        return ServiceResult<WhatsAppConversacionDetalleResponse>.Success(MapDetalle(conversacion, totalMensajes));
+        return ServiceResult<WhatsAppResultadoIdentificacionResponse>.Success(
+            new WhatsAppResultadoIdentificacionResponse(
+                ConversacionId: conversacion.Id,
+                EstadoIdentificacion: identificacion.Estado.ToString(),
+                VinculadaAutomaticamente: identificacion.EsVinculableAutomaticamente,
+                AsociacionAmbigua: identificacion.EsAmbiguo,
+                ClienteId: conversacion.ClienteId,
+                TotalCandidatos: identificacion.TotalCandidatos,
+                Motivo: identificacion.Motivo));
     }
 
     public async Task<ServiceResult<WhatsAppMensajeResponse>> EnviarMensajeManualAsync(
@@ -593,25 +968,42 @@ public sealed class WhatsAppService : IWhatsAppService
         }
     }
 
-    private static WhatsAppConversacionDetalleResponse MapDetalle(ConversacionWhatsApp c, int totalMensajes) => new(
-        c.Id,
-        c.TelefonoE164,
-        c.WhatsAppId,
-        c.NombrePerfilWhatsApp,
-        c.ClienteId,
-        c.Cliente?.NombreCompleto,
-        c.Cliente?.NumeroDocumento,
-        c.AsociacionClienteAmbigua,
-        c.Estado,
-        c.ModoAtencion,
-        c.AgenteAsignadoId,
-        c.AgenteAsignado?.NombreCompleto,
-        c.FechaCreacion,
-        c.FechaUltimoMensaje,
-        c.FechaUltimoMensajeEntrante,
-        c.FechaCambioModoHumano,
-        c.FechaModificacion,
-        totalMensajes);
+    private static WhatsAppConversacionDetalleResponse MapDetalle(
+        ConversacionWhatsApp c,
+        int totalMensajes,
+        bool incluirDocumentoCompleto)
+    {
+        var clienteActivo = c.Cliente is { Activo: true } ? c.Cliente : null;
+        var docCrudo = clienteActivo is null
+            ? null
+            : (!string.IsNullOrWhiteSpace(clienteActivo.NumeroDocumento)
+                ? clienteActivo.NumeroDocumento.Trim()
+                : clienteActivo.DocumentoIdentidad?.Trim());
+
+        var docVisible = incluirDocumentoCompleto
+            ? docCrudo
+            : WhatsAppPhoneNormalizer.EnmascararDocumento(docCrudo);
+
+        return new WhatsAppConversacionDetalleResponse(
+            c.Id,
+            c.TelefonoE164,
+            c.WhatsAppId,
+            c.NombrePerfilWhatsApp,
+            clienteActivo?.Id,
+            clienteActivo?.NombreCompleto,
+            docVisible,
+            c.AsociacionClienteAmbigua,
+            c.Estado,
+            c.ModoAtencion,
+            c.AgenteAsignadoId,
+            c.AgenteAsignado?.NombreCompleto,
+            c.FechaCreacion,
+            c.FechaUltimoMensaje,
+            c.FechaUltimoMensajeEntrante,
+            c.FechaCambioModoHumano,
+            c.FechaModificacion,
+            totalMensajes);
+    }
 
     private static WhatsAppMensajeResponse MapMensaje(MensajeWhatsApp m) => new(
         m.Id,

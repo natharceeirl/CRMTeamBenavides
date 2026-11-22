@@ -31,17 +31,20 @@ public sealed class WhatsAppWebhookService : IWhatsAppWebhookService
     private static readonly KeyedAsyncLock<string> LocksTelefono = new(StringComparer.Ordinal);
 
     private readonly ApplicationDbContext _context;
+    private readonly IWhatsAppClienteIdentificacionService _identificacionService;
     private readonly IWhatsAppAutoResponder _autoResponder;
     private readonly IOptionsMonitor<WhatsAppSettings> _settingsMonitor;
     private readonly ILogger<WhatsAppWebhookService> _logger;
 
     public WhatsAppWebhookService(
         ApplicationDbContext context,
+        IWhatsAppClienteIdentificacionService identificacionService,
         IWhatsAppAutoResponder autoResponder,
         IOptionsMonitor<WhatsAppSettings> settingsMonitor,
         ILogger<WhatsAppWebhookService> logger)
     {
         _context = context;
+        _identificacionService = identificacionService;
         _autoResponder = autoResponder;
         _settingsMonitor = settingsMonitor;
         _logger = logger;
@@ -246,7 +249,7 @@ public sealed class WhatsAppWebhookService : IWhatsAppWebhookService
         var wamid = ObtenerString(msgElem, "id")?.Trim();
         var fromRaw = ObtenerString(msgElem, "from");
 
-        var norm = WhatsAppPhoneNormalizer.NormalizarE164(fromRaw, defaultCountryCode);
+        var norm = WhatsAppPhoneNormalizer.NormalizarRemitenteMeta(fromRaw, defaultCountryCode);
         if (!norm.EsValido || string.IsNullOrEmpty(norm.TelefonoE164))
         {
             _logger.LogWarning("WhatsApp webhook ignoró mensaje entrante con número de origen inválido.");
@@ -283,7 +286,6 @@ public sealed class WhatsAppWebhookService : IWhatsAppWebhookService
                 waId,
                 nombrePerfil,
                 fechaEventoUtc,
-                defaultCountryCode,
                 ct);
 
             var parsed = ParsearContenidoMensaje(msgElem);
@@ -368,7 +370,6 @@ public sealed class WhatsAppWebhookService : IWhatsAppWebhookService
         string waId,
         string? nombrePerfil,
         DateTime fechaEventoUtc,
-        string defaultCountryCode,
         CancellationToken ct)
     {
         using var lockTel = await LocksTelefono.AcquireAsync(telefonoE164, ct);
@@ -391,7 +392,7 @@ public sealed class WhatsAppWebhookService : IWhatsAppWebhookService
                 return existente;
             }
 
-            var (clienteId, esAmbigua) = await ResolverClientePorTelefonoAsync(telefonoE164, defaultCountryCode, ct);
+            var identificacion = await _identificacionService.IdentificarPorTelefonoAsync(telefonoE164, ct);
 
             var ahora = DateTime.UtcNow;
             var nueva = new ConversacionWhatsApp
@@ -399,8 +400,8 @@ public sealed class WhatsAppWebhookService : IWhatsAppWebhookService
                 TelefonoE164 = telefonoE164,
                 WhatsAppId = Truncar(waId, 32),
                 NombrePerfilWhatsApp = Truncar(nombrePerfil, 150),
-                ClienteId = clienteId,
-                AsociacionClienteAmbigua = esAmbigua,
+                ClienteId = identificacion.EsVinculableAutomaticamente ? identificacion.ClienteId : null,
+                AsociacionClienteAmbigua = identificacion.EsAmbiguo,
                 Estado = EstadoConversacionWhatsApp.Abierta,
                 ModoAtencion = ModoAtencionWhatsApp.Bot,
                 FechaUltimoMensaje = fechaEventoUtc,
@@ -429,44 +430,6 @@ public sealed class WhatsAppWebhookService : IWhatsAppWebhookService
                 throw;
             }
         }
-    }
-
-    /// <summary>
-    /// Busca coincidencias exactas por teléfono normalizado E.164 entre clientes activos del CRM.
-    /// Reglas de integridad:
-    /// - 0 coincidencias: sin cliente asociado (no crea clientes automáticamente).
-    /// - 1 coincidencia: asociación unívoca.
-    /// - 2 o más coincidencias: marca asociación ambigua y NO vincula ni fusiona clientes.
-    /// </summary>
-    private async Task<(Guid? ClienteId, bool EsAmbigua)> ResolverClientePorTelefonoAsync(
-        string telefonoE164,
-        string defaultCountryCode,
-        CancellationToken ct)
-    {
-        var candidatos = await _context.Clientes
-            .AsNoTracking()
-            .Where(c => c.Activo && c.Telefono != null && c.Telefono != "")
-            .Select(c => new { c.Id, c.Telefono })
-            .ToListAsync(ct);
-
-        Guid? unicoId = null;
-        int coincidencias = 0;
-
-        foreach (var c in candidatos)
-        {
-            var norm = WhatsAppPhoneNormalizer.NormalizarE164(c.Telefono, defaultCountryCode);
-            if (norm.EsValido && string.Equals(norm.TelefonoE164, telefonoE164, StringComparison.Ordinal))
-            {
-                coincidencias++;
-                unicoId = c.Id;
-                if (coincidencias > 1)
-                {
-                    return (null, true);
-                }
-            }
-        }
-
-        return coincidencias == 1 ? (unicoId, false) : (null, false);
     }
 
     private async Task<bool> ProcesarNotificacionEstadoAsync(JsonElement statusElem, CancellationToken ct)

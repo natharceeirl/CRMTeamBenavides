@@ -5,6 +5,7 @@ using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Api.Services.WhatsApp;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace CRMTeamBenavides.Api.Features.WhatsApp;
@@ -128,7 +129,7 @@ public static class WhatsAppEndpoints
             ApplicationDbContext dbContext,
             CancellationToken ct) =>
         {
-            var (denegado, _) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct);
+            var (denegado, _) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct, PermisosDefinidos.WhatsAppVer);
             if (denegado is not null) return denegado;
 
             return Results.Ok(service.ObtenerEstadoIntegracion());
@@ -148,7 +149,7 @@ public static class WhatsAppEndpoints
             ApplicationDbContext dbContext,
             CancellationToken ct) =>
         {
-            var (denegado, _) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct);
+            var (denegado, _) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct, PermisosDefinidos.WhatsAppVer);
             if (denegado is not null) return denegado;
 
             var resultado = await service.ListarConversacionesAsync(
@@ -167,15 +168,19 @@ public static class WhatsAppEndpoints
 
         adminGroup.MapGet("/conversaciones/{id:guid}", async (
             Guid id,
+            bool? incluirDocumento,
             ClaimsPrincipal user,
             IWhatsAppService service,
             ApplicationDbContext dbContext,
             CancellationToken ct) =>
         {
-            var (denegado, _) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct);
+            var (denegado, usuarioId) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct, PermisosDefinidos.WhatsAppVer);
             if (denegado is not null) return denegado;
 
-            var result = await service.ObtenerConversacionAsync(id, ct);
+            var puedeVerDocumento = incluirDocumento == true
+                && await TienePermisoEnBdAsync(usuarioId!.Value, PermisosDefinidos.ClientesVer, dbContext, ct);
+
+            var result = await service.ObtenerConversacionAsync(id, puedeVerDocumento, ct);
             return MapearResultado(result);
         })
         .RequireAuthorization(PermisosDefinidos.WhatsAppVer)
@@ -190,7 +195,7 @@ public static class WhatsAppEndpoints
             ApplicationDbContext dbContext,
             CancellationToken ct) =>
         {
-            var (denegado, _) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct);
+            var (denegado, _) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct, PermisosDefinidos.WhatsAppVer);
             if (denegado is not null) return denegado;
 
             var result = await service.ListarMensajesAsync(id, pagina ?? 1, tamanoPagina ?? 50, ct);
@@ -207,10 +212,10 @@ public static class WhatsAppEndpoints
             ApplicationDbContext dbContext,
             CancellationToken ct) =>
         {
-            var (denegado, usuarioId) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct);
+            var (denegado, usuarioId) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct, PermisosDefinidos.WhatsAppGestionar);
             if (denegado is not null) return denegado;
 
-            var result = await service.AsignarAgenteAsync(id, request, usuarioId!.Value, ct);
+            var result = await service.AsignarAgenteAsync(id, request, usuarioId!.Value, incluirDocumentoCompleto: false, ct);
             return MapearResultado(result);
         })
         .RequireAuthorization(PermisosDefinidos.WhatsAppGestionar)
@@ -224,10 +229,10 @@ public static class WhatsAppEndpoints
             ApplicationDbContext dbContext,
             CancellationToken ct) =>
         {
-            var (denegado, usuarioId) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct);
+            var (denegado, usuarioId) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct, PermisosDefinidos.WhatsAppGestionar);
             if (denegado is not null) return denegado;
 
-            var result = await service.CambiarModoAtencionAsync(id, request, usuarioId!.Value, ct);
+            var result = await service.CambiarModoAtencionAsync(id, request, usuarioId!.Value, incluirDocumentoCompleto: false, ct);
             return MapearResultado(result);
         })
         .RequireAuthorization(PermisosDefinidos.WhatsAppGestionar)
@@ -241,10 +246,10 @@ public static class WhatsAppEndpoints
             ApplicationDbContext dbContext,
             CancellationToken ct) =>
         {
-            var (denegado, usuarioId) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct);
+            var (denegado, usuarioId) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct, PermisosDefinidos.WhatsAppGestionar);
             if (denegado is not null) return denegado;
 
-            var result = await service.CambiarEstadoAsync(id, request, usuarioId!.Value, ct);
+            var result = await service.CambiarEstadoAsync(id, request, usuarioId!.Value, incluirDocumentoCompleto: false, ct);
             return MapearResultado(result);
         })
         .RequireAuthorization(PermisosDefinidos.WhatsAppGestionar)
@@ -258,14 +263,278 @@ public static class WhatsAppEndpoints
             ApplicationDbContext dbContext,
             CancellationToken ct) =>
         {
-            var (denegado, usuarioId) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct);
+            var (denegado, usuarioId) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct, PermisosDefinidos.WhatsAppGestionar);
             if (denegado is not null) return denegado;
 
-            var result = await service.VincularClienteAsync(id, request, usuarioId!.Value, ct);
+            var result = await service.VincularClienteAsync(id, request, usuarioId!.Value, incluirDocumentoCompleto: false, ct);
             return MapearResultado(result);
         })
         .RequireAuthorization(PermisosDefinidos.WhatsAppGestionar)
         .WithName("VincularClienteConversacionWhatsApp");
+
+        adminGroup.MapDelete("/conversaciones/{id:guid}/vincular-cliente", async (
+            Guid id,
+            ClaimsPrincipal user,
+            IWhatsAppService service,
+            ApplicationDbContext dbContext,
+            CancellationToken ct) =>
+        {
+            var (denegado, usuarioId) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct, PermisosDefinidos.WhatsAppGestionar);
+            if (denegado is not null) return denegado;
+
+            var result = await service.DesvincularClienteAsync(id, usuarioId!.Value, incluirDocumentoCompleto: false, ct);
+            return MapearResultado(result);
+        })
+        .RequireAuthorization(PermisosDefinidos.WhatsAppGestionar)
+        .WithName("DesvincularClienteConversacionWhatsApp");
+
+        adminGroup.MapGet("/conversaciones/{id:guid}/vinculacion", async (
+            Guid id,
+            bool? incluirDocumento,
+            ClaimsPrincipal user,
+            IWhatsAppService service,
+            ApplicationDbContext dbContext,
+            CancellationToken ct) =>
+        {
+            var (denegado, usuarioId) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct, PermisosDefinidos.WhatsAppVer);
+            if (denegado is not null) return denegado;
+
+            var puedeVerDocumento = incluirDocumento == true
+                && await TienePermisoEnBdAsync(usuarioId!.Value, PermisosDefinidos.ClientesVer, dbContext, ct);
+            var result = await service.ObtenerVinculacionClienteAsync(id, puedeVerDocumento, ct);
+            return MapearResultado(result);
+        })
+        .RequireAuthorization(PermisosDefinidos.WhatsAppVer)
+        .WithName("ObtenerVinculacionClienteWhatsApp");
+
+        adminGroup.MapPost("/conversaciones/{id:guid}/identificar-cliente", async (
+            Guid id,
+            ClaimsPrincipal user,
+            IWhatsAppService service,
+            ApplicationDbContext dbContext,
+            CancellationToken ct) =>
+        {
+            var (denegado, usuarioId) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct, PermisosDefinidos.WhatsAppGestionar);
+            if (denegado is not null) return denegado;
+
+            var result = await service.ReintentarIdentificacionClienteAsync(id, usuarioId!.Value, ct);
+            return MapearResultado(result);
+        })
+        .RequireAuthorization(PermisosDefinidos.WhatsAppGestionar)
+        .WithName("ReintentarIdentificacionClienteWhatsApp");
+
+        adminGroup.MapGet("/clientes/buscar", async (
+            string? busqueda,
+            int? pagina,
+            int? tamanoPagina,
+            ClaimsPrincipal user,
+            IWhatsAppService service,
+            ApplicationDbContext dbContext,
+            CancellationToken ct) =>
+        {
+            var (denegado, _) = await ValidarPersonalAutorizadoAsync(
+                user,
+                dbContext,
+                ct,
+                PermisosDefinidos.WhatsAppGestionar,
+                PermisosDefinidos.ClientesVer);
+            if (denegado is not null) return denegado;
+
+            var result = await service.BuscarClientesParaVincularAsync(
+                busqueda,
+                pagina ?? 1,
+                tamanoPagina ?? 15,
+                ct);
+            return MapearResultado(result);
+        })
+        .RequireAuthorization(PermisosDefinidos.WhatsAppGestionar)
+        .RequireAuthorization(PermisosDefinidos.ClientesVer)
+        .WithName("BuscarClientesParaVincularWhatsApp");
+
+        // --- Adaptadores administrativos de consulta controlada del CRM vinculados a una conversación ---
+        // Cada ruta exige whatsapp.ver ADEMÁS del permiso granular del módulo CRM consultado (H-03.B).
+
+        adminGroup.MapGet("/conversaciones/{id:guid}/crm/perfil", async (
+            Guid id,
+            bool? incluirDocumento,
+            ClaimsPrincipal user,
+            IWhatsAppCrmConsultaService crmConsulta,
+            ApplicationDbContext dbContext,
+            CancellationToken ct) =>
+        {
+            var (denegado, _) = await ValidarPersonalAutorizadoAsync(
+                user,
+                dbContext,
+                ct,
+                PermisosDefinidos.WhatsAppVer,
+                PermisosDefinidos.ClientesVer);
+            if (denegado is not null) return denegado;
+
+            var contexto = WhatsAppContextoConsultaCrm.Administrativo(
+                permitirDocumentoCompleto: incluirDocumento == true);
+
+            var result = await crmConsulta.ConsultarPerfilClienteAsync(id, contexto, ct);
+            return MapearResultado(result);
+        })
+        .RequireAuthorization(PermisosDefinidos.WhatsAppVer)
+        .RequireAuthorization(PermisosDefinidos.ClientesVer)
+        .WithName("ConsultarPerfilClienteWhatsApp");
+
+        adminGroup.MapGet("/conversaciones/{id:guid}/crm/vehiculos", async (
+            Guid id,
+            ClaimsPrincipal user,
+            IWhatsAppCrmConsultaService crmConsulta,
+            ApplicationDbContext dbContext,
+            CancellationToken ct) =>
+        {
+            var (denegado, _) = await ValidarPersonalAutorizadoAsync(
+                user,
+                dbContext,
+                ct,
+                PermisosDefinidos.WhatsAppVer,
+                PermisosDefinidos.UnidadesVer);
+            if (denegado is not null) return denegado;
+
+            var result = await crmConsulta.ConsultarVehiculosClienteAsync(
+                id,
+                WhatsAppContextoConsultaCrm.Administrativo(),
+                ct);
+            return MapearResultado(result);
+        })
+        .RequireAuthorization(PermisosDefinidos.WhatsAppVer)
+        .RequireAuthorization(PermisosDefinidos.UnidadesVer)
+        .WithName("ConsultarVehiculosClienteWhatsApp");
+
+        adminGroup.MapGet("/conversaciones/{id:guid}/crm/ordenes", async (
+            Guid id,
+            bool? incluirFinalizadasYCanceladas,
+            int? limite,
+            ClaimsPrincipal user,
+            IWhatsAppCrmConsultaService crmConsulta,
+            ApplicationDbContext dbContext,
+            CancellationToken ct) =>
+        {
+            var (denegado, _) = await ValidarPersonalAutorizadoAsync(
+                user,
+                dbContext,
+                ct,
+                PermisosDefinidos.WhatsAppVer,
+                PermisosDefinidos.OrdenesVerTodas);
+            if (denegado is not null) return denegado;
+
+            var result = await crmConsulta.ConsultarOrdenesServicioClienteAsync(
+                id,
+                incluirFinalizadasYCanceladas ?? true,
+                limite ?? 10,
+                WhatsAppContextoConsultaCrm.Administrativo(),
+                ct);
+            return MapearResultado(result);
+        })
+        .RequireAuthorization(PermisosDefinidos.WhatsAppVer)
+        .RequireAuthorization(PermisosDefinidos.OrdenesVerTodas)
+        .WithName("ConsultarOrdenesClienteWhatsApp");
+
+        adminGroup.MapGet("/conversaciones/{id:guid}/crm/ordenes/{ordenId:guid}", async (
+            Guid id,
+            Guid ordenId,
+            ClaimsPrincipal user,
+            IWhatsAppCrmConsultaService crmConsulta,
+            ApplicationDbContext dbContext,
+            CancellationToken ct) =>
+        {
+            var (denegado, _) = await ValidarPersonalAutorizadoAsync(
+                user,
+                dbContext,
+                ct,
+                PermisosDefinidos.WhatsAppVer,
+                PermisosDefinidos.OrdenesVerTodas);
+            if (denegado is not null) return denegado;
+
+            var result = await crmConsulta.ConsultarEstadoOrdenServicioAsync(
+                id,
+                ordenServicioId: ordenId,
+                contexto: WhatsAppContextoConsultaCrm.Administrativo(),
+                ct: ct);
+            return MapearResultado(result);
+        })
+        .RequireAuthorization(PermisosDefinidos.WhatsAppVer)
+        .RequireAuthorization(PermisosDefinidos.OrdenesVerTodas)
+        .WithName("ConsultarEstadoOrdenClienteWhatsApp");
+
+        adminGroup.MapGet("/conversaciones/{id:guid}/crm/citas", async (
+            Guid id,
+            bool? soloActivas,
+            int? limite,
+            ClaimsPrincipal user,
+            IWhatsAppCrmConsultaService crmConsulta,
+            ApplicationDbContext dbContext,
+            CancellationToken ct) =>
+        {
+            var (denegado, _) = await ValidarPersonalAutorizadoAsync(
+                user,
+                dbContext,
+                ct,
+                PermisosDefinidos.WhatsAppVer,
+                PermisosDefinidos.CitasVer);
+            if (denegado is not null) return denegado;
+
+            var result = await crmConsulta.ConsultarCitasClienteAsync(
+                id,
+                soloActivas ?? false,
+                limite ?? 10,
+                WhatsAppContextoConsultaCrm.Administrativo(),
+                ct);
+            return MapearResultado(result);
+        })
+        .RequireAuthorization(PermisosDefinidos.WhatsAppVer)
+        .RequireAuthorization(PermisosDefinidos.CitasVer)
+        .WithName("ConsultarCitasClienteWhatsApp");
+
+        adminGroup.MapGet("/crm/catalogo", async (
+            string? busqueda,
+            bool? incluirProductos,
+            bool? incluirServicios,
+            int? limite,
+            ClaimsPrincipal user,
+            IWhatsAppCrmConsultaService crmConsulta,
+            ApplicationDbContext dbContext,
+            CancellationToken ct) =>
+        {
+            var incProd = incluirProductos ?? true;
+            var incServ = incluirServicios ?? true;
+
+            var permisos = new List<string> { PermisosDefinidos.WhatsAppVer };
+            if (incProd) permisos.Add(PermisosDefinidos.InventarioVer);
+            if (incServ) permisos.Add(PermisosDefinidos.ServiciosVer);
+
+            var (denegado, usuarioId) = await ValidarPersonalAutorizadoAsync(
+                user,
+                dbContext,
+                ct,
+                permisos.ToArray());
+            if (denegado is not null) return denegado;
+
+            if (!incProd && !incServ)
+            {
+                var tieneAlguno = await TienePermisoEnBdAsync(usuarioId!.Value, PermisosDefinidos.InventarioVer, dbContext, ct)
+                    || await TienePermisoEnBdAsync(usuarioId.Value, PermisosDefinidos.ServiciosVer, dbContext, ct);
+                if (!tieneAlguno)
+                {
+                    return Results.Forbid();
+                }
+            }
+
+            var catalogo = await crmConsulta.ConsultarProductosYServiciosAsync(
+                busqueda,
+                incProd,
+                incServ,
+                limite ?? 15,
+                WhatsAppModoConsultaCrm.AdministrativoInterno,
+                ct);
+            return Results.Ok(catalogo);
+        })
+        .RequireAuthorization(PermisosDefinidos.WhatsAppVer)
+        .WithName("ConsultarCatalogoWhatsApp");
 
         adminGroup.MapPost("/conversaciones/{id:guid}/mensajes", async (
             Guid id,
@@ -275,7 +544,7 @@ public static class WhatsAppEndpoints
             ApplicationDbContext dbContext,
             CancellationToken ct) =>
         {
-            var (denegado, usuarioId) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct);
+            var (denegado, usuarioId) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct, PermisosDefinidos.WhatsAppGestionar);
             if (denegado is not null) return denegado;
 
             var result = await service.EnviarMensajeManualAsync(id, request, usuarioId!.Value, ct);
@@ -285,23 +554,103 @@ public static class WhatsAppEndpoints
         .WithName("EnviarMensajeManualWhatsApp");
     }
 
+    /// <summary>
+    /// Valida contra base de datos que el usuario esté activo, posea roles activos no correspondientes
+    /// al portal de clientes (soportando roles personalizados de personal interno) y conserve vigentes
+    /// todos los permisos requeridos (sin confiar en claims de permisos o roles que hayan podido revocarse).
+    /// </summary>
     private static async Task<(IResult? Denegado, Guid? UsuarioId)> ValidarPersonalAutorizadoAsync(
         ClaimsPrincipal user,
         ApplicationDbContext dbContext,
-        CancellationToken ct)
+        CancellationToken ct,
+        params string[] permisosRequeridos)
     {
         if (user.Identity?.IsAuthenticated != true)
         {
             return (Results.Unauthorized(), null);
         }
 
-        var isolation = await UserIsolationHelper.ResolverContextoAsync(user, dbContext, ct);
-        if (!isolation.UsuarioId.HasValue || !isolation.EsStaff || isolation.EsCliente || isolation.DebeDenegarAcceso)
+        var usuarioId = UserIsolationHelper.ObtenerUsuarioId(user);
+        if (!usuarioId.HasValue)
         {
             return (Results.Forbid(), null);
         }
 
-        return (null, isolation.UsuarioId);
+        var usuarioActivo = await dbContext.Usuarios
+            .AsNoTracking()
+            .AnyAsync(u => u.Id == usuarioId.Value && u.Activo, ct);
+
+        if (!usuarioActivo)
+        {
+            return (Results.Forbid(), null);
+        }
+
+        var rolesActivos = await dbContext.UsuarioRoles
+            .AsNoTracking()
+            .Where(ur => ur.UsuarioId == usuarioId.Value && ur.Rol.Activo)
+            .Select(ur => ur.Rol.Nombre)
+            .ToListAsync(ct);
+
+        if (rolesActivos.Count == 0)
+        {
+            return (Results.Forbid(), null);
+        }
+
+        var esGerenciaEnBd = rolesActivos.Contains(RolesDefinidos.GerenciaAdmin);
+        var esRolCliente = rolesActivos.Contains(RolesDefinidos.Cliente)
+            || user.IsInRole(RolesDefinidos.Cliente);
+
+        // El rol Cliente del portal jamás puede ingresar a endpoints administrativos de WhatsApp.
+        if (esRolCliente && !esGerenciaEnBd)
+        {
+            return (Results.Forbid(), null);
+        }
+
+        if (!esGerenciaEnBd && permisosRequeridos.Length > 0)
+        {
+            var permisosVigentes = await dbContext.UsuarioRoles
+                .AsNoTracking()
+                .Where(ur => ur.UsuarioId == usuarioId.Value && ur.Rol.Activo)
+                .SelectMany(ur => ur.Rol.RolPermisos)
+                .Where(rp => rp.Permiso.Activo && permisosRequeridos.Contains(rp.Permiso.Codigo))
+                .Select(rp => rp.Permiso.Codigo)
+                .Distinct()
+                .ToListAsync(ct);
+
+            foreach (var requerido in permisosRequeridos)
+            {
+                if (!permisosVigentes.Contains(requerido, StringComparer.Ordinal))
+                {
+                    return (Results.Forbid(), null);
+                }
+            }
+        }
+
+        return (null, usuarioId.Value);
+    }
+
+    private static async Task<bool> TienePermisoEnBdAsync(
+        Guid usuarioId,
+        string codigoPermiso,
+        ApplicationDbContext dbContext,
+        CancellationToken ct)
+    {
+        var esGerenciaEnBd = await dbContext.UsuarioRoles
+            .AsNoTracking()
+            .AnyAsync(ur => ur.UsuarioId == usuarioId
+                         && ur.Rol.Activo
+                         && ur.Rol.Nombre == RolesDefinidos.GerenciaAdmin, ct);
+
+        if (esGerenciaEnBd)
+        {
+            return true;
+        }
+
+        return await dbContext.UsuarioRoles
+            .AsNoTracking()
+            .Where(ur => ur.UsuarioId == usuarioId && ur.Rol.Activo)
+            .SelectMany(ur => ur.Rol.RolPermisos)
+            .AnyAsync(rp => rp.Permiso.Activo && rp.Permiso.Codigo == codigoPermiso, ct);
     }
 
     private static IResult MapearResultado<T>(ServiceResult<T> result) => result.Status switch

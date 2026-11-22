@@ -326,6 +326,9 @@ builder.Services.AddScoped<IWhatsAppProvider>(sp =>
         : sp.GetRequiredService<MockWhatsAppProvider>();
 });
 builder.Services.AddScoped<IWhatsAppAutoResponder, NoOpWhatsAppAutoResponder>();
+builder.Services.AddSingleton<IWhatsAppVerificadorIdentidad, WhatsAppVerificadorIdentidadNoImplementado>();
+builder.Services.AddScoped<IWhatsAppClienteIdentificacionService, WhatsAppClienteIdentificacionService>();
+builder.Services.AddScoped<IWhatsAppCrmConsultaService, WhatsAppCrmConsultaService>();
 builder.Services.AddScoped<IWhatsAppOutboxService, WhatsAppOutboxService>();
 builder.Services.AddScoped<IWhatsAppWebhookService, WhatsAppWebhookService>();
 builder.Services.AddScoped<IWhatsAppService, WhatsAppService>();

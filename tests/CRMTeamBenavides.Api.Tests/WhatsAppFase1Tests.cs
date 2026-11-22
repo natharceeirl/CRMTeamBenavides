@@ -235,6 +235,9 @@ public class WhatsAppFase1Tests
             builder.Services.AddSingleton<IWhatsAppProvider>(new MockWhatsAppProvider(NullLogger<MockWhatsAppProvider>.Instance));
         }
 
+        builder.Services.AddSingleton<IWhatsAppVerificadorIdentidad, WhatsAppVerificadorIdentidadNoImplementado>();
+        builder.Services.AddScoped<IWhatsAppClienteIdentificacionService, WhatsAppClienteIdentificacionService>();
+        builder.Services.AddScoped<IWhatsAppCrmConsultaService, WhatsAppCrmConsultaService>();
         builder.Services.AddScoped<IWhatsAppOutboxService, WhatsAppOutboxService>();
         builder.Services.AddScoped<IWhatsAppWebhookService, WhatsAppWebhookService>();
         builder.Services.AddScoped<IWhatsAppService, WhatsAppService>();
@@ -787,7 +790,8 @@ public class WhatsAppFase1Tests
         var mockProvider = new MockWhatsAppProvider(NullLogger<MockWhatsAppProvider>.Instance);
         var outboxService = new WhatsAppOutboxService(db, mockProvider, settingsMonitor, NullLogger<WhatsAppOutboxService>.Instance);
         var auditoria = new AuditoriaEnMemoria();
-        var service = new WhatsAppService(db, outboxService, auditoria, settingsMonitor);
+        var identSvc = new WhatsAppClienteIdentificacionService(db, settingsMonitor, NullLogger<WhatsAppClienteIdentificacionService>.Instance);
+        var service = new WhatsAppService(db, outboxService, identSvc, auditoria, settingsMonitor);
 
         var usuarioId = Guid.NewGuid();
         var res = await service.EnviarMensajeManualAsync(
@@ -827,7 +831,8 @@ public class WhatsAppFase1Tests
         fakeProvider.Encolar(new WhatsAppSendResult(false, null, null, $"Timeout HTTP {settings.AccessToken}", TipoResultadoEnvioWhatsApp.ResultadoAmbiguo, "Meta"));
 
         var outboxService = new WhatsAppOutboxService(db, fakeProvider, settingsMonitor, NullLogger<WhatsAppOutboxService>.Instance);
-        var service = new WhatsAppService(db, outboxService, new AuditoriaEnMemoria(), settingsMonitor);
+        var identSvc = new WhatsAppClienteIdentificacionService(db, settingsMonitor, NullLogger<WhatsAppClienteIdentificacionService>.Instance);
+        var service = new WhatsAppService(db, outboxService, identSvc, new AuditoriaEnMemoria(), settingsMonitor);
 
         // 1. Error transitorio 503 -> queda Pendiente para reintento, sin secreto en ErrorDetalle
         var resTransitorio = await service.EnviarMensajeManualAsync(
@@ -908,7 +913,8 @@ public class WhatsAppFase1Tests
         {
             using var dbLocal = CrearContexto(dbName);
             var outbox = new WhatsAppOutboxService(dbLocal, fakeProvider, settingsMonitor, NullLogger<WhatsAppOutboxService>.Instance);
-            var svc = new WhatsAppService(dbLocal, outbox, new AuditoriaEnMemoria(), settingsMonitor);
+            var identSvc = new WhatsAppClienteIdentificacionService(dbLocal, settingsMonitor, NullLogger<WhatsAppClienteIdentificacionService>.Instance);
+            var svc = new WhatsAppService(dbLocal, outbox, identSvc, new AuditoriaEnMemoria(), settingsMonitor);
             return await svc.EnviarMensajeManualAsync(convId, new WhatsAppEnviarMensajeRequest("Mensaje único", "idem-unico-999"), Guid.NewGuid());
         }
 
@@ -1199,7 +1205,8 @@ public class WhatsAppFase1Tests
         var monitor = new StaticOptionsMonitor<WhatsAppSettings>(incompleto);
         var fakeProvider = new FakeWhatsAppProvider();
         var outboxSvc = new WhatsAppOutboxService(db, fakeProvider, monitor, NullLogger<WhatsAppOutboxService>.Instance);
-        var service = new WhatsAppService(db, outboxSvc, new AuditoriaEnMemoria(), monitor);
+        var identSvc = new WhatsAppClienteIdentificacionService(db, monitor, NullLogger<WhatsAppClienteIdentificacionService>.Instance);
+        var service = new WhatsAppService(db, outboxSvc, identSvc, new AuditoriaEnMemoria(), monitor);
 
         var res = await service.EnviarMensajeManualAsync(conv.Id, new WhatsAppEnviarMensajeRequest("No debe salir"), Guid.NewGuid());
         Assert.False(res.IsSuccess);

@@ -2130,6 +2130,50 @@ export type WhatsAppCambiarModoRequest = {
   modoAtencion: ModoAtencionWhatsApp
 }
 
+export type WhatsAppCatalogoConsultaResponse = {
+  productos: WhatsAppProductoCatalogoResponse[]
+  servicios: WhatsAppServicioCatalogoResponse[]
+}
+
+export type WhatsAppCitaClienteResponse = {
+  id: string
+  numeroCita: string | null
+  fechaHoraProgramada: string
+  duracionMinutos: number
+  estado: EstadoCita
+  motivo: string
+  vehiculoId: string | null
+  vehiculoResumen: string | null
+  ordenServicioId: string | null
+}
+
+export type WhatsAppClienteCandidatoResponse = {
+  id: string
+  nombreCompleto: string
+  razonSocial: string | null
+  tipoDocumento: TipoDocumentoCliente | null
+  documentoEnmascarado: string | null
+  telefonoEnmascarado: string | null
+  cantidadVehiculosActivos: number
+}
+
+export type WhatsAppClienteVinculadoBasicoResponse = {
+  id: string
+  nombreCompleto: string
+  razonSocial: string | null
+  tipoDocumento: TipoDocumentoCliente | null
+  documentoVisible: string | null
+  telefono: string | null
+  cantidadVehiculosActivos: number
+}
+
+export type WhatsAppClientesCandidatosPaginadosResponse = {
+  items: WhatsAppClienteCandidatoResponse[]
+  totalRegistros: number
+  pagina: number
+  tamanoPagina: number
+}
+
 export type WhatsAppConversacionDetalleResponse = {
   id: string
   telefonoE164: string
@@ -2216,6 +2260,125 @@ export type WhatsAppMensajesPaginadosResponse = {
   totalRegistros: number
   pagina: number
   tamanoPagina: number
+}
+
+export type WhatsAppOrdenServicioDetalleResponse = {
+  id: string
+  numeroOrden: string | null
+  fechaApertura: string
+  fechaIngreso: string
+  fechaEstimadaEntrega: string | null
+  fechaSalida: string | null
+  fechaCierre: string | null
+  estado: EstadoOrdenServicio
+  estadoEntrega: string
+  estadoPresupuestoCliente: EstadoPresupuestoCliente
+  vehiculoId: string
+  vehiculoResumen: string
+  vehiculoPlaca: string | null
+  tipoAtencionPrincipal: TipoAtencion
+  tiposAtencion: TipoAtencion[]
+  modalidadAtencion: ModalidadAtencion
+  motivoFalla: string | null
+  diagnosticoResumen: string | null
+  solucionResumen: string | null
+  trabajos: WhatsAppTrabajoOrdenResponse[]
+  total: number
+}
+
+export type WhatsAppOrdenServicioResumenResponse = {
+  id: string
+  numeroOrden: string | null
+  fechaIngreso: string
+  fechaEstimadaEntrega: string | null
+  fechaSalida: string | null
+  estado: EstadoOrdenServicio
+  estadoEntrega: string
+  vehiculoId: string
+  vehiculoResumen: string
+  tipoAtencionPrincipal: TipoAtencion
+  tiposAtencion: TipoAtencion[]
+  resumenTrabajos: string | null
+}
+
+export type WhatsAppPerfilClienteResponse = {
+  clienteId: string
+  nombreCompleto: string
+  razonSocial: string | null
+  tipoDocumento: TipoDocumentoCliente | null
+  documentoVisible: string | null
+  telefonosE164: string[]
+  tieneEmail: boolean
+  cantidadVehiculosActivos: number
+  cantidadOrdenesActivas: number
+  cantidadCitasActivas: number
+}
+
+export type WhatsAppProductoCatalogoResponse = {
+  id: string
+  codigo: string
+  nombre: string
+  marca: string | null
+  categoriaNombre: string | null
+  tipo: TipoProducto
+  unidad: string
+  disponible: boolean
+  stockDisponible: number | null
+  precioDisponible: boolean
+  precioBaseSinIgvSoles: number | null
+  precioReferencialConIgvSoles: number | null
+  precioIncluyeIgv: boolean
+}
+
+export type WhatsAppResultadoIdentificacionResponse = {
+  conversacionId: string
+  estadoIdentificacion: string
+  vinculadaAutomaticamente: boolean
+  asociacionAmbigua: boolean
+  clienteId: string | null
+  totalCandidatos: number
+  motivo: string
+}
+
+export type WhatsAppServicioCatalogoResponse = {
+  id: string
+  nombre: string
+  precioDisponible: boolean
+  precioSugeridoSoles: number | null
+  precioIncluyeIgv: boolean
+  tipoAfectacionIgv: TipoAfectacionIgv
+  precioReferencialConIgv: number | null
+}
+
+export type WhatsAppTrabajoOrdenResponse = {
+  tipoItem: TipoItemServicio
+  descripcion: string
+  cantidad: number
+}
+
+export type WhatsAppVehiculoClienteResponse = {
+  id: string
+  tipoUnidad: TipoUnidad
+  marca: string
+  modelo: string
+  anio: number | null
+  placa: string | null
+  color: string | null
+  tipoMedidor: TipoMedidor
+  lecturaMedidorActual: number | null
+  serieIdentificacionParcial: string | null
+}
+
+export type WhatsAppVinculacionClienteResponse = {
+  conversacionId: string
+  telefonoE164: string
+  estaVinculada: boolean
+  asociacionClienteAmbigua: boolean
+  clienteVinculadoInactivo: boolean
+  telefonoCoincideConCliente: boolean | null
+  requiereRevisionVinculacion: boolean
+  origenVinculacion: string
+  cliente: WhatsAppClienteVinculadoBasicoResponse | null
 }
 
 export type WhatsAppVincularClienteRequest = {
