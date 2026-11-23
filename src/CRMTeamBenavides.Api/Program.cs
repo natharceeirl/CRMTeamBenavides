@@ -39,6 +39,7 @@ using CRMTeamBenavides.Api.Services.Notificaciones;
 using CRMTeamBenavides.Api.Services.Yamaha;
 using CRMTeamBenavides.Api.Services.Yamaha.Exportadores;
 using CRMTeamBenavides.Api.Services.WhatsApp;
+using CRMTeamBenavides.Api.Services.WhatsApp.IA;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Data.Seed;
 using CRMTeamBenavides.Api.Health;
@@ -306,6 +307,10 @@ builder.Services
     .AddOptions<WhatsAppSettings>()
     .Bind(builder.Configuration.GetSection(WhatsAppSettings.SectionName));
 
+builder.Services
+    .AddOptions<WhatsAppAiSettings>()
+    .Bind(builder.Configuration.GetSection(WhatsAppAiSettings.SectionName));
+
 builder.Services.AddSingleton<MockWhatsAppProvider>();
 builder.Services
     .AddHttpClient<MetaWhatsAppProvider>((serviceProvider, client) =>
@@ -325,11 +330,27 @@ builder.Services.AddScoped<IWhatsAppProvider>(sp =>
         ? sp.GetRequiredService<MetaWhatsAppProvider>()
         : sp.GetRequiredService<MockWhatsAppProvider>();
 });
-builder.Services.AddScoped<IWhatsAppAutoResponder, NoOpWhatsAppAutoResponder>();
 builder.Services.AddSingleton<IWhatsAppVerificadorIdentidad, WhatsAppVerificadorIdentidadNoImplementado>();
 builder.Services.AddScoped<IWhatsAppClienteIdentificacionService, WhatsAppClienteIdentificacionService>();
 builder.Services.AddScoped<IWhatsAppCrmConsultaService, WhatsAppCrmConsultaService>();
 builder.Services.AddScoped<IWhatsAppOutboxService, WhatsAppOutboxService>();
+
+// Fase 3 — Inteligencia conversacional WhatsApp (deshabilitada por defecto: WhatsAppAi.Enabled = false, Provider = Mock)
+builder.Services.AddSingleton<IWhatsAppIntentClassifier, WhatsAppIntentClassifier>();
+builder.Services.AddSingleton<MockWhatsAppAiProvider>();
+builder.Services.AddSingleton<DisabledExternalWhatsAppAiProvider>();
+builder.Services.AddScoped<IWhatsAppAiProvider>(sp =>
+{
+    var aiSettings = sp.GetRequiredService<IOptionsMonitor<WhatsAppAiSettings>>().CurrentValue;
+    return aiSettings.UsaProveedorMock
+        ? sp.GetRequiredService<MockWhatsAppAiProvider>()
+        : sp.GetRequiredService<DisabledExternalWhatsAppAiProvider>();
+});
+builder.Services.AddScoped<IWhatsAppAiCrmToolsFacade, WhatsAppAiCrmToolsFacade>();
+builder.Services.AddScoped<IWhatsAppEscalamientoService, WhatsAppEscalamientoService>();
+builder.Services.AddScoped<IWhatsAppConversacionOrquestador, WhatsAppConversacionOrquestador>();
+builder.Services.AddScoped<IWhatsAppAutoResponder, WhatsAppAiAutoResponder>();
+
 builder.Services.AddScoped<IWhatsAppWebhookService, WhatsAppWebhookService>();
 builder.Services.AddScoped<IWhatsAppService, WhatsAppService>();
 builder.Services.AddHostedService<WhatsAppOutboxBackgroundService>();

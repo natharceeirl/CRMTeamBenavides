@@ -51,6 +51,17 @@ public class WhatsAppFase1Tests
             Eventos.Add((usuarioId, accion, entidad, entidadId, detalle));
             return Task.CompletedTask;
         }
+
+        public void EncolarEventoEnTransaccion(
+            Guid? usuarioId,
+            string accion,
+            string entidad,
+            string entidadId,
+            object? detalle = null,
+            DateTime? fechaUtc = null)
+        {
+            Eventos.Add((usuarioId, accion, entidad, entidadId, detalle));
+        }
     }
 
     private sealed class SpyAutoResponder : IWhatsAppAutoResponder

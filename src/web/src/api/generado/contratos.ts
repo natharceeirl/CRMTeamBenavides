@@ -2226,6 +2226,24 @@ export type WhatsAppEnviarMensajeRequest = {
   idempotencyKey?: string | null
 }
 
+export type WhatsAppEstadoIaResponse = {
+  enabled: boolean
+  proveedorConfigurado: string
+  proveedorEfectivo: string
+  proveedorOperativo: boolean
+  model: string
+  tieneCredencialesExternasConfiguradas: boolean
+  verificacionIdentidadHabilitada: boolean
+  whatsAppHabilitadoParaEnvios: boolean
+  whatsAppProveedorEfectivo: string
+  allowFaqTools: boolean
+  allowPublicCatalogTools: boolean
+  maxInputChars: number
+  maxOutputChars: number
+  maxOutputTokens: number
+  timeoutSeconds: number
+}
+
 export type WhatsAppEstadoIntegracionResponse = {
   enabled: boolean
   provider: string

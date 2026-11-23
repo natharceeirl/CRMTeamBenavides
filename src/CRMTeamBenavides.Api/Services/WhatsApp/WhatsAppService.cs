@@ -288,16 +288,6 @@ public sealed class WhatsAppService : IWhatsAppService
         bool incluirDocumentoCompleto = false,
         CancellationToken ct = default)
     {
-        var conversacion = await _context.ConversacionesWhatsApp
-            .Include(c => c.Cliente)
-            .Include(c => c.AgenteAsignado)
-            .FirstOrDefaultAsync(c => c.Id == conversacionId && c.Activo, ct);
-
-        if (conversacion is null)
-        {
-            return ServiceResult<WhatsAppConversacionDetalleResponse>.NotFound("Conversación de WhatsApp no encontrada.");
-        }
-
         Usuario? agente = null;
         if (request.AgenteId.HasValue)
         {
@@ -310,25 +300,55 @@ public sealed class WhatsAppService : IWhatsAppService
             }
         }
 
+        await using var tx = _context.Database.IsNpgsql()
+            ? await _context.Database.BeginTransactionAsync(ct)
+            : null;
+
+        var conversacion = await ObtenerConversacionConBloqueoAsync(conversacionId, ct);
+        if (conversacion is null)
+        {
+            if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
+            return ServiceResult<WhatsAppConversacionDetalleResponse>.NotFound("Conversación de WhatsApp no encontrada.");
+        }
+
         var anteriorAgenteId = conversacion.AgenteAsignadoId;
+        var ahora = DateTime.UtcNow;
         conversacion.AgenteAsignadoId = agente?.Id;
         conversacion.AgenteAsignado = agente;
-        if (agente is not null && conversacion.Estado == EstadoConversacionWhatsApp.Abierta)
+        if (agente is not null)
         {
-            conversacion.Estado = EstadoConversacionWhatsApp.EnAtencion;
+            if (conversacion.Estado == EstadoConversacionWhatsApp.Abierta)
+            {
+                conversacion.Estado = EstadoConversacionWhatsApp.EnAtencion;
+            }
+
+            // MED-02: marcar inequívocamente el inicio de intervención humana en la fila
+            // para impedir fuga de historial si posteriormente se desasigna y regresa a Bot.
+            conversacion.FechaCambioModoHumano = ahora;
         }
         conversacion.ModificadoPorId = usuarioAccionId;
-        conversacion.FechaModificacion = DateTime.UtcNow;
+        conversacion.FechaModificacion = ahora;
 
-        await _context.SaveChangesAsync(ct);
+        if (agente is not null)
+        {
+            await CancelarOutboxBotPendienteAsync(
+                conversacion.Id,
+                "Envío automático cancelado: un agente humano fue asignado a la conversación.",
+                ahora,
+                ct);
+        }
 
-        await _auditoria.RegistrarEventoAsync(
+        // LOW-01 + MED-02: encolar auditoría atómicamente dentro de la misma transacción.
+        _auditoria.EncolarEventoEnTransaccion(
             usuarioAccionId,
             "WHATSAPP_ASIGNAR_AGENTE",
             "ConversacionWhatsApp",
             conversacion.Id.ToString(),
             new { AgenteAnteriorId = anteriorAgenteId, AgenteNuevoId = agente?.Id },
-            ct);
+            fechaUtc: ahora);
+
+        await _context.SaveChangesAsync(ct);
+        if (tx is not null) await tx.CommitAsync(ct);
 
         var totalMensajes = await _context.MensajesWhatsApp
             .AsNoTracking()
@@ -350,13 +370,14 @@ public sealed class WhatsAppService : IWhatsAppService
             return ServiceResult<WhatsAppConversacionDetalleResponse>.Invalid("Modo de atención inválido.");
         }
 
-        var conversacion = await _context.ConversacionesWhatsApp
-            .Include(c => c.Cliente)
-            .Include(c => c.AgenteAsignado)
-            .FirstOrDefaultAsync(c => c.Id == conversacionId && c.Activo, ct);
+        await using var tx = _context.Database.IsNpgsql()
+            ? await _context.Database.BeginTransactionAsync(ct)
+            : null;
 
+        var conversacion = await ObtenerConversacionConBloqueoAsync(conversacionId, ct);
         if (conversacion is null)
         {
+            if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
             return ServiceResult<WhatsAppConversacionDetalleResponse>.NotFound("Conversación de WhatsApp no encontrada.");
         }
 
@@ -370,19 +391,28 @@ public sealed class WhatsAppService : IWhatsAppService
             {
                 conversacion.Estado = EstadoConversacionWhatsApp.EnAtencion;
             }
+
+            await CancelarOutboxBotPendienteAsync(
+                conversacion.Id,
+                "Envío automático cancelado: la conversación pasó a modo Humano.",
+                ahora,
+                ct);
         }
         conversacion.ModificadoPorId = usuarioAccionId;
         conversacion.FechaModificacion = ahora;
 
-        await _context.SaveChangesAsync(ct);
-
-        await _auditoria.RegistrarEventoAsync(
+        // Registrar transición de modo dentro de la misma transacción atómica (F3-M02 / F3-M03):
+        // garantiza marca temporal exacta para el corte de historial al regresar a modo Bot.
+        _auditoria.EncolarEventoEnTransaccion(
             usuarioAccionId,
             "WHATSAPP_CAMBIAR_MODO",
             "ConversacionWhatsApp",
             conversacion.Id.ToString(),
             new { ModoAnterior = modoAnterior.ToString(), ModoNuevo = request.ModoAtencion.ToString() },
-            ct);
+            fechaUtc: ahora);
+
+        await _context.SaveChangesAsync(ct);
+        if (tx is not null) await tx.CommitAsync(ct);
 
         var totalMensajes = await _context.MensajesWhatsApp
             .AsNoTracking()
@@ -404,30 +434,47 @@ public sealed class WhatsAppService : IWhatsAppService
             return ServiceResult<WhatsAppConversacionDetalleResponse>.Invalid("Estado de conversación inválido.");
         }
 
-        var conversacion = await _context.ConversacionesWhatsApp
-            .Include(c => c.Cliente)
-            .Include(c => c.AgenteAsignado)
-            .FirstOrDefaultAsync(c => c.Id == conversacionId && c.Activo, ct);
+        await using var tx = _context.Database.IsNpgsql()
+            ? await _context.Database.BeginTransactionAsync(ct)
+            : null;
 
+        var conversacion = await ObtenerConversacionConBloqueoAsync(conversacionId, ct);
         if (conversacion is null)
         {
+            if (tx is not null) await tx.RollbackAsync(CancellationToken.None);
             return ServiceResult<WhatsAppConversacionDetalleResponse>.NotFound("Conversación de WhatsApp no encontrada.");
         }
 
         var estadoAnterior = conversacion.Estado;
+        var ahora = DateTime.UtcNow;
         conversacion.Estado = request.Estado;
+        if (request.Estado == EstadoConversacionWhatsApp.EnAtencion)
+        {
+            conversacion.FechaCambioModoHumano = ahora;
+        }
         conversacion.ModificadoPorId = usuarioAccionId;
-        conversacion.FechaModificacion = DateTime.UtcNow;
+        conversacion.FechaModificacion = ahora;
 
-        await _context.SaveChangesAsync(ct);
+        if (request.Estado is EstadoConversacionWhatsApp.EnAtencion or EstadoConversacionWhatsApp.Cerrada)
+        {
+            await CancelarOutboxBotPendienteAsync(
+                conversacion.Id,
+                $"Envío automático cancelado: la conversación cambió a estado {request.Estado}.",
+                ahora,
+                ct);
+        }
 
-        await _auditoria.RegistrarEventoAsync(
+        // LOW-01 + MED-02: encolar auditoría atómicamente dentro de la misma transacción.
+        _auditoria.EncolarEventoEnTransaccion(
             usuarioAccionId,
             "WHATSAPP_CAMBIAR_ESTADO",
             "ConversacionWhatsApp",
             conversacion.Id.ToString(),
             new { EstadoAnterior = estadoAnterior.ToString(), EstadoNuevo = request.Estado.ToString() },
-            ct);
+            fechaUtc: ahora);
+
+        await _context.SaveChangesAsync(ct);
+        if (tx is not null) await tx.CommitAsync(ct);
 
         var totalMensajes = await _context.MensajesWhatsApp
             .AsNoTracking()
@@ -435,6 +482,102 @@ public sealed class WhatsAppService : IWhatsAppService
 
         return ServiceResult<WhatsAppConversacionDetalleResponse>.Success(
             MapDetalle(conversacion, totalMensajes, incluirDocumentoCompleto));
+    }
+
+    /// <summary>
+    /// En PostgreSQL adquiere bloqueo exclusivo de fila (<c>FOR UPDATE</c>) sobre <c>ConversacionesWhatsApp</c>
+    /// y recarga explícitamente sus propiedades desde la base de datos (<c>ReloadAsync</c>) para evitar
+    /// leer instancias obsoletas del <c>ChangeTracker</c> de EF Core (F3-H02).
+    /// </summary>
+    private async Task<ConversacionWhatsApp?> ObtenerConversacionConBloqueoAsync(Guid conversacionId, CancellationToken ct)
+    {
+        if (_context.Database.IsNpgsql())
+        {
+            var bloqueada = await _context.ConversacionesWhatsApp
+                .FromSqlInterpolated($"""
+                    SELECT * FROM "ConversacionesWhatsApp"
+                    WHERE "Id" = {conversacionId} AND "Activo" = true
+                    FOR UPDATE
+                    """)
+                .FirstOrDefaultAsync(ct);
+
+            if (bloqueada is null)
+            {
+                return null;
+            }
+
+            // Garantiza valores frescos de PostgreSQL incluso si la entidad ya estaba rastreada en el DbContext.
+            await _context.Entry(bloqueada).ReloadAsync(ct);
+            await _context.Entry(bloqueada).Reference(c => c.Cliente).LoadAsync(ct);
+            await _context.Entry(bloqueada).Reference(c => c.AgenteAsignado).LoadAsync(ct);
+            return bloqueada;
+        }
+
+        var conv = await _context.ConversacionesWhatsApp
+            .Include(c => c.Cliente)
+            .Include(c => c.AgenteAsignado)
+            .FirstOrDefaultAsync(c => c.Id == conversacionId && c.Activo, ct);
+
+        if (conv is not null)
+        {
+            await _context.Entry(conv).ReloadAsync(ct);
+        }
+
+        return conv;
+    }
+
+    /// <summary>
+    /// Cancela respuestas automáticas del bot (<c>ai:reply:*</c>) aún en estado <c>Pendiente</c>
+    /// cuando un agente humano toma o cierra la conversación. Jamás altera mensajes de agentes humanos.
+    /// </summary>
+    private async Task CancelarOutboxBotPendienteAsync(
+        Guid conversacionId,
+        string motivo,
+        DateTime ahora,
+        CancellationToken ct)
+    {
+        var pendientesBot = await _context.OutboxMensajesWhatsApp
+            .Include(o => o.MensajeWhatsApp)
+            .Where(o =>
+                o.ConversacionId == conversacionId
+                && o.Activo
+                && o.Estado == EstadoOutboxWhatsApp.Pendiente
+                && o.IdempotencyKey.StartsWith("ai:reply:"))
+            .ToListAsync(ct);
+
+        foreach (var item in pendientesBot)
+        {
+            if (item.MensajeWhatsApp is not null && item.MensajeWhatsApp.EnviadoPorUsuarioId.HasValue)
+            {
+                continue;
+            }
+
+            item.Estado = EstadoOutboxWhatsApp.Fallido;
+            item.ProximoIntentoUtc = null;
+            item.ReservadoHastaUtc = null;
+            item.FechaProcesadoUtc = ahora;
+            item.UltimoError = motivo;
+            item.FechaModificacion = ahora;
+            // LOW-02: registrar trazabilidad preventiva sin incrementar Intentos (no hubo intento real de envío).
+            item.HistorialIntentosJson = WhatsAppOutboxService.AgregarIntentoAlHistorial(
+                item.HistorialIntentosJson,
+                new IntentoOutboxRegistro(
+                    Intento: item.Intentos,
+                    FechaUtc: ahora,
+                    Proveedor: "sistema_crm",
+                    Clasificacion: "CanceladoPorIntervencionHumana",
+                    CodigoHttp: null,
+                    ExternalMessageId: null,
+                    Detalle: motivo));
+
+            if (item.MensajeWhatsApp is not null && string.IsNullOrWhiteSpace(item.MensajeWhatsApp.ExternalMessageId))
+            {
+                item.MensajeWhatsApp.Estado = EstadoMensajeWhatsApp.Fallido;
+                item.MensajeWhatsApp.ErrorDetalle = motivo;
+                item.MensajeWhatsApp.FechaUltimoEstadoUtc = ahora;
+                item.MensajeWhatsApp.FechaModificacion = ahora;
+            }
+        }
     }
 
     public async Task<ServiceResult<WhatsAppConversacionDetalleResponse>> VincularClienteAsync(

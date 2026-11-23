@@ -3,8 +3,10 @@ using System.Text;
 using CRMTeamBenavides.Api.Configuration.Autorizacion;
 using CRMTeamBenavides.Api.Services;
 using CRMTeamBenavides.Api.Services.WhatsApp;
+using CRMTeamBenavides.Api.Services.WhatsApp.IA;
 using CRMTeamBenavides.Data;
 using CRMTeamBenavides.Domain.Entities;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -136,6 +138,52 @@ public static class WhatsAppEndpoints
         })
         .RequireAuthorization(PermisosDefinidos.WhatsAppVer)
         .WithName("ObtenerEstadoIntegracionWhatsApp");
+
+        adminGroup.MapGet("/ia/estado", async (
+            ClaimsPrincipal user,
+            [FromServices] IOptionsMonitor<WhatsAppAiSettings> aiSettingsMonitor,
+            [FromServices] IOptionsMonitor<WhatsAppSettings> waSettingsMonitor,
+            [FromServices] IWhatsAppProvider waProvider,
+            [FromServices] IWhatsAppVerificadorIdentidad verificadorIdentidad,
+            [FromServices] ApplicationDbContext dbContext,
+            IServiceProvider serviceProvider,
+            CancellationToken ct) =>
+        {
+            var (denegado, _) = await ValidarPersonalAutorizadoAsync(user, dbContext, ct, PermisosDefinidos.WhatsAppVer);
+            if (denegado is not null) return denegado;
+
+            var s = aiSettingsMonitor.CurrentValue;
+            var wa = waSettingsMonitor.CurrentValue;
+            var aiProvider = serviceProvider.GetService<IWhatsAppAiProvider>();
+
+            // F3-H03: reflejar siempre los servicios realmente resueltos por DI (nunca inventar "Mock" ni "operativo").
+            var proveedorConfigurado = s.Provider?.Trim() ?? string.Empty;
+            var proveedorEfectivo = aiProvider?.NombreProveedor ?? DisabledExternalWhatsAppAiProvider.NombreProveedorDeshabilitado;
+            var proveedorOperativo = s.Enabled
+                && aiProvider is not null
+                && aiProvider is not DisabledExternalWhatsAppAiProvider;
+            var verificacionIdentidadHabilitada = verificadorIdentidad is not WhatsAppVerificadorIdentidadNoImplementado;
+            var whatsAppHabilitadoParaEnvios = wa.ValidarConfiguracionEnvio() is null;
+
+            return Results.Ok(new WhatsAppEstadoIaResponse(
+                Enabled: s.Enabled,
+                ProveedorConfigurado: proveedorConfigurado,
+                ProveedorEfectivo: proveedorEfectivo,
+                ProveedorOperativo: proveedorOperativo,
+                Model: string.IsNullOrWhiteSpace(s.Model) ? "mock-deterministic-v1" : s.Model.Trim(),
+                TieneCredencialesExternasConfiguradas: s.TieneCredencialesExternasConfiguradas,
+                VerificacionIdentidadHabilitada: verificacionIdentidadHabilitada,
+                WhatsAppHabilitadoParaEnvios: whatsAppHabilitadoParaEnvios,
+                WhatsAppProveedorEfectivo: waProvider.NombreProveedor,
+                AllowFaqTools: s.AllowFaqTools,
+                AllowPublicCatalogTools: s.AllowPublicCatalogTools,
+                MaxInputChars: s.ObtenerMaxInputCharsSeguro(),
+                MaxOutputChars: s.ObtenerMaxOutputCharsSeguro(),
+                MaxOutputTokens: s.ObtenerMaxOutputTokensSeguro(),
+                TimeoutSeconds: s.ObtenerTimeoutSegundosSeguro()));
+        })
+        .RequireAuthorization(PermisosDefinidos.WhatsAppVer)
+        .WithName("ObtenerEstadoIaWhatsApp");
 
         adminGroup.MapGet("/conversaciones", async (
             int? pagina,

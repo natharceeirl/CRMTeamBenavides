@@ -47,18 +47,21 @@ public sealed class WhatsAppOutboxService : IWhatsAppOutboxService
     private readonly ApplicationDbContext _context;
     private readonly IWhatsAppProvider _provider;
     private readonly IOptionsMonitor<WhatsAppSettings> _settingsMonitor;
+    private readonly IOptionsMonitor<WhatsAppAiSettings>? _aiSettingsMonitor;
     private readonly ILogger<WhatsAppOutboxService> _logger;
 
     public WhatsAppOutboxService(
         ApplicationDbContext context,
         IWhatsAppProvider provider,
         IOptionsMonitor<WhatsAppSettings> settingsMonitor,
-        ILogger<WhatsAppOutboxService> logger)
+        ILogger<WhatsAppOutboxService> logger,
+        IOptionsMonitor<WhatsAppAiSettings>? aiSettingsMonitor = null)
     {
         _context = context;
         _provider = provider;
         _settingsMonitor = settingsMonitor;
         _logger = logger;
+        _aiSettingsMonitor = aiSettingsMonitor;
     }
 
     public async Task<OutboxMensajeWhatsApp?> ProcesarRegistroAsync(Guid outboxId, CancellationToken ct = default)
@@ -235,7 +238,15 @@ public sealed class WhatsAppOutboxService : IWhatsAppOutboxService
             var item = reclamados.FirstOrDefault();
             if (item is null)
             {
-                await tx.RollbackAsync(ct);
+                await tx.RollbackAsync(CancellationToken.None);
+                return null;
+            }
+
+            // Garantiza lectura fresca tras FOR UPDATE SKIP LOCKED si el registro ya estaba rastreado en el DbContext.
+            await _context.Entry(item).ReloadAsync(ct);
+            if (item.Estado != EstadoOutboxWhatsApp.Pendiente)
+            {
+                await tx.RollbackAsync(CancellationToken.None);
                 return null;
             }
 
@@ -283,20 +294,28 @@ public sealed class WhatsAppOutboxService : IWhatsAppOutboxService
                     """)
                 .ToListAsync(ct);
 
+            var confirmados = new List<OutboxMensajeWhatsApp>(lote.Count);
             foreach (var item in lote)
             {
+                await _context.Entry(item).ReloadAsync(ct);
+                if (item.Estado != EstadoOutboxWhatsApp.Pendiente)
+                {
+                    continue;
+                }
+
                 item.Estado = EstadoOutboxWhatsApp.Procesando;
                 item.ReservadoHastaUtc = ahora.Add(DuracionReserva);
                 item.FechaModificacion = ahora;
+                confirmados.Add(item);
             }
 
-            if (lote.Count > 0)
+            if (confirmados.Count > 0)
             {
                 await _context.SaveChangesAsync(ct);
             }
 
             await tx.CommitAsync(ct);
-            return lote;
+            return confirmados;
         }
 
         var candidatos = await _context.OutboxMensajesWhatsApp
@@ -340,6 +359,49 @@ public sealed class WhatsAppOutboxService : IWhatsAppOutboxService
             item.FechaModificacion = DateTime.UtcNow;
             await _context.SaveChangesAsync(ct);
             return;
+        }
+
+        // Guardias exclusivas para respuestas automáticas del bot (ai:reply:*):
+        // jamás bloquean mensajes legítimos enviados por agentes humanos (EnviadoPorUsuarioId != null).
+        if (EsMensajeAutomaticoBot(item, mensaje))
+        {
+            var motivoCancelacion = await EvaluarCancelacionMensajeBotAsync(item, mensaje, ct);
+            if (motivoCancelacion is not null)
+            {
+                var ahoraCancel = DateTime.UtcNow;
+                item.Estado = EstadoOutboxWhatsApp.Fallido;
+                item.ReservadoHastaUtc = null;
+                item.ProximoIntentoUtc = null;
+                item.FechaProcesadoUtc = ahoraCancel;
+                item.UltimoError = motivoCancelacion;
+                item.FechaModificacion = ahoraCancel;
+                item.HistorialIntentosJson = AgregarIntentoAlHistorial(
+                    item.HistorialIntentosJson,
+                    new IntentoOutboxRegistro(
+                        Intento: item.Intentos,
+                        FechaUtc: ahoraCancel,
+                        Proveedor: _provider.NombreProveedor,
+                        Clasificacion: "CanceladoPorPoliticaBot",
+                        CodigoHttp: null,
+                        ExternalMessageId: null,
+                        Detalle: motivoCancelacion));
+
+                if (mensaje is not null)
+                {
+                    mensaje.Estado = EstadoMensajeWhatsApp.Fallido;
+                    mensaje.ErrorDetalle = motivoCancelacion;
+                    mensaje.FechaUltimoEstadoUtc = ahoraCancel;
+                    mensaje.FechaModificacion = ahoraCancel;
+                }
+
+                await _context.SaveChangesAsync(ct);
+
+                _logger.LogInformation(
+                    "WhatsApp Outbox canceló despacho automático del bot sin llamar al proveedor. OutboxId={OutboxId}, ConversacionId={ConversacionId}",
+                    item.Id,
+                    item.ConversacionId);
+                return;
+            }
         }
 
         item.Intentos += 1;
@@ -479,7 +541,7 @@ public sealed class WhatsAppOutboxService : IWhatsAppOutboxService
         await _context.SaveChangesAsync(ct);
     }
 
-    private static string AgregarIntentoAlHistorial(string? historialActual, IntentoOutboxRegistro nuevo)
+    internal static string AgregarIntentoAlHistorial(string? historialActual, IntentoOutboxRegistro nuevo)
     {
         var lista = new List<IntentoOutboxRegistro>();
         if (!string.IsNullOrWhiteSpace(historialActual))
@@ -508,5 +570,91 @@ public sealed class WhatsAppOutboxService : IWhatsAppOutboxService
         }
 
         return serializado.Length <= 4000 ? serializado : serializado[..4000];
+    }
+
+    private static bool EsMensajeAutomaticoBot(OutboxMensajeWhatsApp item, MensajeWhatsApp? mensaje) =>
+        item.IdempotencyKey.StartsWith("ai:reply:", StringComparison.Ordinal)
+        && (mensaje is null || mensaje.EnviadoPorUsuarioId is null);
+
+    /// <summary>
+    /// Verifica antes de llamar al proveedor externo si una respuesta automática del bot
+    /// debe cancelarse (F3-H01: expiración o IA deshabilitada; F3-H02: toma humana, agente asignado o cierre).
+    /// </summary>
+    private async Task<string?> EvaluarCancelacionMensajeBotAsync(
+        OutboxMensajeWhatsApp item,
+        MensajeWhatsApp? mensaje,
+        CancellationToken ct)
+    {
+        var aiSettings = _aiSettingsMonitor?.CurrentValue;
+
+        // F3-H01: si la IA está deshabilitada o el registro bot superó su antigüedad máxima, no despachar respuestas antiguas.
+        if (aiSettings is not null && !aiSettings.Enabled)
+        {
+            return "Envío automático omitido: la IA conversacional está deshabilitada.";
+        }
+
+        var maxAgeMinutos = aiSettings?.ObtenerMaxBotOutboxAgeMinutosSeguro() ?? 15;
+        if (DateTime.UtcNow - item.FechaCreacion > TimeSpan.FromMinutes(maxAgeMinutos))
+        {
+            return $"Envío automático omitido: la respuesta del bot superó la vigencia máxima de {maxAgeMinutos} minutos.";
+        }
+
+        var conversacion = await _context.ConversacionesWhatsApp
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == item.ConversacionId && c.Activo, ct);
+
+        if (conversacion is null)
+        {
+            return "Envío automático omitido: la conversación ya no existe o está inactiva.";
+        }
+
+        if (conversacion.Estado == EstadoConversacionWhatsApp.Cerrada)
+        {
+            return "Envío automático omitido: la conversación se encuentra cerrada.";
+        }
+
+        // Un mensaje bot con escalado=true es el aviso generado atómicamente al derivar a humano:
+        // solo se permite enviarlo mientras ningún agente humano haya tomado o intervenido posteriormente.
+        var esAvisoDeEscalamiento = EsAvisoDeEscalamientoBot(mensaje?.MetadataTecnicaJson);
+        if (esAvisoDeEscalamiento)
+        {
+            var intervencionHumanaPosterior = conversacion.ModificadoPorId.HasValue
+                && (!conversacion.FechaModificacion.HasValue
+                    || mensaje is null
+                    || conversacion.FechaModificacion.Value >= mensaje.FechaCreacion);
+
+            if (conversacion.AgenteAsignadoId.HasValue || intervencionHumanaPosterior)
+            {
+                return "Envío automático omitido: un agente humano ya intervino en la conversación.";
+            }
+
+            return null;
+        }
+
+        // Respuestas normales del bot: jamás despachar si la conversación pasó a Humano, EnAtencion o fue asignada.
+        if (conversacion.ModoAtencion != ModoAtencionWhatsApp.Bot
+            || conversacion.AgenteAsignadoId.HasValue
+            || conversacion.Estado == EstadoConversacionWhatsApp.EnAtencion)
+        {
+            return "Envío automático omitido: la conversación pasó a atención humana antes del despacho.";
+        }
+
+        return null;
+    }
+
+    private static bool EsAvisoDeEscalamientoBot(string? metadataJson)
+    {
+        if (string.IsNullOrWhiteSpace(metadataJson)) return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(metadataJson);
+            return doc.RootElement.TryGetProperty("escalado", out var prop)
+                && prop.ValueKind == JsonValueKind.True;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 }

@@ -27,6 +27,30 @@ public class AuditoriaService : IAuditoriaService
         object? detalle = null,
         CancellationToken ct = default)
     {
+        EncolarEventoEnTransaccion(usuarioId, accion, entidad, entidadId, detalle);
+        await _context.SaveChangesAsync(ct);
+    }
+
+    public void EncolarEventoEnTransaccion(
+        Guid? usuarioId,
+        string accion,
+        string entidad,
+        string entidadId,
+        object? detalle = null,
+        DateTime? fechaUtc = null)
+    {
+        var evento = CrearEvento(usuarioId, accion, entidad, entidadId, detalle, fechaUtc);
+        _context.EventosAuditoria.Add(evento);
+    }
+
+    public static EventoAuditoria CrearEvento(
+        Guid? usuarioId,
+        string accion,
+        string entidad,
+        string entidadId,
+        object? detalle = null,
+        DateTime? fechaUtc = null)
+    {
         string? detalleJson = null;
         if (detalle is not null)
         {
@@ -47,18 +71,15 @@ public class AuditoriaService : IAuditoriaService
             }
         }
 
-        var evento = new EventoAuditoria
+        return new EventoAuditoria
         {
             Id = Guid.NewGuid(),
             UsuarioId = usuarioId,
-            Fecha = DateTime.UtcNow,
+            Fecha = fechaUtc ?? DateTime.UtcNow,
             Accion = accion,
             Entidad = entidad,
             EntidadId = entidadId,
             Detalle = detalleJson
         };
-
-        _context.EventosAuditoria.Add(evento);
-        await _context.SaveChangesAsync(ct);
     }
 }

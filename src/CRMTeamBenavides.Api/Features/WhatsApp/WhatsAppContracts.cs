@@ -251,3 +251,24 @@ public record WhatsAppServicioCatalogoResponse(
 public record WhatsAppCatalogoConsultaResponse(
     List<WhatsAppProductoCatalogoResponse> Productos,
     List<WhatsAppServicioCatalogoResponse> Servicios);
+
+// =============================================================================
+// CONTRATOS FASE 3 — ESTADO DE LA CAPA DE IA CONVERSACIONAL (SIN SECRETOS)
+// =============================================================================
+
+public record WhatsAppEstadoIaResponse(
+    bool Enabled,
+    string ProveedorConfigurado,
+    string ProveedorEfectivo,
+    bool ProveedorOperativo,
+    string Model,
+    bool TieneCredencialesExternasConfiguradas,
+    bool VerificacionIdentidadHabilitada,
+    bool WhatsAppHabilitadoParaEnvios,
+    string WhatsAppProveedorEfectivo,
+    bool AllowFaqTools,
+    bool AllowPublicCatalogTools,
+    int MaxInputChars,
+    int MaxOutputChars,
+    int MaxOutputTokens,
+    int TimeoutSeconds);
