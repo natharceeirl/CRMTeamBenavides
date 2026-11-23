@@ -37,7 +37,10 @@ public sealed record WhatsAppAiRespuesta(
     int TokensEstimadosEntrada,
     int TokensEstimadosSalida,
     string? CodigoError = null,
-    string? ErrorSanitizado = null);
+    string? ErrorSanitizado = null,
+    int? TokensEntradaReales = null,
+    int? TokensSalidaReales = null,
+    int? MaxOutputTokensSolicitado = null);
 
 /// <summary>
 /// Abstracción desacoplada para proveedores de IA conversacional (Mock determinista o futuro LLM externo).

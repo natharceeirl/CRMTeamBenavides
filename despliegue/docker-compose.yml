@@ -85,6 +85,17 @@ services:
       WhatsApp__AppSecret: ${WHATSAPP_APP_SECRET:-}
       WhatsApp__WebhookVerifyToken: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
       WhatsApp__GraphApiVersion: ${WHATSAPP_GRAPH_API_VERSION:-v21.0}
+      WhatsApp__TimeoutSeconds: ${WHATSAPP_TIMEOUT_SECONDS:-30}
+      # WhatsApp IA conversacional: deshabilitada por defecto (Enabled=false, Provider=Mock).
+      # Proveedor externo pendiente de decisión comercial; no incluir credenciales reales en el repositorio.
+      WhatsAppAi__Enabled: ${WHATSAPP_AI_ENABLED:-false}
+      WhatsAppAi__Provider: ${WHATSAPP_AI_PROVIDER:-Mock}
+      WhatsAppAi__Model: ${WHATSAPP_AI_MODEL:-mock-deterministic-v1}
+      WhatsAppAi__ApiKey: ${WHATSAPP_AI_API_KEY:-}
+      WhatsAppAi__ApiBaseUrl: ${WHATSAPP_AI_BASE_URL:-}
+      WhatsAppAi__TimeoutSeconds: ${WHATSAPP_AI_TIMEOUT_SECONDS:-10}
+      WhatsAppAi__MaxOutputTokens: ${WHATSAPP_AI_MAX_OUTPUT_TOKENS:-350}
+      WhatsAppAi__MaxBotOutboxAgeMinutes: ${WHATSAPP_AI_MAX_BOT_OUTBOX_AGE_MINUTES:-15}
       # Sin cada consulta SQL ni URLs de HttpClient (con ?code=...) en el log.
       Logging__LogLevel__Microsoft.EntityFrameworkCore: Warning
       Logging__LogLevel__System.Net.Http.HttpClient: Warning

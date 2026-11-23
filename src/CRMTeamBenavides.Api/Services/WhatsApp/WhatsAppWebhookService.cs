@@ -116,6 +116,7 @@ public sealed class WhatsAppWebhookService : IWhatsAppWebhookService
             int estadosActualizados = 0;
             int estadosIgnorados = 0;
             int eventosDesconocidos = 0;
+            bool procesadoConExito = true;
             string? primerExternalId = null;
 
             foreach (var entry in entryProp.EnumerateArray())
@@ -191,9 +192,25 @@ public sealed class WhatsAppWebhookService : IWhatsAppWebhookService
                             var statusWamid = ObtenerString(statusElem, "id");
                             primerExternalId ??= statusWamid;
 
-                            var actualizado = await ProcesarNotificacionEstadoAsync(statusElem, ct);
-                            if (actualizado) estadosActualizados++;
-                            else estadosIgnorados++;
+                            try
+                            {
+                                var actualizado = await ProcesarNotificacionEstadoAsync(statusElem, ct);
+                                if (actualizado) estadosActualizados++;
+                                else estadosIgnorados++;
+                            }
+                            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                            {
+                                throw;
+                            }
+                            catch (Exception)
+                            {
+                                // Fase 4: aislar fallo de un estado individual para no perder el evento webhook original.
+                                procesadoConExito = false;
+                                estadosIgnorados++;
+                                _logger.LogWarning(
+                                    "WhatsApp webhook registró un error no fatal al procesar un estado de entrega. Wamid={Wamid}",
+                                    Truncar(statusWamid, 64));
+                            }
                         }
                     }
 
@@ -220,7 +237,7 @@ public sealed class WhatsAppWebhookService : IWhatsAppWebhookService
                 Truncar(primerExternalId, 128),
                 mensajesProcesados,
                 estadosActualizados,
-                true,
+                procesadoConExito,
                 resumen,
                 ct);
 
@@ -457,11 +474,60 @@ public sealed class WhatsAppWebhookService : IWhatsAppWebhookService
 
         using var lockWamid = await LocksWamid.AcquireAsync(wamid, ct);
         {
-            var mensaje = await _context.MensajesWhatsApp
-                .FirstOrDefaultAsync(m => m.ExternalMessageId == wamid && m.Activo, ct);
+            await using var tx = _context.Database.IsNpgsql()
+                ? await _context.Database.BeginTransactionAsync(ct)
+                : null;
+
+            async Task RollbackSeguroAsync()
+            {
+                if (tx is null) return;
+                try
+                {
+                    await tx.RollbackAsync(CancellationToken.None);
+                }
+                catch
+                {
+                    // Jamás ocultar la excepción original durante rollback defensivo.
+                }
+            }
+
+            // F4-MED-01: en PostgreSQL adquirir bloqueo exclusivo FOR UPDATE sobre el mensaje saliente
+            // y recargar explícitamente con ReloadAsync para serializar actualizaciones multi-instancia
+            // sin leer propiedades obsoletas del ChangeTracker.
+            MensajeWhatsApp? mensaje;
+            if (_context.Database.IsNpgsql())
+            {
+                mensaje = await _context.MensajesWhatsApp
+                    .FromSqlInterpolated($"""
+                        SELECT * FROM "MensajesWhatsApp"
+                        WHERE "ExternalMessageId" = {wamid}
+                          AND "Direccion" = {(int)DireccionMensajeWhatsApp.Saliente}
+                          AND "Activo" = true
+                        FOR UPDATE
+                        """)
+                    .FirstOrDefaultAsync(ct);
+            }
+            else
+            {
+                mensaje = await _context.MensajesWhatsApp
+                    .FirstOrDefaultAsync(m =>
+                        m.ExternalMessageId == wamid
+                        && m.Direccion == DireccionMensajeWhatsApp.Saliente
+                        && m.Activo, ct);
+            }
+
+            if (mensaje is not null)
+            {
+                await _context.Entry(mensaje).ReloadAsync(ct);
+                if (!mensaje.Activo || mensaje.Direccion != DireccionMensajeWhatsApp.Saliente)
+                {
+                    mensaje = null;
+                }
+            }
 
             if (mensaje is null)
             {
+                await RollbackSeguroAsync();
                 // Evento de estado para un mensaje aún no persistido o externo: ignorar sin fallar.
                 return false;
             }
@@ -470,23 +536,174 @@ public sealed class WhatsAppWebhookService : IWhatsAppWebhookService
 
             if (!DebeAplicarTransicionEstado(mensaje.Estado, nuevoEstado.Value, mensaje.FechaUltimoEstadoUtc, fechaEstadoUtc))
             {
+                await RollbackSeguroAsync();
                 return false;
             }
 
+            // Cargar Outbox asociado dentro de la misma transacción (con FOR UPDATE + ReloadAsync en PostgreSQL).
+            OutboxMensajeWhatsApp? outbox;
+            if (_context.Database.IsNpgsql())
+            {
+                outbox = await _context.OutboxMensajesWhatsApp
+                    .FromSqlInterpolated($"""
+                        SELECT * FROM "OutboxMensajesWhatsApp"
+                        WHERE "MensajeWhatsAppId" = {mensaje.Id}
+                          AND "Activo" = true
+                        FOR UPDATE
+                        """)
+                    .FirstOrDefaultAsync(ct);
+            }
+            else
+            {
+                outbox = await _context.OutboxMensajesWhatsApp
+                    .FirstOrDefaultAsync(o => o.MensajeWhatsAppId == mensaje.Id && o.Activo, ct);
+            }
+
+            if (outbox is not null)
+            {
+                await _context.Entry(outbox).ReloadAsync(ct);
+                if (!outbox.Activo)
+                {
+                    outbox = null;
+                }
+            }
+
+            // F4-MED-02: capturar snapshot exacto de las entidades modificadas para restauración selectiva en caso de fallo.
+            var msgEstadoAnterior = mensaje.Estado;
+            var msgFechaUltimoEstadoAnterior = mensaje.FechaUltimoEstadoUtc;
+            var msgFechaModAnterior = mensaje.FechaModificacion;
+            var msgErrorAnterior = mensaje.ErrorDetalle;
+
+            var outboxEstadoAnterior = outbox?.Estado;
+            var outboxProximoIntentoAnterior = outbox?.ProximoIntentoUtc;
+            var outboxReservadoHastaAnterior = outbox?.ReservadoHastaUtc;
+            var outboxFechaProcesadoAnterior = outbox?.FechaProcesadoUtc;
+            var outboxUltimoErrorAnterior = outbox?.UltimoError;
+            var outboxFechaModAnterior = outbox?.FechaModificacion;
+            var outboxHistorialAnterior = outbox?.HistorialIntentosJson;
+            bool outboxModificado = false;
+
+            var ahora = DateTime.UtcNow;
             mensaje.Estado = nuevoEstado.Value;
             mensaje.FechaUltimoEstadoUtc = fechaEstadoUtc;
-            mensaje.FechaModificacion = DateTime.UtcNow;
+            mensaje.FechaModificacion = ahora;
 
             if (nuevoEstado.Value == EstadoMensajeWhatsApp.Fallido)
             {
-                var detalleError = ExtraerDetalleErrorEstado(statusElem);
+                var settings = _settingsMonitor.CurrentValue;
+                var detalleError = ExtraerDetalleErrorEstado(statusElem, settings.AccessToken, settings.AppSecret, settings.WebhookVerifyToken);
                 if (!string.IsNullOrWhiteSpace(detalleError))
                 {
                     mensaje.ErrorDetalle = Truncar(detalleError, 500);
                 }
             }
+            else if (nuevoEstado.Value is EstadoMensajeWhatsApp.Entregado or EstadoMensajeWhatsApp.Leido)
+            {
+                mensaje.ErrorDetalle = null;
+            }
 
-            await _context.SaveChangesAsync(ct);
+            // F4-LOW-01: mantener coherencia entre MensajeWhatsApp y OutboxMensajeWhatsApp.
+            // - Si Meta reporta 'failed', el Outbox refleja el fallo asíncrono sin reencolar envíos.
+            // - Si Meta confirma entrega real ('Entregado' o 'Leido') para un registro previamente
+            //   'Indeterminado' o 'Fallido', el Outbox se reconcilia a 'Enviado' para evitar contradicción.
+            if (outbox is not null)
+            {
+                if (nuevoEstado.Value == EstadoMensajeWhatsApp.Fallido)
+                {
+                    outbox.Estado = EstadoOutboxWhatsApp.Fallido;
+                    outbox.ProximoIntentoUtc = null;
+                    outbox.ReservadoHastaUtc = null;
+                    outbox.FechaProcesadoUtc ??= ahora;
+                    outbox.UltimoError = mensaje.ErrorDetalle ?? "Meta reportó fallo asíncrono de entrega vía webhook.";
+                    outbox.FechaModificacion = ahora;
+                    outbox.HistorialIntentosJson = WhatsAppOutboxService.AgregarIntentoAlHistorial(
+                        outbox.HistorialIntentosJson,
+                        new IntentoOutboxRegistro(
+                            Intento: outbox.Intentos,
+                            FechaUtc: ahora,
+                            Proveedor: WhatsAppSettings.ProviderMeta,
+                            Clasificacion: "FalloAsincronoWebhookMeta",
+                            CodigoHttp: null,
+                            ExternalMessageId: wamid,
+                            Detalle: outbox.UltimoError));
+                    outboxModificado = true;
+                }
+                else if (outbox.Estado is EstadoOutboxWhatsApp.Indeterminado or EstadoOutboxWhatsApp.Fallido
+                    && nuevoEstado.Value is EstadoMensajeWhatsApp.Entregado or EstadoMensajeWhatsApp.Leido)
+                {
+                    var estadoOutboxPrevio = outbox.Estado;
+                    outbox.Estado = EstadoOutboxWhatsApp.Enviado;
+                    outbox.ProximoIntentoUtc = null;
+                    outbox.ReservadoHastaUtc = null;
+                    outbox.FechaProcesadoUtc ??= ahora;
+                    outbox.UltimoError = null;
+                    outbox.FechaModificacion = ahora;
+                    outbox.HistorialIntentosJson = WhatsAppOutboxService.AgregarIntentoAlHistorial(
+                        outbox.HistorialIntentosJson,
+                        new IntentoOutboxRegistro(
+                            Intento: outbox.Intentos,
+                            FechaUtc: ahora,
+                            Proveedor: WhatsAppSettings.ProviderMeta,
+                            Clasificacion: "ConfirmadoPorWebhookMeta",
+                            CodigoHttp: null,
+                            ExternalMessageId: wamid,
+                            Detalle: $"Outbox reconciliado desde {estadoOutboxPrevio} a Enviado por webhook de Meta ({nuevoEstado.Value})."));
+                    outboxModificado = true;
+                }
+            }
+
+            void RestaurarEntidadesEnTracker()
+            {
+                // F4-MED-02: restaurar exclusivamente mensaje y outbox sin llamar a ChangeTracker.Clear(),
+                // permitiendo que RegistrarEventoWebhookAsync guarde el evento original limpiamente.
+                try
+                {
+                    mensaje.Estado = msgEstadoAnterior;
+                    mensaje.FechaUltimoEstadoUtc = msgFechaUltimoEstadoAnterior;
+                    mensaje.FechaModificacion = msgFechaModAnterior;
+                    mensaje.ErrorDetalle = msgErrorAnterior;
+
+                    var entryMsg = _context.Entry(mensaje);
+                    if (entryMsg.State == EntityState.Modified)
+                    {
+                        entryMsg.State = EntityState.Unchanged;
+                    }
+
+                    if (outbox is not null && outboxModificado)
+                    {
+                        outbox.Estado = outboxEstadoAnterior!.Value;
+                        outbox.ProximoIntentoUtc = outboxProximoIntentoAnterior;
+                        outbox.ReservadoHastaUtc = outboxReservadoHastaAnterior;
+                        outbox.FechaProcesadoUtc = outboxFechaProcesadoAnterior;
+                        outbox.UltimoError = outboxUltimoErrorAnterior;
+                        outbox.FechaModificacion = outboxFechaModAnterior;
+                        outbox.HistorialIntentosJson = outboxHistorialAnterior;
+
+                        var entryOutbox = _context.Entry(outbox);
+                        if (entryOutbox.State == EntityState.Modified)
+                        {
+                            entryOutbox.State = EntityState.Unchanged;
+                        }
+                    }
+                }
+                catch
+                {
+                    // Jamás ocultar la excepción original durante la restauración defensiva.
+                }
+            }
+
+            try
+            {
+                await _context.SaveChangesAsync(ct);
+                if (tx is not null) await tx.CommitAsync(ct);
+            }
+            catch
+            {
+                await RollbackSeguroAsync();
+                RestaurarEntidadesEnTracker();
+                throw;
+            }
+
             return true;
         }
     }
@@ -522,7 +739,17 @@ public sealed class WhatsAppWebhookService : IWhatsAppWebhookService
                 return false;
             }
 
-            return !fechaUltimoEstadoUtc.HasValue || fechaEntranteUtc >= fechaUltimoEstadoUtc.Value;
+            if (!fechaUltimoEstadoUtc.HasValue)
+            {
+                return true;
+            }
+
+            // Meta envía timestamps Unix con resolución de 1 segundo; truncar milisegundos evita
+            // descartar un webhook 'failed' legítimo ocurrido dentro del mismo segundo que 'Enviado'.
+            var ultimoTruncadoSegundos = new DateTime(
+                fechaUltimoEstadoUtc.Value.Ticks - (fechaUltimoEstadoUtc.Value.Ticks % TimeSpan.TicksPerSecond),
+                DateTimeKind.Utc);
+            return fechaEntranteUtc >= ultimoTruncadoSegundos;
         }
 
         var rangoActual = RangoProgresion(actual);
@@ -691,7 +918,7 @@ public sealed class WhatsAppWebhookService : IWhatsAppWebhookService
         return mapa;
     }
 
-    private static string? ExtraerDetalleErrorEstado(JsonElement statusElem)
+    private static string? ExtraerDetalleErrorEstado(JsonElement statusElem, params string?[] secretos)
     {
         if (!statusElem.TryGetProperty("errors", out var errors) || errors.ValueKind != JsonValueKind.Array || errors.GetArrayLength() == 0)
         {
@@ -707,9 +934,17 @@ public sealed class WhatsAppWebhookService : IWhatsAppWebhookService
         var code = primero.TryGetProperty("code", out var c) ? c.ToString() : "?";
         var title = ObtenerString(primero, "title") ?? "Error de entrega";
         var detail = ObtenerString(primero, "message");
-        return string.IsNullOrWhiteSpace(detail)
+        if (string.IsNullOrWhiteSpace(detail)
+            && primero.TryGetProperty("error_data", out var errData)
+            && errData.ValueKind == JsonValueKind.Object)
+        {
+            detail = ObtenerString(errData, "details");
+        }
+
+        var crudo = string.IsNullOrWhiteSpace(detail)
             ? $"Meta error {code}: {title}"
             : $"Meta error {code}: {title} - {detail}";
+        return WhatsAppWebhookSecurity.SanitizarMensajeError(crudo, secretos);
     }
 
     private async Task RegistrarEventoWebhookAsync(

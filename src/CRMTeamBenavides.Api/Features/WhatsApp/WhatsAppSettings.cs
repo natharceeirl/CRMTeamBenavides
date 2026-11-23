@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace CRMTeamBenavides.Api.Features.WhatsApp;
 
 /// <summary>
@@ -6,7 +8,7 @@ namespace CRMTeamBenavides.Api.Features.WhatsApp;
 /// Los secretos (<c>AccessToken</c>, <c>AppSecret</c>, <c>WebhookVerifyToken</c>) deben inyectarse
 /// exclusivamente mediante variables de entorno o User Secrets, nunca en <c>appsettings.json</c>.
 /// </summary>
-public sealed class WhatsAppSettings
+public sealed partial class WhatsAppSettings
 {
     public const string SectionName = "WhatsApp";
 
@@ -61,6 +63,9 @@ public sealed class WhatsAppSettings
     /// <summary>Cantidad máxima de mensajes pendientes reservados por vuelta en el Outbox.</summary>
     public int OutboxBatchSize { get; set; } = 20;
 
+    [GeneratedRegex(@"^v\d+\.\d+$", RegexOptions.CultureInvariant)]
+    private static partial Regex FormatoGraphApiVersionRegex();
+
     public bool UsaProveedorMock =>
         string.Equals(Provider?.Trim(), ProviderMock, StringComparison.OrdinalIgnoreCase);
 
@@ -69,10 +74,21 @@ public sealed class WhatsAppSettings
 
     public bool EsProveedorReconocido => UsaProveedorMock || UsaProveedorMeta;
 
+    public bool GraphApiVersionValida =>
+        !string.IsNullOrWhiteSpace(GraphApiVersion)
+        && FormatoGraphApiVersionRegex().IsMatch(GraphApiVersion.Trim());
+
+    public bool GraphApiBaseUrlValida =>
+        !string.IsNullOrWhiteSpace(GraphApiBaseUrl)
+        && Uri.TryCreate(GraphApiBaseUrl.Trim(), UriKind.Absolute, out var uri)
+        && string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+
+    public int ObtenerTimeoutSegundosSeguro() => Math.Clamp(TimeoutSeconds, 5, 120);
+
     public bool TieneCredencialesMetaCompletas =>
         !string.IsNullOrWhiteSpace(PhoneNumberId)
         && !string.IsNullOrWhiteSpace(AccessToken)
-        && !string.IsNullOrWhiteSpace(GraphApiVersion);
+        && GraphApiVersionValida;
 
     public bool TieneSeguridadWebhookConfigurada =>
         !string.IsNullOrWhiteSpace(AppSecret)
@@ -86,6 +102,7 @@ public sealed class WhatsAppSettings
         Enabled
         && UsaProveedorMeta
         && TieneCredencialesMetaCompletas
+        && GraphApiBaseUrlValida
         && TieneSeguridadWebhookConfigurada;
 
     /// <summary>
@@ -102,6 +119,16 @@ public sealed class WhatsAppSettings
         if (!EsProveedorReconocido)
         {
             return $"Proveedor de WhatsApp no reconocido ('{Provider}'). Valores válidos: Mock o Meta.";
+        }
+
+        if (UsaProveedorMeta && !GraphApiVersionValida)
+        {
+            return "Versión de Graph API de Meta inválida. Debe seguir el formato 'vXX.X' (por ejemplo, v21.0).";
+        }
+
+        if (UsaProveedorMeta && !GraphApiBaseUrlValida)
+        {
+            return "La URL base de Graph API de Meta debe ser una URI HTTPS válida.";
         }
 
         if (UsaProveedorMeta && !TieneCredencialesMetaCompletas)

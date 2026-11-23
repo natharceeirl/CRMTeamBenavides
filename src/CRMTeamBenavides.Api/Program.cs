@@ -335,7 +335,15 @@ builder.Services.AddScoped<IWhatsAppClienteIdentificacionService, WhatsAppClient
 builder.Services.AddScoped<IWhatsAppCrmConsultaService, WhatsAppCrmConsultaService>();
 builder.Services.AddScoped<IWhatsAppOutboxService, WhatsAppOutboxService>();
 
-// Fase 3 — Inteligencia conversacional WhatsApp (deshabilitada por defecto: WhatsAppAi.Enabled = false, Provider = Mock)
+// Fase 3/4 — Inteligencia conversacional WhatsApp (deshabilitada por defecto: WhatsAppAi.Enabled = false, Provider = Mock)
+builder.Services
+    .AddHttpClient("WhatsAppAiExternal", (serviceProvider, client) =>
+    {
+        var aiSettings = serviceProvider.GetRequiredService<IOptions<WhatsAppAiSettings>>().Value;
+        client.Timeout = TimeSpan.FromSeconds(aiSettings.ObtenerTimeoutSegundosSeguro());
+    })
+    // Evita que LoggingHttpMessageHandler registre API keys o encabezados Authorization en los logs.
+    .RemoveAllLoggers();
 builder.Services.AddSingleton<IWhatsAppIntentClassifier, WhatsAppIntentClassifier>();
 builder.Services.AddSingleton<MockWhatsAppAiProvider>();
 builder.Services.AddSingleton<DisabledExternalWhatsAppAiProvider>();

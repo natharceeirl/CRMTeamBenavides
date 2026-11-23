@@ -89,6 +89,18 @@ public sealed class MetaWhatsAppProvider : IWhatsAppProvider
                 Proveedor: NombreProveedor);
         }
 
+        const int MaxMetaTextLength = 4096;
+        if (request.Texto.Length > MaxMetaTextLength)
+        {
+            return new WhatsAppSendResult(
+                Exitoso: false,
+                ExternalMessageId: null,
+                CodigoHttp: 400,
+                Error: $"El texto excede el límite máximo permitido por Meta Cloud API ({MaxMetaTextLength} caracteres).",
+                Clasificacion: TipoResultadoEnvioWhatsApp.ErrorDefinitivo,
+                Proveedor: NombreProveedor);
+        }
+
         var baseUrl = (settings.GraphApiBaseUrl ?? "https://graph.facebook.com").TrimEnd('/');
         var version = settings.GraphApiVersion.Trim().Trim('/');
         var phoneNumberId = Uri.EscapeDataString(settings.PhoneNumberId.Trim());
@@ -114,12 +126,16 @@ public sealed class MetaWhatsAppProvider : IWhatsAppProvider
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.AccessToken.Trim());
+        httpRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(settings.ObtenerTimeoutSegundosSeguro()));
 
         try
         {
-            using var response = await _httpClient.SendAsync(httpRequest, ct);
+            using var response = await _httpClient.SendAsync(httpRequest, timeoutCts.Token);
             var statusCode = (int)response.StatusCode;
-            var body = await response.Content.ReadAsStringAsync(ct);
+            var body = await response.Content.ReadAsStringAsync(timeoutCts.Token);
 
             if (response.IsSuccessStatusCode)
             {
@@ -157,7 +173,14 @@ public sealed class MetaWhatsAppProvider : IWhatsAppProvider
 
             var retryAfterSegundos = ExtraerRetryAfterSegundos(response);
             var clasificacion = ClasificarErrorHttp(response.StatusCode);
-            var errorDetalle = ExtraerErrorMetaSeguro(body, statusCode, settings.AccessToken, settings.AppSecret);
+            var errorDetalle = ExtraerErrorMetaSeguro(
+                body,
+                statusCode,
+                settings.AccessToken,
+                settings.AppSecret,
+                settings.WebhookVerifyToken,
+                request.DestinatarioE164,
+                norm.WhatsAppId);
 
             _logger.LogWarning(
                 "Meta WhatsApp Cloud API no aceptó el envío. HTTP={StatusCode}, Clasificacion={Clasificacion}, IdempotencyKey={IdempotencyKey}, Detalle={Detalle}",
@@ -198,7 +221,10 @@ public sealed class MetaWhatsAppProvider : IWhatsAppProvider
             var errorSeguro = WhatsAppWebhookSecurity.SanitizarMensajeError(
                 $"Error de red al contactar Meta WhatsApp Cloud API (resultado ambiguo): {ex.Message}",
                 settings.AccessToken,
-                settings.AppSecret);
+                settings.AppSecret,
+                settings.WebhookVerifyToken,
+                request.DestinatarioE164,
+                norm.WhatsAppId);
 
             _logger.LogWarning(
                 "Error de red en Meta WhatsApp Cloud API (ResultadoAmbiguo; sin reintento automático). IdempotencyKey={IdempotencyKey}, Detalle={Detalle}",
@@ -280,6 +306,16 @@ public sealed class MetaWhatsAppProvider : IWhatsAppProvider
 
     private static string ExtraerErrorMetaSeguro(string? body, int statusCode, params string?[] secretos)
     {
+        var categoria = statusCode switch
+        {
+            401 => "AUTH",
+            403 => "PERMISOS",
+            429 => "RATE_LIMIT",
+            400 => "VALIDACION",
+            >= 500 => "SERVIDOR",
+            _ => "HTTP"
+        };
+
         if (!string.IsNullOrWhiteSpace(body))
         {
             try
@@ -288,10 +324,18 @@ public sealed class MetaWhatsAppProvider : IWhatsAppProvider
                 if (doc.RootElement.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.Object)
                 {
                     var code = err.TryGetProperty("code", out var c) ? c.ToString() : "?";
+                    var subcode = err.TryGetProperty("error_subcode", out var sc) ? sc.ToString() : null;
                     var type = err.TryGetProperty("type", out var t) ? t.GetString() : "MetaError";
                     var msg = err.TryGetProperty("message", out var m) ? m.GetString() : "Error de API";
+
+                    if (code == "190") categoria = "AUTH";
+                    else if (code is "10" or "200") categoria = "PERMISOS";
+                    else if (code is "4" or "80007" or "130429" or "131048" or "131056") categoria = "RATE_LIMIT";
+                    else if (code == "131047") categoria = "VENTANA_24H";
+
+                    var codigoCompuesto = string.IsNullOrWhiteSpace(subcode) ? code : $"{code}.{subcode}";
                     return WhatsAppWebhookSecurity.SanitizarMensajeError(
-                        $"Meta HTTP {statusCode} [{type}/{code}]: {msg}",
+                        $"Meta [{categoria}] HTTP {statusCode} [{type}/{codigoCompuesto}]: {msg}",
                         secretos);
                 }
             }
@@ -302,7 +346,7 @@ public sealed class MetaWhatsAppProvider : IWhatsAppProvider
         }
 
         return WhatsAppWebhookSecurity.SanitizarMensajeError(
-            $"Meta WhatsApp Cloud API respondió HTTP {statusCode}.",
+            $"Meta [{categoria}] respondió HTTP {statusCode}.",
             secretos);
     }
 }

@@ -1501,4 +1501,208 @@ public sealed class WhatsAppPostgresIsolatedTests : IAsyncLifetime
             Assert.Equal(1, await checkAsigOk.EventosAuditoria.CountAsync(e => e.EntidadId == convCancelId.ToString() && e.Accion == "WHATSAPP_CAMBIAR_ESTADO"));
         }
     }
+
+    private sealed class FailOnMensajeModifiedInterceptor : SaveChangesInterceptor
+    {
+        public bool Disparo { get; private set; }
+        public int GuardadosExitosos { get; private set; }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (eventData.Context is not null)
+            {
+                var hayMensajeModificado = eventData.Context.ChangeTracker
+                    .Entries<MensajeWhatsApp>()
+                    .Any(e => e.State == EntityState.Modified);
+
+                if (hayMensajeModificado)
+                {
+                    Disparo = true;
+                    throw new InvalidOperationException("Fallo simulado al persistir actualización de estado de mensaje.");
+                }
+            }
+
+            GuardadosExitosos++;
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task PG10_Fase4_F4MED01_F4MED02_ConcurrenciaEstadosMultiinstanciaYRollbackConPreservacionEventoWebhookEnPostgresReal()
+    {
+        var waMonitor = new StaticOptionsMonitor<WhatsAppSettings>(new WhatsAppSettings
+        {
+            Enabled = true,
+            Provider = WhatsAppSettings.ProviderMock,
+            DefaultCountryCode = "51"
+        });
+
+        static byte[] CrearPayloadStatus(string wamid, string status, string unixTs) =>
+            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+            {
+                @object = "whatsapp_business_account",
+                entry = new[]
+                {
+                    new
+                    {
+                        changes = new[]
+                        {
+                            new
+                            {
+                                field = "messages",
+                                value = new
+                                {
+                                    statuses = new[]
+                                    {
+                                        new { id = wamid, status, timestamp = unixTs }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }));
+
+        var unixAhora = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+
+        Guid agentePg10Id;
+        await using (var seedAg = CrearContexto())
+        {
+            var ag = new Usuario { NombreCompleto = "Agente PG10", Email = "agente.pg10@t.local", Activo = true };
+            seedAg.Usuarios.Add(ag);
+            await seedAg.SaveChangesAsync();
+            agentePg10Id = ag.Id;
+        }
+
+        // 1. F4-MED-01: Concurrencia real multi-instancia entre 'read' y 'delivered' para el mismo wamid en PostgreSQL 18.
+        //    Verifica que FOR UPDATE + ReloadAsync impide cualquier regresión Leido -> Entregado (incluso con entidad pre-rastreada).
+        for (int i = 0; i < 5; i++)
+        {
+            var wamid = $"wamid.pg10.race.{i}";
+            Guid msgId;
+            await using (var seed = CrearContexto())
+            {
+                var conv = new ConversacionWhatsApp { TelefonoE164 = $"+5198791000{i}", ModoAtencion = ModoAtencionWhatsApp.Humano, Activo = true };
+                var msg = new MensajeWhatsApp
+                {
+                    Conversacion = conv,
+                    ExternalMessageId = wamid,
+                    IdempotencyKey = $"manual:pg10:{i}",
+                    Direccion = DireccionMensajeWhatsApp.Saliente,
+                    ContenidoTexto = "Mensaje concurrente",
+                    Estado = EstadoMensajeWhatsApp.Enviado,
+                    FechaUltimoEstadoUtc = DateTime.UtcNow.AddSeconds(-5),
+                    EnviadoPorUsuarioId = agentePg10Id,
+                    Activo = true
+                };
+                seed.ConversacionesWhatsApp.Add(conv);
+                seed.MensajesWhatsApp.Add(msg);
+                await seed.SaveChangesAsync();
+                msgId = msg.Id;
+            }
+
+            async Task EjecutarWebhookEstadoAsync(string status, bool preRastrear)
+            {
+                await using var db = CrearContexto();
+                if (preRastrear)
+                {
+                    // Dejar la entidad previamente rastreada en ChangeTracker para validar ReloadAsync tras FOR UPDATE.
+                    _ = await db.MensajesWhatsApp.SingleAsync(m => m.Id == msgId);
+                }
+
+                var ident = new WhatsAppClienteIdentificacionService(db, waMonitor, NullLogger<WhatsAppClienteIdentificacionService>.Instance);
+                var webhook = new WhatsAppWebhookService(db, ident, new NoOpWhatsAppAutoResponder(), waMonitor, NullLogger<WhatsAppWebhookService>.Instance);
+                var res = await webhook.ProcesarNotificacionAsync(CrearPayloadStatus(wamid, status, unixAhora));
+                Assert.True(res.EsValido);
+            }
+
+            await Task.WhenAll(
+                EjecutarWebhookEstadoAsync("read", preRastrear: false),
+                EjecutarWebhookEstadoAsync("delivered", preRastrear: true),
+                EjecutarWebhookEstadoAsync("read", preRastrear: true));
+
+            // Orden inverso adicional después de Leido -> debe ignorarse
+            await EjecutarWebhookEstadoAsync("delivered", preRastrear: true);
+
+            await using var checkRace = CrearContexto();
+            var msgFinal = await checkRace.MensajesWhatsApp.AsNoTracking().SingleAsync(m => m.Id == msgId);
+            Assert.Equal(EstadoMensajeWhatsApp.Leido, msgFinal.Estado);
+        }
+
+        // 2. F4-MED-02: Fallo durante SaveChangesAsync de ProcesarNotificacionEstadoAsync ->
+        //    rollback + limpieza selectiva de ChangeTracker -> RegistrarEventoWebhookAsync guarda EventoWebhookWhatsApp
+        //    con ProcesadoConExito = false y CERO mutaciones residuales en MensajeWhatsApp / OutboxMensajeWhatsApp.
+        const string wamidFallo = "wamid.pg10.fail.state";
+        Guid msgFalloId;
+        Guid outboxFalloId;
+        await using (var seedFallo = CrearContexto())
+        {
+            var conv = new ConversacionWhatsApp { TelefonoE164 = "+51987910099", ModoAtencion = ModoAtencionWhatsApp.Humano, Activo = true };
+            var msg = new MensajeWhatsApp
+            {
+                Conversacion = conv,
+                ExternalMessageId = wamidFallo,
+                IdempotencyKey = "manual:pg10:fail",
+                Direccion = DireccionMensajeWhatsApp.Saliente,
+                ContenidoTexto = "Mensaje fallo estado",
+                Estado = EstadoMensajeWhatsApp.Enviado,
+                FechaUltimoEstadoUtc = DateTime.UtcNow.AddSeconds(-5),
+                EnviadoPorUsuarioId = agentePg10Id,
+                Activo = true
+            };
+            var outbox = new OutboxMensajeWhatsApp
+            {
+                MensajeWhatsApp = msg,
+                ConversacionId = conv.Id,
+                DestinatarioE164 = conv.TelefonoE164,
+                ContenidoTexto = msg.ContenidoTexto,
+                IdempotencyKey = msg.IdempotencyKey,
+                Estado = EstadoOutboxWhatsApp.Enviado,
+                Intentos = 1,
+                Activo = true
+            };
+            seedFallo.ConversacionesWhatsApp.Add(conv);
+            seedFallo.MensajesWhatsApp.Add(msg);
+            seedFallo.OutboxMensajesWhatsApp.Add(outbox);
+            await seedFallo.SaveChangesAsync();
+            msgFalloId = msg.Id;
+            outboxFalloId = outbox.Id;
+        }
+
+        var failInterceptor = new FailOnMensajeModifiedInterceptor();
+        await using (var dbFallo = CrearContextoConInterceptor(failInterceptor))
+        {
+            var ident = new WhatsAppClienteIdentificacionService(dbFallo, waMonitor, NullLogger<WhatsAppClienteIdentificacionService>.Instance);
+            var webhook = new WhatsAppWebhookService(dbFallo, ident, new NoOpWhatsAppAutoResponder(), waMonitor, NullLogger<WhatsAppWebhookService>.Instance);
+
+            var res = await webhook.ProcesarNotificacionAsync(CrearPayloadStatus(wamidFallo, "failed", unixAhora));
+            Assert.True(res.EsValido);
+            Assert.Equal(0, res.EstadosActualizados);
+            Assert.Equal(1, res.EstadosIgnorados);
+            Assert.True(failInterceptor.Disparo);
+            // El siguiente SaveChangesAsync (RegistrarEventoWebhookAsync) tuvo éxito sin reintentar guardar MensajeWhatsApp/Outbox.
+            Assert.Equal(1, failInterceptor.GuardadosExitosos);
+            Assert.DoesNotContain(dbFallo.ChangeTracker.Entries(), e => e.State is EntityState.Added or EntityState.Modified);
+        }
+
+        await using (var checkFallo = CrearContexto())
+        {
+            var evento = await checkFallo.EventosWebhookWhatsApp
+                .AsNoTracking()
+                .SingleAsync(e => e.ExternalMessageId == wamidFallo);
+            Assert.False(evento.ProcesadoConExito);
+
+            var msgPost = await checkFallo.MensajesWhatsApp.AsNoTracking().SingleAsync(m => m.Id == msgFalloId);
+            Assert.Equal(EstadoMensajeWhatsApp.Enviado, msgPost.Estado);
+            Assert.Null(msgPost.ErrorDetalle);
+
+            var outboxPost = await checkFallo.OutboxMensajesWhatsApp.AsNoTracking().SingleAsync(o => o.Id == outboxFalloId);
+            Assert.Equal(EstadoOutboxWhatsApp.Enviado, outboxPost.Estado);
+            Assert.Null(outboxPost.UltimoError);
+            Assert.Null(outboxPost.HistorialIntentosJson);
+        }
+    }
 }
