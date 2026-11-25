@@ -131,11 +131,14 @@ builder.Services
     .AddDefaultTokenProviders()
     .AddErrorDescriber<SpanishIdentityErrorDescriber>();
 
-builder.Services
+var jwtOptionsBuilder = builder.Services
     .AddOptions<JwtSettings>()
     .Bind(builder.Configuration.GetSection(JwtSettings.SectionName))
     .Validate(settings => !string.IsNullOrWhiteSpace(settings.SecretKey),
         "JwtSettings:SecretKey es obligatorio.")
+    .Validate(settings => builder.Environment.IsDevelopment() || ValidacionConfiguracionEntorno.EsSecretoValido(
+            settings.SecretKey, ValidacionConfiguracionEntorno.LongitudMinimaJwtSecret),
+        $"JwtSettings:SecretKey debe tener al menos {ValidacionConfiguracionEntorno.LongitudMinimaJwtSecret} caracteres, entropía suficiente y no contener marcadores placeholder.")
     .Validate(settings => !string.IsNullOrWhiteSpace(settings.Issuer),
         "JwtSettings:Issuer es obligatorio.")
     .Validate(settings => !string.IsNullOrWhiteSpace(settings.Audience),
@@ -144,6 +147,11 @@ builder.Services
         "JwtSettings:AccessTokenExpirationMinutes debe ser mayor que 0.")
     .Validate(settings => settings.RefreshTokenExpirationDays > 0,
         "JwtSettings:RefreshTokenExpirationDays debe ser mayor que 0.");
+
+if (!EF.IsDesignTime)
+{
+    jwtOptionsBuilder.ValidateOnStart();
+}
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -368,6 +376,11 @@ builder.Services.AddHostedService<WhatsAppOutboxBackgroundService>();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+if (!EF.IsDesignTime)
+{
+    ValidacionConfiguracionEntorno.ValidarAlArrancar(app.Environment, app.Configuration);
+}
 
 // Primero: lo que sigue tiene que ver el HTTPS y la IP real que reenvía Caddy.
 app.UseForwardedHeaders();

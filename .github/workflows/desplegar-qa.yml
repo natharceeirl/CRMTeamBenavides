@@ -1,0 +1,265 @@
+# Despliega commits de «develop» exclusivamente en el servidor QA independiente.
+#
+# MECANISMO DE DISPARO SIN MODIFICAR «main» (QA-FIN-HIGH-01):
+# - GitHub Actions no muestra en la interfaz web el botón «Run workflow» (workflow_dispatch)
+#   para archivos de workflow que aún no existen en la rama predeterminada («main»).
+# - Para conservar «main» 100% intacta y disparar ejecuciones manuales desde «develop»,
+#   este workflow se activa al enviar una etiqueta (tag) explícita con prefijo:
+#     * qa-validar-<id>   -> ejecuta pruebas y corre actualizar-qa.sh en modo «validar»
+#     * qa-desplegar-<id> -> ejecuta pruebas y corre actualizar-qa.sh en modo «desplegar»
+# - También conserva «workflow_dispatch» para cuando el archivo esté presente en la rama
+#   predeterminada en el futuro.
+#
+# GARANTÍAS DE SEGURIDAD:
+# - Verifica en el runner y en el servidor QA que el SHA sea ancestro de «origin/develop».
+# - NO ejecuta migraciones (ni automáticas ni por workflow): las migraciones en QA solo
+#   pueden generarse («generar-sql»), inspeccionarse y aplicarse («migrar») en el servidor QA.
+# - El trabajo «pruebas-qa» corre antes de «desplegar-qa» y no tiene acceso a secretos.
+# - El trabajo «desplegar-qa» utiliza exclusivamente el GitHub Environment «qa» (donde
+#   debe configurarse «Required reviewers» para aprobación humana antes de exponer secretos SSH).
+# - Contrasta la variable «QA_DOMINIO» del Environment «qa» con el «DOMINIO» del .env remoto
+#   mediante --dominio-esperado sin imprimirlo en logs públicos.
+name: Desplegar QA
+
+on:
+  push:
+    tags:
+      - 'qa-validar-*'
+      - 'qa-desplegar-*'
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: Modo de operación en QA (validar = solo inspección; desplegar = actualizar sin migraciones)
+        type: choice
+        required: true
+        default: validar
+        options:
+          - validar
+          - desplegar
+      commit:
+        description: SHA completo (40 hex) de develop a desplegar (vacío = HEAD actual de develop)
+        type: string
+        required: false
+        default: ''
+      confirmar_operacion_qa:
+        description: Escriba exactamente CONFIRMO_QA para autorizar la operación en el entorno QA
+        type: string
+        required: true
+        default: ''
+
+concurrency:
+  group: despliegue-qa
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  pruebas-qa:
+    name: Validar y Probar (develop)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      commit: ${{ steps.commit.outputs.sha }}
+      modo: ${{ steps.commit.outputs.modo }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Validar origen, ascendencia en origin/develop y modo
+        id: commit
+        env:
+          EVENTO: ${{ github.event_name }}
+          REF_COMPLETA: ${{ github.ref }}
+          REF_NOMBRE: ${{ github.ref_name }}
+          PEDIDO: ${{ inputs.commit }}
+          MODO_INPUT: ${{ inputs.modo }}
+          CONFIRMAR_QA: ${{ inputs.confirmar_operacion_qa }}
+        run: |
+          git fetch --no-tags --quiet origin +refs/heads/develop:refs/remotes/origin/develop
+
+          if [ "$EVENTO" = "push" ]; then
+            case "$REF_COMPLETA" in
+              refs/tags/qa-validar-*)
+                MODO="validar"
+                ;;
+              refs/tags/qa-desplegar-*)
+                MODO="desplegar"
+                ;;
+              *)
+                echo "::error::Etiqueta no autorizada para QA ($REF_COMPLETA). Use qa-validar-<id> o qa-desplegar-<id>."
+                exit 1
+                ;;
+            esac
+
+            case "$REF_NOMBRE" in
+              *[!A-Za-z0-9._-]*)
+                echo "::error::El nombre de la etiqueta contiene caracteres no permitidos."
+                exit 1
+                ;;
+            esac
+
+            if ! sha=$(git rev-parse --verify --quiet "${REF_COMPLETA}^{commit}"); then
+              echo "::error::No se pudo resolver el commit de la etiqueta $REF_COMPLETA."
+              exit 1
+            fi
+          elif [ "$EVENTO" = "workflow_dispatch" ]; then
+            if [ "$REF_COMPLETA" != "refs/heads/develop" ]; then
+              echo "::error::workflow_dispatch solo puede ejecutarse desde refs/heads/develop (actual: $REF_COMPLETA)."
+              exit 1
+            fi
+
+            if [ "$CONFIRMAR_QA" != "CONFIRMO_QA" ]; then
+              echo "::error::Confirmación manual inválida. Debe escribir exactamente CONFIRMO_QA en confirmar_operacion_qa."
+              exit 1
+            fi
+
+            case "$MODO_INPUT" in
+              validar | desplegar)
+                MODO="$MODO_INPUT"
+                ;;
+              *)
+                echo "::error::Modo no permitido en el workflow QA: $MODO_INPUT (solo se permiten validar o desplegar)."
+                exit 1
+                ;;
+            esac
+
+            if [ -n "$PEDIDO" ]; then
+              case "$PEDIDO" in
+                *[!0-9a-f]*)
+                  echo "::error::El commit debe ser un SHA hexadecimal de 40 caracteres en minúsculas."
+                  exit 1
+                  ;;
+              esac
+              if [ "${#PEDIDO}" -ne 40 ]; then
+                echo "::error::El commit debe tener exactamente 40 caracteres (recibido: ${#PEDIDO})."
+                exit 1
+              fi
+              objetivo_ref="$PEDIDO"
+            else
+              objetivo_ref="refs/remotes/origin/develop"
+            fi
+
+            if ! sha=$(git rev-parse --verify --quiet "${objetivo_ref}^{commit}"); then
+              echo "::error::No existe el commit solicitado ($objetivo_ref)."
+              exit 1
+            fi
+          else
+            echo "::error::Evento no autorizado: $EVENTO"
+            exit 1
+          fi
+
+          case "$sha" in
+            *[!0-9a-f]*)
+              echo "::error::El SHA resuelto no es hexadecimal válido."
+              exit 1
+              ;;
+          esac
+          if [ "${#sha}" -ne 40 ]; then
+            echo "::error::El SHA resuelto no tiene 40 caracteres."
+            exit 1
+          fi
+
+          if ! git merge-base --is-ancestor "$sha" refs/remotes/origin/develop; then
+            echo "::error::El commit $sha NO pertenece a la historia de origin/develop. Ejecución rechazada."
+            exit 1
+          fi
+
+          git checkout --quiet "$sha"
+          git log --oneline -1
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "modo=$MODO" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Pruebas seguras del backend
+        run: dotnet test tests/CRMTeamBenavides.Api.Tests --filter "Category!=Integration"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/web/package-lock.json
+
+      - name: Verificaciones de la web
+        working-directory: src/web
+        run: |
+          npm ci
+          npm run verificar
+
+  desplegar-qa:
+    name: Servidor QA (Environment qa)
+    needs: pruebas-qa
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: qa
+    steps:
+      - name: Verificar configuración y secretos de QA
+        env:
+          QA_HOST: ${{ secrets.QA_SERVIDOR_HOST }}
+          QA_CLAVE: ${{ secrets.QA_SERVIDOR_SSH_CLAVE }}
+          QA_HUELLA: ${{ secrets.QA_SERVIDOR_SSH_HUELLA }}
+          QA_DOM: ${{ vars.QA_DOMINIO }}
+        run: |
+          if [ -z "$QA_HOST" ]; then
+            echo "::error::Falta el secreto QA_SERVIDOR_HOST en el GitHub Environment «qa»."
+            exit 1
+          fi
+          if [ -z "$QA_CLAVE" ]; then
+            echo "::error::Falta el secreto QA_SERVIDOR_SSH_CLAVE en el GitHub Environment «qa»."
+            exit 1
+          fi
+          if [ -z "$QA_HUELLA" ]; then
+            echo "::error::Falta el secreto QA_SERVIDOR_SSH_HUELLA en el GitHub Environment «qa»."
+            exit 1
+          fi
+          if [ -z "$QA_DOM" ]; then
+            echo "::error::Falta la variable no secreta QA_DOMINIO en el GitHub Environment «qa»."
+            exit 1
+          fi
+          if [ "$QA_DOM" = "app.teambenavides.com" ]; then
+            echo "::error::QA_DOMINIO no puede coincidir con el dominio de producción."
+            exit 1
+          fi
+          case "$QA_DOM" in
+            *[!A-Za-z0-9.-]* | .* | *.)
+              echo "::error::QA_DOMINIO tiene un formato de nombre de host inválido."
+              exit 1
+              ;;
+          esac
+          if printf '%s' "$QA_DOM" | grep -Eqi 'REEMPLAZAR|CAMBIAR|PLACEHOLDER|CHANGEME|TODO_|TU_DOMINIO|VALOR_FICTICIO'; then
+            echo "::error::QA_DOMINIO contiene un marcador placeholder inválido."
+            exit 1
+          fi
+
+      - name: Preparar llave SSH exclusiva de QA
+        env:
+          CLAVE: ${{ secrets.QA_SERVIDOR_SSH_CLAVE }}
+          HUELLA: ${{ secrets.QA_SERVIDOR_SSH_HUELLA }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$CLAVE" > ~/.ssh/servidor_qa
+          chmod 600 ~/.ssh/servidor_qa
+          printf '%s\n' "$HUELLA" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Ejecutar actualizar-qa.sh en el servidor QA
+        env:
+          SERVIDOR_QA: ${{ secrets.QA_SERVIDOR_HOST }}
+          COMMIT: ${{ needs.pruebas-qa.outputs.commit }}
+          MODO: ${{ needs.pruebas-qa.outputs.modo }}
+          QA_DOM: ${{ vars.QA_DOMINIO }}
+        run: |
+          case "$MODO" in
+            validar | desplegar) ;;
+            *)
+              echo "::error::El workflow QA no permite ejecutar el modo «$MODO»."
+              exit 1
+              ;;
+          esac
+          comando_remoto="$COMMIT $MODO --dominio-esperado=$QA_DOM"
+          ssh -i ~/.ssh/servidor_qa -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o ServerAliveInterval=30 "ubuntu@$SERVIDOR_QA" "$comando_remoto"
