@@ -101,7 +101,7 @@ El mapa funcional (https://claude.ai/code/artifact/708d0351-bbde-48cd-9768-7d63f
 | Móvil | Flutter + Riverpod (o Bloc) + Dio + go_router |
 | Arquitectura | Una sola API, modular por área, sin microservicios |
 | IDE | VS 2026, Rider o VS Code + C# Dev Kit |
-| Hosting | AWS Lightsail de 2 GB con Docker (decidido el 21/10); ver [docs/despliegue.md](docs/despliegue.md) |
+| Hosting | AWS Lightsail de 2 GB con Docker (decidido el 21/10). Fuera de línea desde el 25/11, hasta tener el servidor en la cuenta de Team Benavides; ver [docs/despliegue.md](docs/despliegue.md) |
 
 Principios del documento técnico que no se negocian:
 
@@ -123,7 +123,7 @@ Principios del documento técnico que no se negocian:
   ```
 
 - Flujo diario: `git pull` antes de empezar y antes de subir → commits en `develop` → `git push`. Un clon nuevo abre en `main`: primero `git switch develop`.
-- Sacar una versión: `git push origin develop:main` y después Actions → Desplegar → Run workflow con `main`. Se lleva todo lo que haya en `develop`, así que lo que se sube a `develop` tiene que compilar y pasar las pruebas. Detalle en [docs/despliegue.md](docs/despliegue.md).
+- Sacar una versión: `git push origin develop:main` y después Actions → Desplegar → Run workflow con `main`. Se lleva todo lo que haya en `develop`, así que lo que se sube a `develop` tiene que compilar y pasar las pruebas. Hasta tener el servidor nuevo, Desplegar no tiene a dónde conectarse. Detalle en [docs/despliegue.md](docs/despliegue.md).
 - Nunca se hace force push a `main`.
 - Estructura:
   - `CRMTeamBenavides.slnx` y `src/CRMTeamBenavides.Api`: la API .NET 10 con entidades de dominio, servicios, endpoints por área en `Features/`, `ApplicationDbContext` y migraciones.
@@ -183,7 +183,7 @@ De lo pedido el 15/09, la matriz de roles y el flujo de estados quedaron resuelt
 ## Decisiones pendientes
 
 - Fecha del Go Live: propuesta el viernes 20/11/2026.
-- Hosting: se usa AWS Lightsail de 2 GB (21/10); falta crear la cuenta a nombre de Team Benavides.
+- Hosting: AWS Lightsail de 2 GB (21/10). La cuenta de AWS provisional se cerró y la plataforma está fuera de línea desde el 25/11. Falta la cuenta a nombre de Team Benavides para el servidor nuevo, que solo usa Lightsail.
 - Qué acciones aprueba Gerencia.
 - Presupuesto: aprobación completa o por ítem, y cobro del diagnóstico si se rechaza.
 - Formato de atención: qué campos van estructurados y si la firma es impresa o en pantalla.
@@ -205,7 +205,7 @@ De lo pedido el 15/09, la matriz de roles y el flujo de estados quedaron resuelt
 - Resumen de cambios de la reunión del 25/09: [docs/resumen-cambios-reunion.md](docs/resumen-cambios-reunion.md).
 - Reglas del módulo de compras: [docs/modulo-compras.md](docs/modulo-compras.md).
 - Notificaciones: [docs/notificaciones.md](docs/notificaciones.md).
-- Despliegue: [docs/despliegue.md](docs/despliegue.md). Incluye el comando `crear-gerencia` para el primer usuario de Gerencia y los límites del login.
+- Despliegue: [docs/despliegue.md](docs/despliegue.md). Incluye el comando `crear-gerencia` para el primer usuario de Gerencia, los límites del login y cómo mudar la base y las fotos a otro servidor.
 - Referencia visual del portal del cliente: [docs/referencias/app-cliente.html](docs/referencias/app-cliente.html). Versión publicada: https://claude.ai/artifact/JqzMRP5fjiEZXdRDvFmjDL
 - Documento técnico: `Team_Benavides_Resumen Técnico.pdf` (no está en el repositorio).
 - Guía día a día original, con el Go Live del 02/10: `guia.pdf` (no está en el repositorio). La reemplaza el plan de implementación.

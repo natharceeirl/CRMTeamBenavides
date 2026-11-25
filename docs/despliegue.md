@@ -13,7 +13,13 @@ La plataforma corre en un solo servidor con Docker: Caddy recibe el HTTPS y sirv
 
 ## Servidor
 
-Se usa **AWS Lightsail de 2 GB** (decidido el 21/10): 2 GB de memoria, 60 GB de disco SSD y 3 TB de transferencia al mes, por unos US$13 al mes con snapshots. Falta crear la cuenta a nombre de Team Benavides.
+**Al 25/11 la plataforma está fuera de línea.** El servidor corría en una cuenta de AWS provisional, que se cerró. Ese mismo día se borró el registro A de `sistema.teambenavides.com`: si seguía apuntando a la IP vieja, AWS podía dársela a otro cliente y ese tercero podía sacar un certificado válido para el subdominio. Hasta que haya servidor nuevo, el botón Desplegar no tiene a dónde conectarse.
+
+El servidor nuevo sigue siendo **AWS Lightsail de 2 GB** (decidido el 21/10): 2 GB de memoria, 60 GB de disco SSD y 3 TB de transferencia al mes, por unos US$13 al mes con snapshots. Va en una cuenta a nombre de Team Benavides, con su tarjeta y su RUC; sin RUC, AWS suma el 18 % de IGV. En esa cuenta:
+
+- Solo se crea Lightsail. La plataforma no usa EC2, ECS, ECR ni VPC, que se cobran aparte: en la cuenta provisional, unas pruebas olvidadas en esos servicios costaron más que el servidor.
+- El trabajo diario se hace con un usuario que solo administra Lightsail. El usuario raíz queda para los pagos y la cuenta, con MFA y una contraseña que no se usa en ningún otro lado.
+- Un presupuesto mensual avisa a un correo que alguien lee todos los días.
 
 Medido el 21/10 en Docker, con los datos de desarrollo:
 
@@ -37,6 +43,10 @@ Correr la plataforma sobra; compilar es lo justo, y las dos imágenes a la vez n
 El disco de 60 GB alcanza para años: el sistema, Docker y las imágenes ocupan unos 10 GB, y la base de un taller no pasa de 1 GB. Lo que crece son las fotos de las órdenes.
 
 Por eso la web y la app achican cada foto antes de subirla, con la misma regla: lado mayor de 1920 px y JPEG al 80 %. La API rechaza las de más de 3 MB (`Almacenamiento:TamanioMaximoMb`). Probado el 21/10: una foto de 4000×3000 y 5,8 MB quedó guardada con 457 KB. A ese peso, 100 fotos al día suman unos 16 GB al año.
+
+### Los datos de la cuenta cerrada
+
+AWS guarda el servidor y sus snapshots 90 días desde el cierre y después los borra. Las copias de `pg_dump` estaban en el mismo disco, y no había copia fuera del servidor. Para sacar la base y las fotos hay que reabrir la cuenta: solo lo puede hacer el usuario raíz, desde la consola y sin saldo pendiente, y al reabrirla vuelve a cobrar todo lo que quede en ella. Con la cuenta abierta se sigue «Mudar a otro servidor» y después se vuelve a cerrar.
 
 ## Primera vez en un servidor
 
@@ -194,7 +204,54 @@ pg_restore --no-owner --no-privileges --exit-on-error -d <base> crm-AAAAMMDD-HHM
 
 ### Fuera del servidor
 
-Una copia que vive solo en el servidor se pierde con él. Falta llevar cada día `despliegue/respaldos/` y las fotos a otro lugar. El plan es Cloudflare R2 cuando haya cuenta, con una sincronización incremental para que las fotos no se suban enteras cada vez. Mientras tanto, se pueden copiar a mano con `scp`.
+Una copia que vive solo en el servidor se pierde con él, y los snapshots de Lightsail se pierden con la cuenta de AWS: pasó al cerrar la cuenta provisional (ver «Los datos de la cuenta cerrada»). Falta llevar cada día `despliegue/respaldos/` y las fotos a otro lugar. El plan es Cloudflare R2 cuando haya cuenta, con una sincronización incremental para que las fotos no se suban enteras cada vez. Mientras tanto, se pueden copiar a mano con `scp`, como en la sección siguiente.
+
+### Mudar a otro servidor
+
+Pasa la base y las fotos de un servidor a otro, por ejemplo desde la cuenta cerrada. Todavía no se ensayó: conviene probarlo antes con datos de prueba.
+
+En el servidor viejo, desde `/opt/crm-team-benavides/despliegue`:
+
+```
+docker compose exec respaldo sh /respaldo.sh ahora
+ls -lh respaldos/
+sudo tar --numeric-owner -czf ~/datos-api.tgz -C /var/lib/docker/volumes/crm-team-benavides_datos-api/_data .
+sudo cp respaldos/crm-AAAAMMDD-HHMM.dump ~/
+sudo chown ubuntu ~/crm-*.dump ~/datos-api.tgz
+```
+
+`datos-api.tgz` lleva las fotos y las llaves de Data Protection. Desde la PC, bajar los dos archivos y guardarlos fuera de AWS:
+
+```
+scp -i ~/.ssh/LLAVE "ubuntu@IP-VIEJA:~/crm-*.dump" .
+scp -i ~/.ssh/LLAVE ubuntu@IP-VIEJA:~/datos-api.tgz .
+```
+
+En el servidor nuevo se sigue «Primera vez en un servidor» con estos cambios:
+
+1. Pasos 0 y 1 igual: el servidor y un `.env` con claves nuevas.
+2. Crear en el DNS del dominio el registro A `sistema` con la IP nueva, y subir los dos archivos con `scp` a `~/` del servidor nuevo.
+3. En vez del paso 2, levantar la base y el contenedor de copias, y restaurar:
+
+   ```
+   docker compose up -d db respaldo
+   sudo cp ~/crm-AAAAMMDD-HHMM.dump respaldos/
+   docker compose exec respaldo sh /respaldo.sh restaurar /respaldos/crm-AAAAMMDD-HHMM.dump
+   ```
+
+4. Pasos 3 y 4 igual: aplican solo las migraciones de `main` posteriores a la copia.
+5. Sin el paso 5: los usuarios vienen en la copia.
+6. En vez del paso 6, compilar, crear los contenedores sin arrancarlos, devolver las fotos y levantar todo:
+
+   ```
+   docker compose build api
+   docker compose build caddy
+   docker compose create
+   sudo tar --numeric-owner -xzf ~/datos-api.tgz -C /var/lib/docker/volumes/crm-team-benavides_datos-api/_data
+   docker compose up -d
+   ```
+
+7. En GitHub, cambiar `SERVIDOR_HOST` y `SERVIDOR_SSH_HUELLA`, y agregar la llave de despliegue en el servidor nuevo (ver «Configurar GitHub, una vez»).
 
 ## Ensayar en una PC
 
@@ -283,5 +340,6 @@ En Docker, `docker-compose.yml` arma estas variables a partir del `.env`. Sin Do
 
 ## Pendiente
 
+- **Servidor nuevo** en la cuenta de AWS de Team Benavides, con el registro A `sistema` y los secretos de GitHub apuntando a él (ver «Servidor»).
 - **Copia de la base y de las fotos fuera del servidor**, por ejemplo a Cloudflare R2.
 - **Ambiente de pruebas en el mismo servidor:** otra API y otra base con otro nombre de proyecto, y un segundo dominio en el mismo Caddy.
