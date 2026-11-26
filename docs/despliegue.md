@@ -342,4 +342,3 @@ En Docker, `docker-compose.yml` arma estas variables a partir del `.env`. Sin Do
 
 - **Servidor nuevo** en la cuenta de AWS de Team Benavides, con el registro A `sistema` y los secretos de GitHub apuntando a él (ver «Servidor»).
 - **Copia de la base y de las fotos fuera del servidor**, por ejemplo a Cloudflare R2.
-- **Ambiente de pruebas en el mismo servidor:** otra API y otra base con otro nombre de proyecto, y un segundo dominio en el mismo Caddy.
